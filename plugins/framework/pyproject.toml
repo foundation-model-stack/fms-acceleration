@@ -22,7 +22,9 @@ classifiers=[
     "Programming Language :: Python :: 3.11",
 ]
 dependencies = [
-  "transformers<4.40"
+  "torch<2.3",
+  "transformers<4.40",
+  "peft"
 ]
 
 [tool.hatch.build.targets.wheel]

@@ -21,7 +21,10 @@ from transformers.utils.import_utils import _is_package_available
 import yaml
 
 # First Party
-from fms_acceleration import AccelerationPlugin, get_relevant_configuration_sections
+from fms_acceleration.framework_plugin import (
+    AccelerationPlugin,
+    get_relevant_configuration_sections,
+)
 
 
 def check_plugin_packages(plugin: AccelerationPlugin):
@@ -73,13 +76,13 @@ class AccelerationFramework:
 
         assert (
             len(self.plugins_require_custom_loading) <= 1
-        ), f"can load at most 1 plugin with custom model loading, but tried to '{self.plugins_require_custom_loading}'."
+        ), f"Can load at most 1 plugin with custom model loading, but tried to '{self.plugins_require_custom_loading}'."
 
     def model_loader(self, model_name: str, **kwargs):
 
         if len(self.plugins_require_custom_loading) == 0:
             raise NotImplementedError(
-                f"Attempted modeling loading, but none of activated plugins '{list(self.active_plugins.keys())}' "
+                f"Attempted model loading, but none of activated plugins '{list(self.active_plugins.keys())}' "
                 "require custom loading."
             )
 

@@ -50,10 +50,12 @@ def get_relevant_configuration_sections(configuration: Dict) -> Dict:
     for registration in PLUGIN_REGISTRATIONS:
         relevant_config = {}
         # OR is not implemented yet
+        reject = False
         for key in registration.AND:
             content = _trace_key_path(configuration, key)
             if content is None:
-                continue
+                reject = True
+                break
 
             path = key.split(".")
             n = len(path)
@@ -65,6 +67,9 @@ def get_relevant_configuration_sections(configuration: Dict) -> Dict:
                 n -= 1
 
             _cfg[path[0]] = content
+
+        if reject:
+            continue
 
         if len(relevant_config) > 0:
             results.append((relevant_config, registration.plugin))
