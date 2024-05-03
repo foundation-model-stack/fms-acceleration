@@ -1,21 +1,21 @@
 # FMS Acceleration Framework Library
 
-This contains the library code for
+This contains the library code that implements the acceleration plugin framework, in particular the classes:
 - `AccelerationFramework`
 - `AccelerationPlugin`
 
-The purpose of this library is to:
-- provide a single integration point into [Huggingface](https://github.com/huggingface/transformers).
-- manage `AccelerationPlugin` in a flexible manner. 
-- read and load plugins from a single configuration YAML. Enforce compatiblity rules on how plugins can be combined.
+The library is envisioned to:
+- Provide single integration point into [Huggingface](https://github.com/huggingface/transformers).
+- Manage `AccelerationPlugin` in a flexible manner. 
+- Load plugins from single configuration YAML, while enforcing compatiblity rules on how plugins can be combined.
 
-See the following resources
-- Instructions on [how to run with `fms-hf-tuning`](https://github.com/foundation-model-stack/fms-acceleration/README.md)
-- Sample [plugin configurations](https://github.com/foundation-model-stack/fms-acceleration/sample-configurations).
+See following resources:
+- Instructions for [running acceleration framework with `fms-hf-tuning`](https://github.com/foundation-model-stack/fms-hf-tuning/README.md)
+- [Sample plugin YAML configurations](../../sample-configurations) for important accelerations.
 
 ## Using AccelerationFramework with HF Trainer
 
-First instantiate an `AccelerationFramework` object by passing a YAML configuration, say via a `path_to_config`:
+Being by instantiating an `AccelerationFramework` object, passing a YAML configuration (say via a `path_to_config`):
 ```python
 from fms_acceleration import AccelerationFramework
 framework = AccelerationFramework(path_to_config)
@@ -28,7 +28,7 @@ Some plugins may require custom model loaders (in replacement of the typical `Au
 ```python
 model = framework.model_loader(model_name_or_path, ...)
 ```
-E.g., in the GPTQ example, see [plugin configurations](https://github.com/foundation-model-stack/fms-acceleration/sample-configurations), we require `model_name_or_path` to be custom loaded from a quantized checkpoint.
+E.g., in the GPTQ example, see [sample GPTQ QLoRA configuration](../../sample-configurations/qlora-sample-config.yaml), we require `model_name_or_path` to be custom loaded from a quantized checkpoint.
 
 We provide a flag `framework.requires_custom_loading` to check if plugins require custom loading.
 
@@ -64,8 +64,8 @@ Thats all! the model will not be reap all acceleration speedups based on the plu
 Each [package](#packages) in this monorepo:
 - can be *independently installed*. Install only the libraries you need:
    ```shell
-   pip install fms-acceleration/libs/peft
-   pip install fms-acceleration/libs/unsloth
+   pip install fms-acceleration/plugins/peft
+   pip install fms-acceleration/plugins/unsloth # to be available in the near future
    ```
 - can be *independently configured*. Each plugin is registed under a particular configuration path. E.g., the [autogptq plugin](libs/peft/src/fms_accelerate_peft/framework_plugin_autogptq.py) is reqistered under the config path `peft.quantization.auto_gptq`.
     ```python
@@ -81,7 +81,7 @@ Each [package](#packages) in this monorepo:
         peft:
             quantization:
                 auto_gptq:
-                    # everything under hear will be passed to plugin 
+                    # everything under here will be passed to plugin 
                     # when instantiating
                     ...
     ```

@@ -10,8 +10,8 @@ It is currently being integrated into [fms-hf-tuning](https://github.com/foundat
 
 Package | Description | Depends | License | Status
 --|--|--|--|--
-[framework](./libs/framework/README.md) | This acceleration framework for integration with huggingface trainers | | | Beta
-[peft](./libs/peft/README.md) | For PEFT-training, e.g., 4bit QLoRA. | Huggingface<br>AutoGPTQ | Apache 2.0<br>MIT | Beta
+[framework](./plugins/framework/README.md) | This acceleration framework for integration with huggingface trainers | | | Beta
+[peft](./plugins/peft/README.md) | For PEFT-training, e.g., 4bit QLoRA. | Huggingface<br>AutoGPTQ | Apache 2.0<br>MIT | Beta
 unsloth | For fast triton kernels (e.g., fused LoRA, fast cross-entropy, rms, rope) | Xformers | Apache 2.0 with exclusions. | Under Development
 
 
@@ -19,16 +19,16 @@ unsloth | For fast triton kernels (e.g., fused LoRA, fast cross-entropy, rms, ro
 
 The below instructions show how to accelerate your QLoRA tuning experience with [tuning/sft_trainer.py](https://github.com/foundation-model-stack/fms-hf-tuning/blob/main/tuning/sft_trainer.py) from `fms-hf-tuning`. As an example, we show how to use AutoGPTQ triton V2 kernel with QLoRA tuning:
 1. Checkout [fms-hf-tuning](https://github.com/foundation-model-stack/fms-hf-tuning) following their README instructions.
-2. Ensure that [framework library](./libs/framework) is also installed:
+2. Ensure that [framework library](./plugins/framework) is also installed:
     ```
-    pip install git+https://github.com/foundation-model-stack/fms-acceleration.git#subdirectory=libs/framework
+    pip install git+https://github.com/foundation-model-stack/fms-acceleration.git#subdirectory=plugins/framework
     ```
-3. For QLoRA we use the Triton V2 GPTQ kernels integrated into [AutoGPTQ](https://github.com/AutoGPTQ/AutoGPTQ). For that, we require our [peft](./libs/peft/README.md) plugin:
+3. For QLoRA we use the Triton V2 GPTQ kernels integrated into [AutoGPTQ](https://github.com/AutoGPTQ/AutoGPTQ). For that, we require our [peft](./plugins/peft/README.md) plugin:
     ```
-    pip install git+https://github.com/foundation-model-stack/fms-acceleration.git#subdirectory=libs/peft
+    pip install git+https://github.com/foundation-model-stack/fms-acceleration.git#subdirectory=plugins/peft
     ```
 4. Prepare a YAML configuration for our acceleration framework plugins. In particular, this [sample configuration](sample-configurations/qlora-sample-config.yaml) will configure the AutoGPTQ triton V2 kernels for QLoRA PeFT.
-    * Plugins automatically configured based on configuration; for more details on how plugins are configured, [see framework/README.md](./libs/framework/README.md#configuration-of-plugins).
+    * Plugins automatically configured based on configuration; for more details on how plugins are configured, [see framework/README.md](./plugins/framework/README.md#configuration-of-plugins).
 5. Run `sft_trainer.py` passing `--acceleration_framework_config_file` pointing to the acceleration framework configuration YAML:
     ```
     python sft_trainer.py \
@@ -36,7 +36,11 @@ The below instructions show how to accelerate your QLoRA tuning experience with 
         ...
     ```
 
-For further code level details see [framework/README.md](./libs/framework/README.md).
+**Check out new packages [here](#packages) as more become available over time**.
+
+### Code Architecture
+
+For deeper dive into details see [framework/README.md](./plugins/framework/README.md).
 
 ## Reproducibility
 
