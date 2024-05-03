@@ -12,12 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import yaml
-from typing import Optional, List, Dict, Tuple
+# Standard
+from typing import Dict, List, Optional, Tuple
 
-from transformers import TrainingArguments, PreTrainedModel
+# Third Party
+from transformers import PreTrainedModel, TrainingArguments
 from transformers.utils.import_utils import _is_package_available
+import yaml
 
+# First Party
 from fms_acceleration import AccelerationPlugin, get_relevant_configuration_sections
 
 

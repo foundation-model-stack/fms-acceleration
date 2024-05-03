@@ -12,8 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .framework_plugin import AccelerationPlugin, get_relevant_configuration_sections
+# Local
 from .framework import AccelerationFramework
+from .framework_plugin import AccelerationPlugin, get_relevant_configuration_sections
 
 PLUGIN_PREFIX = "fms_accelerate_"
 PLUGINS = [
@@ -21,6 +22,7 @@ PLUGINS = [
     "unsloth",
 ]
 
+# Standard
 # use importlib to load the packages, if they are installed
 import importlib
 
