@@ -1,0 +1,34 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fms-acceleration-peft"
+version = '0.0.1'
+description = "FMS Acceleration for PeFT"
+authors = [
+  {name = "Fabian Lim", email = "flim@sg.ibm.com"},
+  {name = "Aaron Chew", email = "aaron.chew1@ibm.com"},
+]
+license = {text = "Apache-2.0"}
+readme = "README.md"
+requires-python = "~=3.9"
+keywords = ['fms-hf-tuning', 'acceleration', 'peft']
+dependencies = ["auto_gptq > 0.7.1"]
+classifiers=[
+    "License :: OSI Approved :: Apache Software License",
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+
+[project.optional-dependencies]
+flash-attn = ["flash-attn"]
+
+[tool.hatch.build.targets.wheel]
+only-include = ["src/fms_accelerate_peft"]
+
+[tool.hatch.build.targets.wheel.sources]
+"src" = ""
