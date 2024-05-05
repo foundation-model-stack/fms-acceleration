@@ -40,7 +40,7 @@ KEY_PLUGINS = "plugins"
 
 class AccelerationFramework:
 
-    active_plugins: Dict[str, AccelerationPlugin] = dict()
+    active_plugins: List[Tuple[str, AccelerationPlugin]] = list()
     plugins_require_custom_loading: List = list()
 
     def __init__(self, configuration_file: Optional[str] = None):
@@ -51,6 +51,8 @@ class AccelerationFramework:
         # pepare the plugin configurations
         plugin_configs = {k: v for k, v in contents[KEY_PLUGINS].items()}
 
+        # relevant sections are returned following plugin precedence, i.e.,
+        # they follow the registration order.
         for selected_configs, cls in get_relevant_configuration_sections(
             plugin_configs
         ):
@@ -63,8 +65,14 @@ class AccelerationFramework:
             # check plugin
             check_plugin_packages(plugin)
 
-            # install plugin
-            self.active_plugins[plugin_name] = plugin
+            # check if already activated, if so, will not reactivate again
+            # maintain uniqueness of activated plugins
+            if any([x == plugin_name for x, _ in self.active_plugins]):
+                continue
+
+            # activate plugin
+            # - activation order will not contradict registration order
+            self.active_plugins.append((plugin_name, plugin))
             if plugin.requires_custom_loading:
                 self.plugins_require_custom_loading.append(plugin_name)
 
@@ -82,13 +90,16 @@ class AccelerationFramework:
 
         if len(self.plugins_require_custom_loading) == 0:
             raise NotImplementedError(
-                f"Attempted model loading, but none of activated plugins '{list(self.active_plugins.keys())}' "
+                f"Attempted model loading, but none of activated plugins '{list(self.active_plugins)}' "
                 "require custom loading."
             )
 
         # otherwise there should be exactly 1
         plugin_name = self.plugins_require_custom_loading[0]
-        return self.active_plugins[plugin_name].model_loader(model_name, **kwargs)
+        plugin = [
+            plugin for name, plugin in self.active_plugins if name == plugin_name
+        ][0]
+        return plugin.model_loader(model_name, **kwargs)
 
     def augmentation(
         self,
@@ -99,7 +110,7 @@ class AccelerationFramework:
         model_archs = set(model.config.architectures)  # get the config
 
         # NOTE: this assumes that augmentation order does not matter
-        for plugin_name, plugin in self.active_plugins.items():
+        for plugin_name, plugin in self.active_plugins:
 
             # check the model arcs at augmentation
             if plugin.restricted_model_archs and not any(
@@ -122,4 +133,4 @@ class AccelerationFramework:
 
     @property
     def requires_agumentation(self):
-        return any([x.requires_agumentation for x in self.active_plugins.values()])
+        return any([x.requires_agumentation for _, x in self.active_plugins])

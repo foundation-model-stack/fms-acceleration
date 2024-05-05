@@ -34,10 +34,10 @@ from fms_acceleration.framework_plugin import PLUGIN_REGISTRATIONS, Acceleration
 
 @contextmanager
 def build_framework_and_instantiate(
-    configuration_contents: Dict,
     plugins_to_be_registered: List[
         Tuple[List[str], Type[AccelerationPlugin]]  # and_paths, plugin_class
     ],
+    configuration_contents: Dict,
 ):
     "helper function to instantiate an acceleration framework for testing"
 
@@ -47,7 +47,7 @@ def build_framework_and_instantiate(
     PLUGIN_REGISTRATIONS.clear()
     old_active_plugins = AccelerationFramework.active_plugins
     old_custom_loading_plugins = AccelerationFramework.plugins_require_custom_loading
-    AccelerationFramework.active_plugins = {}
+    AccelerationFramework.active_plugins = []
     AccelerationFramework.plugins_require_custom_loading = []
 
     for path, plugin in plugins_to_be_registered:
@@ -124,8 +124,8 @@ def test_config_with_empty_body_raises():
     # - raise since activation will fail
     with pytest.raises(ValueError) as e:
         with build_framework_and_instantiate(
-            configuration_contents={"dummy": None},
             plugins_to_be_registered=[(["dummy"], empty_plugin)],
+            configuration_contents={"dummy": None},
         ):
             pass
 
@@ -137,8 +137,8 @@ def test_config_with_empty_body_raises():
     # - raise because one path has an empty body
     with pytest.raises(ValueError) as e:
         with build_framework_and_instantiate(
-            configuration_contents={"dummy": None, "dummy2": {"key1": 1}},
             plugins_to_be_registered=[(["dummy", "dummy2"], empty_plugin)],
+            configuration_contents={"dummy": None, "dummy2": {"key1": 1}},
         ):
             pass
 
@@ -205,8 +205,8 @@ def test_single_plugin():
     # 3. raise because requires_augmentation = True but no augmentation impl.
     # 4. raise when called on model with incompatible arch.
     with build_framework_and_instantiate(
-        configuration_contents={"dummy": {"key1": 1}},
         plugins_to_be_registered=[(["dummy"], incomplete_plugin)],
+        configuration_contents={"dummy": {"key1": 1}},
     ) as framework:
 
         # check 1.
@@ -232,8 +232,8 @@ def test_single_plugin():
     # - raise because wrong path results in zero active plugins
     with pytest.raises(ValueError) as e:
         with build_framework_and_instantiate(
-            configuration_contents={"dummy2": {"key1": 1}},  # config with wrong path
             plugins_to_be_registered=[(["dummy"], empty_plugin)],
+            configuration_contents={"dummy2": {"key1": 1}},  # config with wrong path
         ):
             pass
 
@@ -243,8 +243,8 @@ def test_single_plugin():
     # 1. test correct plugin registration and activation.
     # 2. test augmentation should run
     with build_framework_and_instantiate(
-        configuration_contents={"dummy": {"key1": 1}},
         plugins_to_be_registered=[(["dummy"], plugin)],
+        configuration_contents={"dummy": {"key1": 1}},
     ) as framework:
         # check 1.
         assert len(PLUGIN_REGISTRATIONS) == 1
@@ -294,11 +294,11 @@ def test_two_plugins():
     #    during registration.
     # 2. test that only 1 plugin will be activated, because duplication is checked here.
     with build_framework_and_instantiate(
-        configuration_contents={"dummy": {"key1": 1}, "dummy2": {"key1": 1}},
         plugins_to_be_registered=[
             (["dummy"], incomp_plugin1),
             (["dummy2"], incomp_plugin2),
         ],
+        configuration_contents={"dummy": {"key1": 1}, "dummy2": {"key1": 1}},
     ) as framework:
 
         # check 1.
@@ -310,11 +310,11 @@ def test_two_plugins():
     # register and activate 2 incomplete plugins, both of the different class
     # 1. test that two plugins are registered and activated
     with build_framework_and_instantiate(
-        configuration_contents={"dummy": {"key1": 1}, "dummy2": {"key1": 1}},
         plugins_to_be_registered=[
             (["dummy"], incomp_plugin1),
             (["dummy2"], incomp_plugin3),
         ],
+        configuration_contents={"dummy": {"key1": 1}, "dummy2": {"key1": 1}},
     ) as framework:
         # check 1.
         assert len(PLUGIN_REGISTRATIONS) == 2
@@ -324,8 +324,8 @@ def test_two_plugins():
     # 1. raise because cannot activate two plugins with model loading
     with pytest.raises(AssertionError) as e:
         with build_framework_and_instantiate(
-            configuration_contents={"dummy": {"key1": 1}, "dummy2": {"key1": 1}},
             plugins_to_be_registered=[(["dummy"], plugin1), (["dummy2"], plugin2)],
+            configuration_contents={"dummy": {"key1": 1}, "dummy2": {"key1": 1}},
         ) as framework:
             pass
 
@@ -336,11 +336,11 @@ def test_two_plugins():
     # 2. test model loading works.
     # 3. test model augmentation works.
     with build_framework_and_instantiate(
-        configuration_contents={"dummy": {"key1": 1}, "dummy2": {"key1": 1}},
         plugins_to_be_registered=[
             (["dummy"], plugin1),
             (["dummy2"], plugin3_no_loader),
         ],
+        configuration_contents={"dummy": {"key1": 1}, "dummy2": {"key1": 1}},
     ) as framework:
         # check 1.
         assert len(PLUGIN_REGISTRATIONS) == 2
@@ -351,3 +351,48 @@ def test_two_plugins():
 
         # check 3
         framework.augmentation(model, train_args, None)
+
+
+def test_plugin_registration_order():
+    "test that plugin registration order determines their activation order"
+
+    # build a set of hooks that register the activation order
+    def hook_builder(act_order=[]):
+        def _hook(
+            self,
+            model,
+            train_args,
+            modifiable_args,
+        ):
+            act_order.append(str(self.__class__))
+            return model, modifiable_args
+
+        return _hook
+
+    # create an arbitrary model (not impt for this test)
+    model = create_noop_model_with_archs(archs=["CausalLM"])
+
+    # create different plugins and install hook to capture
+    # the activation order
+    plugin_activation_order = []
+
+    # installed plugins in this order
+    plugins_to_be_installed = []
+    for class_name in ["PluginDEF", "PluginABC"]:
+        plugin = create_plugin_cls(
+            class_name=class_name,
+            requires_agumentation=True,
+            agumentation=hook_builder(act_order=plugin_activation_order),
+        )
+        plugins_to_be_installed.append((class_name, plugin))
+
+    # build and register plugins in order of the
+    with build_framework_and_instantiate(
+        plugins_to_be_registered=[([k], v) for k, v in plugins_to_be_installed],
+        configuration_contents={k: {"key1": 1} for k, _ in plugins_to_be_installed},
+    ) as framework:
+
+        # trigger augmentation of active plugins and check order of activation
+        framework.augmentation(model, None, None)
+        for c, (n, _) in zip(plugin_activation_order, plugins_to_be_installed):
+            assert n in c

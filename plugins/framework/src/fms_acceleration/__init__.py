@@ -16,6 +16,10 @@
 from .framework import AccelerationFramework
 from .framework_plugin import AccelerationPlugin, get_relevant_configuration_sections
 
+# the order below is a linear precedence in which the plugins will be registered
+# and activated.
+# - hence the plugins that have model loaders should be on top of this list
+
 PLUGIN_PREFIX = "fms_accelerate_"
 PLUGINS = [
     "peft",
