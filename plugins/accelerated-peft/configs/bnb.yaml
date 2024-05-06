@@ -6,5 +6,11 @@ peft:
   # e.g., kernels for quantized base weights
   quantization: 
 
+    # For loading BitsAndBytes quantized layers
+    # to serve as 4bit base-weights for LoRA PEFT-tuning.
+    # NOTE: currently AutoGPTQ is not properly integrated into huggingface /
+    # bitsandbytes, thus recommended quant_type to be either "nf4"
+    # or "fp4".
+    # bitsandbytes:
     bitsandbytes:
       quant_type: nf4 

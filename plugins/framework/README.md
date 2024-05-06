@@ -28,7 +28,7 @@ Some plugins may require custom model loaders (in replacement of the typical `Au
 ```python
 model = framework.model_loader(model_name_or_path, ...)
 ```
-E.g., in the GPTQ example, see [sample GPTQ QLoRA configuration](../../sample-configurations/qlora-sample-config.yaml), we require `model_name_or_path` to be custom loaded from a quantized checkpoint.
+E.g., in the GPTQ example, see [sample GPTQ QLoRA configuration](../../sample-configurations/accelerated-peft-autogptq-sample-configuration.yaml), we require `model_name_or_path` to be custom loaded from a quantized checkpoint.
 
 We provide a flag `framework.requires_custom_loading` to check if plugins require custom loading.
 

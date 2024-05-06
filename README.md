@@ -16,11 +16,11 @@ Package | Description | Depends | License | Status
 
 ## Usage with FMS HF Tuning
 
-This is intended to be a collection of many acceleration routines (including PeFT and other techniques). The below demonstrates a concrete example to show how to accelerate your tuning experience with [tuning/sft_trainer.py](https://github.com/foundation-model-stack/fms-hf-tuning/blob/main/tuning/sft_trainer.py) from `fms-hf-tuning`.
+This is intended to be a collection of many acceleration routines (including PeFT and other techniques). Below demonstrates a concrete example to show how to accelerate your tuning experience with [tuning/sft_trainer.py](https://github.com/foundation-model-stack/fms-hf-tuning/blob/main/tuning/sft_trainer.py) from `fms-hf-tuning`.
 
 ### Accelerated GPTQ-LoRA Training
 
-The below instructions performs accelerated PeFT fine-tuning using this package, in particular GPTQ-LoRA tuning using the AutoGPTQ `triton_v2` kernel; this kernel is state-of-the-art [provided by `jeromeku` on Mar 2024](https://github.com/AutoGPTQ/AutoGPTQ/pull/596):
+These instructions perfor accelerated PeFT fine-tuning using this package, in particular GPTQ-LoRA tuning with the AutoGPTQ `triton_v2` kernel; this kernel is state-of-the-art [provided by `jeromeku` on Mar 2024](https://github.com/AutoGPTQ/AutoGPTQ/pull/596):
 1. Checkout [fms-hf-tuning](https://github.com/foundation-model-stack/fms-hf-tuning).
 2. Ensure that our [framework library](./plugins/framework) is also installed:
     ```
@@ -30,7 +30,7 @@ The below instructions performs accelerated PeFT fine-tuning using this package,
     ```
     pip install git+https://github.com/foundation-model-stack/fms-acceleration.git#subdirectory=plugins/accelerated-peft
     ```
-4. Prepare a YAML configuration for the acceleration framework plugins, see our [acccelerated-peft sample configuration](sample-configurations/accelerated-peft-sample-config.yaml) that configures triton V2 kernels.
+4. Prepare a YAML configuration for the acceleration framework plugins, see our [acccelerated-peft sample configuration](sample-configurations/accelerated-peft-autogptq-sample-configuration.yaml) that configures triton V2 kernels.
     * The plugin framework handles automatically the plugin configuration for whatever plugins that are installed; for more details [see framework/README.md](./plugins/framework/README.md#configuration-of-plugins).
 5. Run `sft_trainer.py` passing `--acceleration_framework_config_file` pointing to the acceleration framework configuration YAML:
     ```
