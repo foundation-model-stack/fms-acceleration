@@ -1,0 +1,4 @@
+fms_acceleration @ git+https://github.com/foundation-model-stack/fms-acceleration.git#subdirectory=plugins/framework
+
+# this is because "auto_gptq > 0.7.1" it not yet available
+auto_gptq @ git+https://github.com/AutoGPTQ/AutoGPTQ.git

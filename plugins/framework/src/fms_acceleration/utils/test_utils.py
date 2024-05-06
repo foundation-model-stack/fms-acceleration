@@ -1,0 +1,153 @@
+# Copyright The IBM Tuning Team
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# SPDX-License-Identifier: Apache-2.0
+# https://spdx.dev/learn/handling-license-info/
+
+# Standard
+from contextlib import contextmanager
+from tempfile import NamedTemporaryFile
+from typing import Any, Callable, Dict, List, Set, Tuple, Type
+
+# Third Party
+import torch
+import yaml
+
+# First Party
+from fms_acceleration.framework import KEY_PLUGINS, AccelerationFramework
+from fms_acceleration.framework_plugin import PLUGIN_REGISTRATIONS, AccelerationPlugin
+
+
+def update_configuration_contents(
+    configuration_contents: Dict,
+    augment_at_path: str,
+    augmented_contents: Any,
+):
+    "helper function to replace configuration contents at augment_at_path with augmented_contents"
+    contents = configuration_contents
+    augment_at_path = augment_at_path.split(".")
+    for k in augment_at_path[:-1]:
+        contents = contents[k]
+    key = augment_at_path[-1]
+    if isinstance(contents[key], dict):
+        d = contents[key]
+        del contents[key]
+        contents[augmented_contents] = d
+    else:
+        contents[key] = augmented_contents
+    return configuration_contents
+
+
+def read_configuration(path: str) -> Dict:
+    "helper function to read yaml config into json"
+    with open(path) as f:
+        return yaml.safe_load(f)
+
+
+def configure_framework_from_json(configuration_contents: Dict):
+    "helper function to configure framework given json configuration"
+    with NamedTemporaryFile("w") as f:
+        yaml.dump({KEY_PLUGINS: configuration_contents}, f)
+        return AccelerationFramework(f.name)
+
+
+@contextmanager
+def build_framework_and_instantiate(
+    plugins_to_be_registered: List[
+        Tuple[List[str], Type[AccelerationPlugin]]  # and_paths, plugin_class
+    ],
+    configuration_contents: Dict,
+    reset_registrations: bool = True,
+):
+    "helper function to register plugins and instantiate an acceleration framework for testing"
+
+    # empty out
+    if reset_registrations:
+        old_registrations = []
+        old_registrations.extend(PLUGIN_REGISTRATIONS)
+        PLUGIN_REGISTRATIONS.clear()
+    old_active_plugins = AccelerationFramework.active_plugins
+    old_custom_loading_plugins = AccelerationFramework.plugins_require_custom_loading
+    AccelerationFramework.active_plugins = []
+    AccelerationFramework.plugins_require_custom_loading = []
+
+    for path, plugin in plugins_to_be_registered:
+        AccelerationPlugin.register_plugin(
+            plugin,
+            configuration_and_paths=path,
+        )
+
+    yield configure_framework_from_json(configuration_contents)
+
+    # put back
+    if reset_registrations:
+        PLUGIN_REGISTRATIONS.clear()
+        PLUGIN_REGISTRATIONS.extend(old_registrations)
+    AccelerationFramework.active_plugins = old_active_plugins
+    AccelerationFramework.plugins_require_custom_loading = old_custom_loading_plugins
+
+
+def instantiate_framework(
+    configuration_contents: Dict,
+):
+    """helper function to instantiate an acceleration framework for testing.
+    This version does not refresh plugin registration.
+    """
+    return build_framework_and_instantiate(
+        [], configuration_contents, reset_registrations=False
+    )
+
+
+def create_noop_model_with_archs(class_name: str = "ModelNoop", archs: List[str] = []):
+    "helper function to create a dummy model with mocked architectures"
+
+    config = type("Config", (object,), {"architectures": archs})
+    return type(class_name, (torch.nn.Module,), {"config": config})
+
+
+def create_plugin_cls(
+    class_name: str = "PluginNoop",
+    restricted_models: Set = {},
+    require_pkgs: Set = {},
+    requires_custom_loading: bool = False,
+    requires_agumentation: bool = False,
+    agumentation: Callable = None,
+    model_loader: Callable = None,
+):
+    "helper function to create plugin class"
+
+    attributes = {
+        "restricted_model_archs": restricted_models,
+        "require_packages": require_pkgs,
+        "requires_custom_loading": requires_custom_loading,
+        "requires_agumentation": requires_agumentation,
+    }
+
+    if agumentation is not None:
+        attributes["augmentation"] = agumentation
+
+    if model_loader is not None:
+        attributes["model_loader"] = model_loader
+
+    return type(class_name, (AccelerationPlugin,), attributes)
+
+
+def dummy_augmentation(self, model, train_args, modifiable_args):
+    "dummy augmentation implementation"
+    return model, modifiable_args
+
+
+def dummy_custom_loader(self, model_name, **kwargs):
+    "dummy custom loader returning dummy model"
+    return create_noop_model_with_archs(archs=["DummyModel"])  #

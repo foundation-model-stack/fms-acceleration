@@ -1,0 +1,10 @@
+
+# PEFT-related acceleration
+peft:
+
+  # quantization-releated acceleration
+  # e.g., kernels for quantized base weights
+  quantization: 
+
+    bitsandbytes:
+      quant_type: nf4 

@@ -134,3 +134,9 @@ class AccelerationFramework:
     @property
     def requires_agumentation(self):
         return any([x.requires_agumentation for _, x in self.active_plugins])
+
+    def callbacks(self):
+        cbks = []
+        for _, plugin in self.active_plugins:
+            cbks.extend(plugin.callbacks())
+            return cbks

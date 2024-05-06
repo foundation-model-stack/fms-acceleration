@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-requirements-txt"]
 build-backend = "hatchling.build"
 
 [project]
@@ -14,7 +14,7 @@ license = {text = "Apache-2.0"}
 readme = "README.md"
 requires-python = "~=3.9"
 keywords = ['fms-hf-tuning', 'acceleration', 'peft']
-dependencies = ["auto_gptq > 0.7.1"]
+dynamic = ["dependencies"]
 classifiers=[
     "License :: OSI Approved :: Apache Software License",
     "Development Status :: 4 - Beta",
@@ -27,8 +27,14 @@ classifiers=[
 [project.optional-dependencies]
 flash-attn = ["flash-attn"]
 
+[tool.hatch.metadata.hooks.requirements_txt]
+files = ["requirements.txt"]
+
 [tool.hatch.build.targets.wheel]
 only-include = ["src/fms_accelerate_peft"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel.sources]
 "src" = ""

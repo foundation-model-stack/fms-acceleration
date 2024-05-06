@@ -38,8 +38,6 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
 
         # just do checking, nothing must to configure at this point
         # if need to configure then do something like this:
-        # self.kernel = self._get_config_value("peft.kernel")
-        self._check_config_equal(key="peft.quantization", value="auto_gptq")
         self._check_config_equal(
             key="peft.quantization.auto_gptq.kernel", value="triton_v2"
         )

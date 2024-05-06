@@ -1,0 +1,11 @@
+# PEFT-related acceleration
+peft:
+
+  # quantization-releated acceleration
+  # e.g., kernels for quantized base weights
+  quantization: 
+
+    # AutoGPTQ quantized base weights.
+    auto_gptq:
+      kernel: triton_v2
+      from_quantized: True

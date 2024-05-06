@@ -14,7 +14,11 @@
 
 # Local
 from .framework import AccelerationFramework
-from .framework_plugin import AccelerationPlugin, get_relevant_configuration_sections
+from .framework_plugin import (
+    AccelerationPlugin,
+    AccelerationPluginConfigError,
+    get_relevant_configuration_sections,
+)
 
 # the order below is a linear precedence in which the plugins will be registered
 # and activated.

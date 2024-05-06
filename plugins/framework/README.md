@@ -10,7 +10,7 @@ The library is envisioned to:
 - Load plugins from single configuration YAML, while enforcing compatiblity rules on how plugins can be combined.
 
 See following resources:
-- Instructions for [running acceleration framework with `fms-hf-tuning`](https://github.com/foundation-model-stack/fms-hf-tuning/README.md)
+- Instructions for [running acceleration framework with `fms-hf-tuning`](https://github.com/foundation-model-stack/fms-hf-tuning)
 - [Sample plugin YAML configurations](../../sample-configurations) for important accelerations.
 
 ## Using AccelerationFramework with HF Trainer
