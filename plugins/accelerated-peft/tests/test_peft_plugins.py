@@ -30,21 +30,29 @@ import pytest
 # instantiate_fromwork will handle registering and activating AutoGPTQAccelerationPlugin
 
 # configuration
-DIRNAME = os.path.dirname(os.path.join(__file__))
+DIRNAME = os.path.dirname(__file__)
 CONFIG_PATH_AUTO_GPTQ = os.path.join(DIRNAME, "../configs/autogptq.yaml")
 CONFIG_PATH_BNB = os.path.join(DIRNAME, "../configs/bnb.yaml")
 
 
+# We do not enable the skip since this test does not actually require the packages
+# installed
+# @pytest.mark.skipif(
+#     not check_plugin_packages(AutoGPTQAccelerationPlugin),
+#     reason="missing package requirements of AutoGPTQAccelerationPlugin",
+# )
 def test_configure_gptq_plugin():
     "test auto_gptq plugin loads correctly"
 
     # test that provided configuration correct correct instantiates plugin
-    with instantiate_framework(read_configuration(CONFIG_PATH_AUTO_GPTQ)) as framework:
+    with instantiate_framework(
+        read_configuration(CONFIG_PATH_AUTO_GPTQ), require_packages_check=False
+    ) as framework:
 
         # check flags and callbacks
         assert framework.requires_custom_loading
         assert framework.requires_agumentation
-        assert len(framework.callbacks()) == 0
+        assert len(framework.get_callbacks_and_ready_for_train()) == 0
 
     # attempt to activate plugin with configuration pointing to wrong path
     # - raise with message that no plugins can be configured
@@ -54,7 +62,8 @@ def test_configure_gptq_plugin():
                 read_configuration(CONFIG_PATH_AUTO_GPTQ),
                 "peft.quantization.auto_gptq",
                 "something",
-            )
+            ),
+            require_packages_check=False,
         ):
             pass
 
@@ -70,23 +79,32 @@ def test_configure_gptq_plugin():
             with instantiate_framework(
                 update_configuration_contents(
                     read_configuration(CONFIG_PATH_AUTO_GPTQ), key, wrong_value
-                )
+                ),
+                require_packages_check=False,
             ):
                 pass
 
         e.match(f"AutoGPTQAccelerationPlugin: Value at '{key}'")
 
 
+# We do not enable the skip since this test does not actually require the packages
+# installed
+# @pytest.mark.skipif(
+#     not check_plugin_packages(BNBAccelerationPlugin),
+#     reason="missing package requirements of BNBAccelerationPlugin",
+# )
 def test_configure_bnb_plugin():
     "test bnb plugin loads correctly"
 
     # test that provided configuration correct correct instantiates plugin
-    with instantiate_framework(read_configuration(CONFIG_PATH_BNB)) as framework:
+    with instantiate_framework(
+        read_configuration(CONFIG_PATH_BNB), require_packages_check=False
+    ) as framework:
 
         # check flags and callbacks
         assert framework.requires_custom_loading
         assert framework.requires_agumentation
-        assert len(framework.callbacks()) == 0
+        assert len(framework.get_callbacks_and_ready_for_train()) == 0
 
     # test valid combinatinos
     for key, correct_value in [
@@ -96,12 +114,13 @@ def test_configure_bnb_plugin():
         with instantiate_framework(
             update_configuration_contents(
                 read_configuration(CONFIG_PATH_BNB), key, correct_value
-            )
+            ),
+            require_packages_check=False,
         ):
             # check flags and callbacks
             assert framework.requires_custom_loading
             assert framework.requires_agumentation
-            assert len(framework.callbacks()) == 0
+            assert len(framework.get_callbacks_and_ready_for_train()) == 0
 
     # attempt to activate plugin with configuration pointing to wrong path
     # - raise with message that no plugins can be configured
@@ -111,7 +130,8 @@ def test_configure_bnb_plugin():
                 read_configuration(CONFIG_PATH_BNB),
                 "peft.quantization.bitsandbytes",
                 "something",
-            )
+            ),
+            require_packages_check=False,
         ):
             pass
 
@@ -126,7 +146,8 @@ def test_configure_bnb_plugin():
             with instantiate_framework(
                 update_configuration_contents(
                     read_configuration(CONFIG_PATH_BNB), key, correct_value
-                )
+                ),
+                require_packages_check=False,
             ):
                 pass
 

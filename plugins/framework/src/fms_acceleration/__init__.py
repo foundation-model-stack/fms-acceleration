@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # Local
-from .framework import AccelerationFramework
+from .framework import PLUGIN_PREFIX, AccelerationFramework
 from .framework_plugin import (
     AccelerationPlugin,
     AccelerationPluginConfigError,
@@ -24,7 +24,6 @@ from .framework_plugin import (
 # and activated.
 # - hence the plugins that have model loaders should be on top of this list
 
-PLUGIN_PREFIX = "fms_accelerate_"
 PLUGINS = [
     "peft",
     "unsloth",

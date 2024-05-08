@@ -13,34 +13,62 @@
 # limitations under the License.
 
 # Standard
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Set, Tuple
 
 # Third Party
 from accelerate import Accelerator
 from transformers import PreTrainedModel, TrainingArguments
+from transformers.utils import logging
 from transformers.utils.import_utils import _is_package_available
 import torch
 import yaml
 
+logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
+
 # First Party
 from fms_acceleration.framework_plugin import (
+    PLUGIN_REGISTRATIONS,
     AccelerationPlugin,
+    PluginRegistration,
     get_relevant_configuration_sections,
 )
+
+KEY_PLUGINS = "plugins"
+PLUGIN_PREFIX = "fms_acceleration_"
 
 
 def check_plugin_packages(plugin: AccelerationPlugin):
     if plugin.require_packages is None:
-        return True  # passthrough
+        return True, []  # passthrough
 
+    missing_packages = []
     for package_name in plugin.require_packages:
         if not _is_package_available(package_name):
-            raise ValueError(
-                f"Package \'{package_name}\' required by activated plugin \'{plugin.__class__.__name__}\' "
-                "is missing. Please install it."
-            )
+            missing_packages.append(package_name)
+    return len(missing_packages) == 0, missing_packages
 
-KEY_PLUGINS = "plugins"
+
+def log_initialization_message(
+    active_class_names: Set[str],
+    registered_plugins: List[PluginRegistration],  # list of regs
+    logger: Callable = None,
+):
+    if logger is None:
+        logger = print
+
+    logger = print
+
+    def _registration_display(reg: PluginRegistration):
+        return (
+            f"Active Plugin: {reg.plugin.__name__}. "
+            f"Python package: {reg.package_name}. "
+            f"Version: {reg.package_version}."
+        )
+
+    logger("***** FMS AccelerationFramework *****")
+    for reg in registered_plugins:
+        if reg.plugin.__name__ in active_class_names:
+            logger(_registration_display(reg))
 
 
 class AccelerationFramework:
@@ -48,10 +76,15 @@ class AccelerationFramework:
     active_plugins: List[Tuple[str, AccelerationPlugin]] = list()
     plugins_require_custom_loading: List = list()
 
-    def __init__(self, configuration_file: Optional[str] = None):
+    def __init__(
+        self, configuration_file: Optional[str], require_packages_check: bool = True
+    ):
 
         with open(configuration_file, "r") as f:
             contents = yaml.safe_load(f)
+
+        if KEY_PLUGINS not in contents or contents[KEY_PLUGINS] is None:
+            raise ValueError(f"Configuration file must contain a '{KEY_PLUGINS}' body")
 
         # pepare the plugin configurations
         plugin_configs = {k: v for k, v in contents[KEY_PLUGINS].items()}
@@ -68,7 +101,13 @@ class AccelerationFramework:
             plugin = cls(selected_configs)
 
             # check plugin
-            check_plugin_packages(plugin)
+            has_packages, missing_packages = check_plugin_packages(plugin)
+            if not has_packages and require_packages_check:
+                missing_packages = ", ".join(missing_packages)
+                raise ValueError(
+                    f"Packages '{missing_packages}' required by activated plugin '{plugin_name}' "
+                    "is missing. Please install it."
+                )
 
             # check if already activated, if so, will not reactivate again
             # maintain uniqueness of activated plugins
@@ -140,10 +179,17 @@ class AccelerationFramework:
     def requires_agumentation(self):
         return any([x.requires_agumentation for _, x in self.active_plugins])
 
-    def ready_for_train(
-        self, model: torch.nn.Module, accelerator: Accelerator = None
+    def get_callbacks_and_ready_for_train(
+        self, model: torch.nn.Module = None, accelerator: Accelerator = None
     ):
+        # show the initialized message
+        log_initialization_message(
+            set([x for x, _ in self.active_plugins]),
+            PLUGIN_REGISTRATIONS,
+            logger=logger.info,
+        )
+
         cbks = []
         for _, plugin in self.active_plugins:
             cbks.extend(plugin.get_callbacks_and_ready_for_train(model, accelerator))
-            return cbks
+        return cbks

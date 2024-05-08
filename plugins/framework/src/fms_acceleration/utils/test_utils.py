@@ -55,11 +55,13 @@ def read_configuration(path: str) -> Dict:
         return yaml.safe_load(f)
 
 
-def configure_framework_from_json(configuration_contents: Dict):
+def configure_framework_from_json(
+    configuration_contents: Dict, require_packages_check: bool = True
+):
     "helper function to configure framework given json configuration"
     with NamedTemporaryFile("w") as f:
         yaml.dump({KEY_PLUGINS: configuration_contents}, f)
-        return AccelerationFramework(f.name)
+        return AccelerationFramework(f.name, require_packages_check)
 
 
 @contextmanager
@@ -69,6 +71,7 @@ def build_framework_and_instantiate(
     ],
     configuration_contents: Dict,
     reset_registrations: bool = True,
+    require_packages_check: bool = True,
 ):
     "helper function to register plugins and instantiate an acceleration framework for testing"
 
@@ -88,7 +91,7 @@ def build_framework_and_instantiate(
             configuration_and_paths=path,
         )
 
-    yield configure_framework_from_json(configuration_contents)
+    yield configure_framework_from_json(configuration_contents, require_packages_check)
 
     # put back
     if reset_registrations:
@@ -100,12 +103,16 @@ def build_framework_and_instantiate(
 
 def instantiate_framework(
     configuration_contents: Dict,
+    require_packages_check: bool = True,
 ):
     """helper function to instantiate an acceleration framework for testing.
     This version does not refresh plugin registration.
     """
     return build_framework_and_instantiate(
-        [], configuration_contents, reset_registrations=False
+        [],
+        configuration_contents,
+        reset_registrations=False,
+        require_packages_check=require_packages_check,
     )
 
 

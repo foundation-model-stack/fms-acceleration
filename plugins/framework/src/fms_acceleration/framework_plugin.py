@@ -15,6 +15,8 @@
 # Standard
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Tuple
+import importlib
+import sys
 
 # Third Party
 from accelerate import Accelerator
@@ -28,6 +30,10 @@ class PluginRegistration:
     plugin: "AccelerationPlugin"
     AND: List[str] = None
     # OR: List[str] = None # not implemented yet
+
+    # package metadata
+    package_name: str = None
+    package_version: str = None
 
 
 PLUGIN_REGISTRATIONS: List[PluginRegistration] = list()
@@ -89,8 +95,18 @@ class AccelerationPlugin:
         **kwargs,
     ):
         global PLUGIN_REGISTRATIONS
+
+        # get the package metadata
+        pkg_name = sys.modules[plugin.__module__].__package__
+        package_version = importlib.metadata.version(pkg_name)
+
         PLUGIN_REGISTRATIONS.append(
-            PluginRegistration(plugin=plugin, AND=configuration_and_paths)
+            PluginRegistration(
+                plugin=plugin,
+                AND=configuration_and_paths,
+                package_name=pkg_name,
+                package_version=package_version,
+            )
         )
 
     restricted_model_archs: Optional[Set] = None
@@ -122,7 +138,7 @@ class AccelerationPlugin:
         raise NotImplementedError
 
     def get_callbacks_and_ready_for_train(
-        self, model: torch.nn.Module, accelerator: Accelerator = None
+        self, model: torch.nn.Module = None, accelerator: Accelerator = None
     ):
         return []
 

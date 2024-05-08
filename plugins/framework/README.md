@@ -67,7 +67,7 @@ Each [package](#packages) in this monorepo:
    pip install fms-acceleration/plugins/peft
    pip install fms-acceleration/plugins/unsloth # to be available in the near future
    ```
-- can be *independently configured*. Each plugin is registed under a particular configuration path. E.g., the [autogptq plugin](libs/peft/src/fms_accelerate_peft/framework_plugin_autogptq.py) is reqistered under the config path `peft.quantization.auto_gptq`.
+- can be *independently configured*. Each plugin is registed under a particular configuration path. E.g., the [autogptq plugin](libs/peft/src/fms_acceleration_peft/framework_plugin_autogptq.py) is reqistered under the config path `peft.quantization.auto_gptq`.
     ```python
     AccelerationPlugin.register_plugin(
         AutoGPTQAccelerationPlugin,

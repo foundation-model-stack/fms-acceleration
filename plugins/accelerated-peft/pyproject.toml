@@ -31,7 +31,7 @@ flash-attn = ["flash-attn"]
 files = ["requirements.txt"]
 
 [tool.hatch.build.targets.wheel]
-only-include = ["src/fms_accelerate_peft"]
+only-include = ["src/fms_acceleration_peft"]
 
 [tool.hatch.metadata]
 allow-direct-references = true
