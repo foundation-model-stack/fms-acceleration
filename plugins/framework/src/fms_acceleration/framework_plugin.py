@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 # Third Party
+from accelerate import Accelerator
 from peft import LoraConfig
 from transformers import TrainingArguments
 import torch
@@ -120,7 +121,9 @@ class AccelerationPlugin:
     ):
         raise NotImplementedError
 
-    def callbacks(self):
+    def get_callbacks_and_ready_for_train(
+        self, model: torch.nn.Module, accelerator: Accelerator = None
+    ):
         return []
 
     def _check_config_and_maybe_check_values(self, key: str, values: List[Any] = None):

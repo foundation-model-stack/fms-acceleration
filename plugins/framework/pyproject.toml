@@ -24,7 +24,8 @@ classifiers=[
 dependencies = [
   "torch<2.3",
   "transformers<4.40",
-  "peft"
+  "peft",
+  "accelerate"
 ]
 
 [tool.hatch.build.targets.wheel]

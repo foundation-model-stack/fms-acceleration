@@ -16,8 +16,10 @@
 from typing import Dict, List, Optional, Tuple
 
 # Third Party
+from accelerate import Accelerator
 from transformers import PreTrainedModel, TrainingArguments
 from transformers.utils.import_utils import _is_package_available
+import torch
 import yaml
 
 # First Party
@@ -32,8 +34,11 @@ def check_plugin_packages(plugin: AccelerationPlugin):
         return True  # passthrough
 
     for package_name in plugin.require_packages:
-        _is_package_available(package_name)
-
+        if not _is_package_available(package_name):
+            raise ValueError(
+                f"Package \'{package_name}\' required by activated plugin \'{plugin.__class__.__name__}\' "
+                "is missing. Please install it."
+            )
 
 KEY_PLUGINS = "plugins"
 
@@ -135,8 +140,10 @@ class AccelerationFramework:
     def requires_agumentation(self):
         return any([x.requires_agumentation for _, x in self.active_plugins])
 
-    def callbacks(self):
+    def ready_for_train(
+        self, model: torch.nn.Module, accelerator: Accelerator = None
+    ):
         cbks = []
         for _, plugin in self.active_plugins:
-            cbks.extend(plugin.callbacks())
+            cbks.extend(plugin.get_callbacks_and_ready_for_train(model, accelerator))
             return cbks
