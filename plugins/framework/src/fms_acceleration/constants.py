@@ -12,20 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Local
-from .framework import AccelerationFramework
-from .constants import PLUGIN_PREFIX, PLUGINS
-from .framework_plugin import (
-    AccelerationPlugin,
-    AccelerationPluginConfigError,
-    get_relevant_configuration_sections,
-)
+KEY_PLUGINS = "plugins"
+PLUGIN_PREFIX = "fms_acceleration_"
 
-# Standard
-# use importlib to load the packages, if they are installed
-import importlib
+# the order below is a linear precedence in which the plugins will be registered
+# and activated.
+# - hence the plugins that have model loaders should be on top of this list
 
-for postfix in PLUGINS:
-    plugin_name = f"{PLUGIN_PREFIX}{postfix}"
-    if importlib.util.find_spec(plugin_name):
-        importlib.import_module(plugin_name)
+PLUGINS = [
+    "peft",
+]

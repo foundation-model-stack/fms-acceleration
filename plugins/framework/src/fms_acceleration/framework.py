@@ -26,16 +26,13 @@ import yaml
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 # First Party
-from fms_acceleration.framework_plugin import (
+from .framework_plugin import (
     PLUGIN_REGISTRATIONS,
     AccelerationPlugin,
     PluginRegistration,
     get_relevant_configuration_sections,
 )
-
-KEY_PLUGINS = "plugins"
-PLUGIN_PREFIX = "fms_acceleration_"
-
+from .constants import KEY_PLUGINS
 
 def check_plugin_packages(plugin: AccelerationPlugin):
     if plugin.require_packages is None:
@@ -47,7 +44,6 @@ def check_plugin_packages(plugin: AccelerationPlugin):
             missing_packages.append(package_name)
     return len(missing_packages) == 0, missing_packages
 
-
 def log_initialization_message(
     active_class_names: Set[str],
     registered_plugins: List[PluginRegistration],  # list of regs
@@ -55,8 +51,6 @@ def log_initialization_message(
 ):
     if logger is None:
         logger = print
-
-    logger = print
 
     def _registration_display(reg: PluginRegistration):
         return (
