@@ -200,8 +200,14 @@ class ConfigUtils:
                 current_key = item.replace("--", "")
                 argument_dict[current_key] = None
             else:
+                v = argument_dict[current_key]
                 # is value
-                argument_dict[current_key] = item
+                if v is None:
+                    argument_dict[current_key] = item
+                else:
+                    # otherwise it was from a list, so make into sequence
+                    argument_dict[current_key] = v + ' ' + item
+
         return argument_dict
 
 

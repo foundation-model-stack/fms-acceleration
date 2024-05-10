@@ -4,13 +4,6 @@ echo "FMS Acceleration Benchmarking Script"
 echo "Please run this script as "
 echo "bash scripts/run_benchmarks.sh ... from the root of the repo"
 
-# inputs
-NUM_GPUS_MATRIX=${1-"1 2"}
-RESULT_DIR=${2:-"benchmark_outputs"}
-
-echo "NUM_GPUS_MATRIX: $NUM_GPUS_MATRIX"
-echo "RESULT_DIR: $RESULT_DIR"
-
 # TODO: this can be improved. For now we assume we always run from 
 # root of repo
 WORKING_DIR=scripts/benchmarks
@@ -19,9 +12,9 @@ WORKING_DIR=scripts/benchmarks
 CONFIG_DIR=sample-configurations
 
 # ------------- MAIN CONFIGS -----------------
-SCENARIOS_CONFIG=$WORKING_DIR/scenarios.yaml
-DEFAULTS_CONFIG=$WORKING_DIR/defaults.yaml
-ACCELERATE_CONFIG=$WORKING_DIR/accelerate.yaml
+SCENARIOS_CONFIG=scenarios.yaml
+DEFAULTS_CONFIG=defaults.yaml
+ACCELERATE_CONFIG=accelerate.yaml
 
 # ------------- FRAMEWORK CONFIGS -----------------
 
@@ -37,7 +30,32 @@ SCNTAG_PEFT_AUTOGPTQ=accelerated-peft-gptq
 # ------------- OTHER CONFIGS -----------------
 
 # data will be cached in here
-DATA_CACHE=$RESULT_DIR/data/cache.json
+DATA_CACHE=data/cache.json
+
+# inputs
+NUM_GPUS_MATRIX=${1-"1 2"}
+RESULT_DIR=${2:-"benchmark_outputs"}
+SCENARIOS_CONFIG=${3:-$SCENARIOS_CONFIG}
+SCENARIOS_FILTER=${4-$SCNTAG_PEFT_AUTOGPTQ}
+
+echo "NUM_GPUS_MATRIX: $NUM_GPUS_MATRIX"
+echo "RESULT_DIR: $RESULT_DIR"
+echo "SCENARIOS_CONFIG: $SCENARIOS_CONFIG"
+echo "SCENARIOS_FILTER: $SCENARIOS_FILTER"
+
+# tag on the directories
+SCENARIOS_CONFIG=$WORKING_DIR/$SCENARIOS_CONFIG
+DEFAULTS_CONFIG=$WORKING_DIR/$DEFAULTS_CONFIG
+ACCELERATE_CONFIG=$WORKING_DIR/$ACCELERATE_CONFIG
+DATA_CACHE=$RESULT_DIR/$DATA_CACHE
+
+# ------------- EXTRA ARGS -----------------
+
+EXTRA_ARGS=""
+
+if [ ! -z "$SCENARIOS_FILTER" ]; then 
+    EXTRA_ARGS="$EXTRA_ARGS --run_only_scenarios $SCENARIOS_FILTER"
+fi
 
 # run the bench
 python $WORKING_DIR/benchmark.py \
@@ -46,8 +64,6 @@ python $WORKING_DIR/benchmark.py \
        $CONFIGTAG_PEFT_AUTOGPTQ $CONFIG_PEFT_AUTOGPTQ \
    --scenarios_config_path $SCENARIOS_CONFIG \
    --accelerate_config $ACCELERATE_CONFIG \
-   --run_only_scenarios $SCNTAG_PEFT_AUTOGPTQ \
    --defaults_config_path $DEFAULTS_CONFIG \
    --dataset_save_path $DATA_CACHE \
-   --results_output_path $RESULT_DIR
-
+   --results_output_path $RESULT_DIR $EXTRA_ARGS
