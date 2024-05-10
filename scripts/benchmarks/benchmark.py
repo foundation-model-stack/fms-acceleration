@@ -6,7 +6,7 @@ import subprocess
 import warnings
 from copy import copy
 from itertools import product
-from typing import Callable, Dict, List, Tuple
+from typing import Callable, Dict, List, Tuple, Any
 
 import datasets
 import pandas as pd
@@ -148,7 +148,7 @@ class ConfigUtils:
 
             # append the key value pair
             argslist.append(f"--{arg}")
-            argslist.append(str(val))
+            argslist.append(val)
 
         return argslist
 
@@ -186,13 +186,13 @@ class ConfigUtils:
             list_of_products.append(
                 {
                     name: arg
-                    for name, arg in zip(variable_matrices.keys(), arg_combinations)
+                for name, arg in zip(variable_matrices.keys(), arg_combinations)
                 }
             )
         return list_of_products
 
     @staticmethod
-    def convert_args_to_dict(experiment_arguments: List):
+    def convert_args_to_dict(experiment_arguments: List[Any]):
         "this function converts an uneven keypair list, where some keys are missing values"
         argument_dict = {}
         for item in experiment_arguments:
@@ -206,6 +206,9 @@ class ConfigUtils:
 
 
 class ScenarioMatrix:
+
+    matrix_args = ['model_name_or_path']
+
     def __init__(self, scenario: Dict, acceleration_config_map: Dict = None) -> None:
         assert "arguments" in scenario.keys(), "Missing `arguments` key in `scenario`"
         for key, val in scenario.items():
@@ -223,10 +226,12 @@ class ScenarioMatrix:
         scenario_defaults = {}
         matrices = {}
         for arg_name, arg_value in self.arguments.items():
-            if isinstance(arg_value, list):
+            if arg_name in ScenarioMatrix.matrix_args:
                 matrices[arg_name] = arg_value
+            elif isinstance(arg_value, list):
+                scenario_defaults[arg_name] = [x for x in arg_value]
             else:
-                scenario_defaults[arg_name] = str(arg_value)
+                scenario_defaults[arg_name] = arg_value
         matrices["acceleration_framework_config_file"] = getattr(
             self, "framework_config", []
         )
@@ -252,15 +257,20 @@ class Experiment:
         self.stderr_filename = os.path.join(self.save_dir, FILE_STDERR)
 
     def run(self, run_cmd: str, environment_variables: Dict = None):
-        commands = run_cmd.split()
+
+        # form the command line
+        commands = []
         for c in self.experiment_arg:
-            # need to ensure all the arguments are properly split
-            # since there is a possiblity some arguments are quoted strings
-            # e.e., target_modules = "q_proj k_proj"
-            commands.extend(c.split())
+            if isinstance(c, list):
+                commands.extend([str(x) for x in c])
+            else:
+                commands.append(str(c))
+            
+        # will save the command line in str
+        self.experiment_args_str = commands
         os.makedirs(self.save_dir, exist_ok=True)
         subprocess.run(
-            commands,
+            run_cmd.split() + commands, 
             capture_output=False,
             stdout=open(self.stdout_filename, "w"),
             stderr=open(self.stderr_filename, "w"),
@@ -425,7 +435,7 @@ def main(args):
         maybe_error_messages = experiment.maybe_get_experiment_error_traceback()
         if maybe_error_messages is None:
             save_result = {
-                **ConfigUtils.convert_args_to_dict(experiment.experiment_arg),
+                **ConfigUtils.convert_args_to_dict(experiment.experiment_args_str),
                 **experiment.get_experiment_final_metrics(),
             }
             experiment_stats[experiment.tag] = save_result

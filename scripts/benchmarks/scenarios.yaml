@@ -26,7 +26,7 @@ scenarios:
             r: 16
             lora_alpha: 16
             lora_dropout: 0.0
-            target_modules: "q_proj k_proj v_proj o_proj"
+            target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
             model_name_or_path: 
                 - 'mistralai/Mistral-7B-v0.1'
                 - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
@@ -43,7 +43,7 @@ scenarios:
             r: 16
             lora_alpha: 16
             lora_dropout: 0.0
-            target_modules: "q_proj k_proj v_proj o_proj"
+            target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
             model_name_or_path: 
                 - 'mistralai/Mistral-7B-v0.1'
                 - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
@@ -60,7 +60,7 @@ scenarios:
             r: 16
             lora_alpha: 16
             lora_dropout: 0.0
-            target_modules: "q_proj k_proj v_proj o_proj"
+            target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
             model_name_or_path: 
                 - 'TheBloke/Mistral-7B-v0.1-GPTQ'
                 - 'TheBloke/Mixtral-8x7B-Instruct-v0.1-GPTQ'

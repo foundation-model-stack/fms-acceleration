@@ -21,5 +21,5 @@ adam_epsilon: 1e-4
 lr_scheduler_type: linear
 logging_strategy: steps
 logging_steps: 10
-max_steps: 20
+max_steps: 100
 
