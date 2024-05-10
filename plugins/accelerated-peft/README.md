@@ -13,7 +13,8 @@ Plugin | Description | Depends | Loading | Augmentation | Callbacks
 ### Key Points
 - fix upcasting (resulting in slowdown) issue for `bnb` plugin, originally discovered by inventors of [Unsloth](https://unsloth.ai/blog/mistral-benchmark).
 - `bnb` properly configured to work with FSDP following [this guide](https://huggingface.co/docs/bitsandbytes/main/en/fsdp_qlora). 
-
+- `triton_v2` kernels are not yet properly integrated into huggingface optimum.
+- `triton_v2` kernels are [the only 4bit kernels that work for training](https://github.com/AutoGPTQ/AutoGPTQ/issues/633).
 
 ## Known Issues
 

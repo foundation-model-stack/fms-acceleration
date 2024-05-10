@@ -1,0 +1,17 @@
+target_modules,packing,model_name_or_path,num_gpus,per_device_train_batch_size,train_runtime_mins,train_tokens_per_second,train_loss,framework_config
+q_proj k_proj v_proj o_proj,True,TheBloke/Llama-2-70B-GPTQ,1,4,60.249675,453.225,0.992611780166626,accelerated-peft-autogptq
+q_proj k_proj v_proj o_proj,True,TheBloke/Llama-2-70B-GPTQ,1,8,,,,accelerated-peft-autogptq
+q_proj k_proj v_proj o_proj,True,TheBloke/Llama-2-70B-GPTQ,2,2,31.122931666666663,438.69,0.9936255645751954,accelerated-peft-autogptq
+q_proj k_proj v_proj o_proj,True,TheBloke/Llama-2-70B-GPTQ,2,4,,,,accelerated-peft-autogptq
+q_proj k_proj v_proj o_proj,True,TheBloke/Mistral-7B-v0.1-GPTQ,1,4,7.98609,3419.279,0.9823608779907228,accelerated-peft-autogptq
+q_proj k_proj v_proj o_proj,True,TheBloke/Mistral-7B-v0.1-GPTQ,1,8,15.743668333333334,3468.908,0.9375727558135988,accelerated-peft-autogptq
+q_proj k_proj v_proj o_proj,True,TheBloke/Mistral-7B-v0.1-GPTQ,2,2,4.464503333333334,3058.198,0.973169527053833,accelerated-peft-autogptq
+q_proj k_proj v_proj o_proj,True,TheBloke/Mistral-7B-v0.1-GPTQ,2,4,8.174841666666667,3340.33,1.008008918762207,accelerated-peft-autogptq
+q_proj k_proj v_proj o_proj,True,TheBloke/Mixtral-8x7B-Instruct-v0.1-GPTQ,1,4,14.534866666666666,1878.701,0.8946727943420411,accelerated-peft-autogptq
+q_proj k_proj v_proj o_proj,True,TheBloke/Mixtral-8x7B-Instruct-v0.1-GPTQ,1,8,27.804606666666665,1964.183,0.8923477172851563,accelerated-peft-autogptq
+q_proj k_proj v_proj o_proj,True,TheBloke/Mixtral-8x7B-Instruct-v0.1-GPTQ,2,2,8.29013,1646.938,0.8994909572601318,accelerated-peft-autogptq
+q_proj k_proj v_proj o_proj,True,TheBloke/Mixtral-8x7B-Instruct-v0.1-GPTQ,2,4,14.881406666666669,1834.952,0.8962078380584717,accelerated-peft-autogptq
+q_proj k_proj v_proj o_proj,True,mistralai/Mistral-7B-v0.1,1,4,7.655338333333333,3567.01,0.881033582687378,
+q_proj k_proj v_proj o_proj,True,mistralai/Mistral-7B-v0.1,1,8,15.239303333333334,3583.716,1.0226861000061036,
+q_proj k_proj v_proj o_proj,True,mistralai/Mistral-7B-v0.1,2,2,4.312799999999999,3165.77,0.8488472652435303,
+q_proj k_proj v_proj o_proj,True,mistralai/Mistral-7B-v0.1,2,4,7.919931666666667,3447.841,0.8824976539611816,
