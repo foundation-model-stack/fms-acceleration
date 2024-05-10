@@ -1,4 +1,9 @@
-fms_acceleration @ git+https://github.com/foundation-model-stack/fms-acceleration.git#subdirectory=plugins/framework
+# decide not to have this as an requirement for now
+# fms_acceleration @ git+https://github.com/foundation-model-stack/fms-acceleration.git#subdirectory=plugins/framework
+
+# put this in here because there is a breaking FSDP api change that 
+# is fixed after peft > 0.10
+accelerate < 0.29
 
 # this is because "auto_gptq > 0.7.1" it not yet available
 auto_gptq @ git+https://github.com/AutoGPTQ/AutoGPTQ.git

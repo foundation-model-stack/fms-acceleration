@@ -1,0 +1,39 @@
+# This file holds a list of scenarios to may be run.
+# - to limit to a number of scenarios, use the --run-only-scenarios flag.
+# - Each scenario will be run against a particular acceleration framework
+#   config, if the framework_config: key is specified.
+#   * a particular framework configuration
+# - the arguments tag will hold arguments to be passed to sft_trainer
+#   * the arguments are singular except for model_name_or_path which can handle
+#     multiple arguments.
+# - So anything that is critical for the scenario MUST be specified here 
+#   and not in the defaults, e.g. fp16
+scenarios:
+    -   name: full-finetuning
+        arguments:
+            model_name_or_path:  ['mistralai/Mistral-7B-v0.1']
+            torch_dtype: float16
+
+    -   name: standard-peft
+        arguments:
+            torch_dtype: float16
+            peft_method: lora
+            r: 16
+            lora_alpha: 16
+            lora_dropout: 0.0
+            target_modules: "q_proj k_proj v_proj o_proj"
+            model_name_or_path: ['mistralai/Mistral-7B-v0.1']
+
+    -   name: accelerated-peft-gptq
+        framework_config: 
+            - accelerated-peft-autogptq
+            - accelerated-peft-autogptq-unsloth
+        arguments:
+            fp16: True
+            torch_dtype: float16
+            peft_method: lora
+            r: 16
+            lora_alpha: 16
+            lora_dropout: 0.0
+            target_modules: "q_proj k_proj v_proj o_proj"
+            model_name_or_path: ['TheBloke/TinyLlama-1.1B-Chat-v0.3-GPTQ']
