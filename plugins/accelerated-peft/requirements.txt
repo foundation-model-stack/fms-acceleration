@@ -5,5 +5,8 @@
 # is fixed after peft > 0.10
 accelerate < 0.29
 
+# bitsandbytes for the BNB plugin
+bitsandbytes
+
 # this is because "auto_gptq > 0.7.1" it not yet available
 auto_gptq @ git+https://github.com/AutoGPTQ/AutoGPTQ.git

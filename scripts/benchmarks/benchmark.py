@@ -6,7 +6,7 @@ import subprocess
 import warnings
 from copy import copy
 from itertools import product
-from typing import Callable, Dict, List, Tuple, Any
+from typing import Callable, Dict, List, Tuple, Any, Union
 
 import datasets
 import pandas as pd
@@ -509,39 +509,55 @@ def generate_list_of_experiments(
     return experiments
 
 
-def gather_report(results_dir: str, raw: bool=True):
+def gather_report(result_dir: Union[str, List[str]], raw: bool=True):
 
-    with open(os.path.join(results_dir, FILE_SCRIPT_ARGS)) as f:
-        script_args = json.load(f)
+    def _gather(rdir):
 
-    # map from config file to tag
-    fcm = convert_keypairs_to_map(
-        script_args['acceleration_framework_config_keypairs']
-    )
-    fcm = {v:k for k,v in fcm.items()}
+        with open(os.path.join(rdir, FILE_SCRIPT_ARGS)) as f:
+            script_args = json.load(f)
 
-    experiment_stats = {}
-    exper_dirs = [x for x in os.listdir(results_dir) if x.startswith(DIR_EXPERIMENT_PREFIX)]
-    for tag in exper_dirs:
-        try:
-            with open(os.path.join(results_dir, tag, FILE_RESULTS)) as f:
-                tag = tag.replace(DIR_EXPERIMENT_PREFIX + '_', '')
-                tag = int(tag)
-                experiment_stats[tag] = json.load(f)
-        except FileNotFoundError:
-            pass
-    df = pd.DataFrame.from_dict(experiment_stats, orient="index").sort_index()
-    try:
-        df['framework_config'] = df['acceleration_framework_config_file'].map(
-            lambda x : fcm.get(x, 'none')
+        # map from config file to tag
+        fcm = convert_keypairs_to_map(
+            script_args['acceleration_framework_config_keypairs']
         )
-    except KeyError: 
-        pass
+        fcm = {v:k for k,v in fcm.items()}
+
+        experiment_stats = {}
+        exper_dirs = [x for x in os.listdir(rdir) if x.startswith(DIR_EXPERIMENT_PREFIX)]
+        for tag in exper_dirs:
+            try:
+                with open(os.path.join(rdir, tag, FILE_RESULTS)) as f:
+                    tag = tag.replace(DIR_EXPERIMENT_PREFIX + '_', '')
+                    tag = int(tag)
+                    experiment_stats[tag] = json.load(f)
+            except FileNotFoundError:
+                pass
+        df = pd.DataFrame.from_dict(experiment_stats, orient="index").sort_index()
+        try:
+            df['framework_config'] = df['acceleration_framework_config_file'].map(
+                lambda x : fcm.get(x, 'none')
+            )
+        except KeyError: 
+            pass
+
+        return df
+
+    if isinstance(result_dir, str):
+        df = _gather(result_dir)
+    else:
+        df = pd.concat([_gather(x) for x in result_dir])
 
     if raw:
         return df, None
 
-    _nunique = partial(pd.Series.nunique, dropna=False)
+    # certain columns should not be deduped
+    def _nunique(series):
+        try:
+            return pd.Series.nunique(series, dropna=False)
+        except:
+            # if unique does not work, then return number of non-na
+            # elements
+            return len(series) - series.isna().sum()
     u = df.apply(_nunique) # columns that are unique
     return df.loc[:,u != 1], df.iloc[0][u == 1].to_dict()
 
