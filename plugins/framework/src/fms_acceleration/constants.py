@@ -21,4 +21,5 @@ PLUGIN_PREFIX = "fms_acceleration_"
 
 PLUGINS = [
     "peft",
+    "unsloth",
 ]

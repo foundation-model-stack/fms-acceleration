@@ -141,12 +141,20 @@ def read_configuration(path: str) -> Dict:
 # specified key path, with the value.
 KEY_AUTO_GPTQ = "auto_gptq"
 KEY_BNB_NF4 = "bnb-nf4"
+KEY_UNSLOTH = "unsloth"
 
 CONFIGURATIONS = {
     KEY_AUTO_GPTQ: "plugins/accelerated-peft/configs/autogptq.yaml",
     KEY_BNB_NF4: (
         "plugins/accelerated-peft/configs/bnb.yaml",
         [("peft.quantization.bitsandbytes.quant_type", "nf4")],
+    ),
+    KEY_UNSLOTH: (
+        "plugins/unsloth/configs/unsloth.yaml",
+        [
+            ("peft.quantization.unsloth.base_layer", "bitsandbytes"),
+            ("peft.quantization.unsloth.base_layer", "auto_gptq"),
+        ],
     ),
 }
 
@@ -157,7 +165,9 @@ CONFIGURATIONS = {
 #   config.
 COMBINATIONS = [
     ("accelerated-peft-autogptq", (KEY_AUTO_GPTQ,)),
-    # ("accelerated-peft-bnb-nf4", (KEY_BNB_NF4,)),
+    ("accelerated-peft-bnb-nf4", (KEY_BNB_NF4,)),    
+    ("accelerated-peft-autogptq-unsloth", (KEY_AUTO_GPTQ, KEY_UNSLOTH)),
+    ("accelerated-peft-bnb-nf4-unsloth", (KEY_BNB_NF4, KEY_UNSLOTH)),    
 ]
 
 
@@ -167,23 +177,29 @@ def merge_configs(config_contents: List[Dict]):
 
     # merge in place
     def _merge(result: Dict, new_contents: Dict):
-        for k in new_contents:
+        for k, v in new_contents.items():
+            # creates a new dictionary item if does not already exist in result
             if k not in result:
-                result[k] = {}
-            _merge(result[k], new_contents)
+                result[k] = v
+            if isinstance(v, dict):
+                _merge(result[k], v)               
+        return result
 
     if len(config_contents) == 0:
         return {}
 
+    # this is a left merge of the 1st plugin
     result = config_contents[0]
     if len(config_contents) == 1:
         return result
 
+    # this is for 2nd plugin onwards:
     for new_contents in config_contents[1:]:
-        _merge(result, new_contents)
+        result = _merge(result, new_contents)
 
     return result
 
+from typing import Dict
 
 if __name__ == "__main__":
 
@@ -236,7 +252,8 @@ if __name__ == "__main__":
     # now merge contents in CONFIGURATIONS to form the final
     # sample configuration
     for combi_tag, combi in COMBINATIONS:
-
+        # if "unsloth" in combi_tag:
+        #     import pdb; pdb.set_trace()
         # merging the configuration contents for this particular combination
         config = merge_configs([CONFIGURATIONS[tag] for tag in combi])
         indent_yaml(config)  # add the indent
