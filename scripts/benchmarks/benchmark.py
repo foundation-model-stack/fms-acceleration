@@ -43,6 +43,8 @@ TRUE_FALSE_ARGUMENTS = []
 
 FILE_STDOUT = "stdout"
 FILE_STDERR = "stderr"
+FILE_RESULTS = "results.json"
+FILE_SHELL_COMMAND = "command.sh"
 FILE_SUMMARY_CSV = 'summary.csv'
 
 # regex to capture the start and end of tracebacks
@@ -257,10 +259,17 @@ class Experiment:
         self.result = None
         self.tag = tag
 
+        # to be set in run
+        self.shell_command = None
+        self.experiment_args_str = None
+        self.environment = None
+
         # directories
         self.save_dir = save_dir
         self.stdout_filename = os.path.join(self.save_dir, FILE_STDOUT)
         self.stderr_filename = os.path.join(self.save_dir, FILE_STDERR)
+        self.command_filename = os.path.join(self.save_dir, FILE_SHELL_COMMAND)
+        self.results_filename = os.path.join(self.save_dir, FILE_RESULTS)
 
     def run(self, run_cmd: str, environment_variables: Dict = None):
 
@@ -273,10 +282,12 @@ class Experiment:
                 commands.append(str(c))
             
         # will save the command line in str
+        self.shell_command = run_cmd.split() + commands
+        self.environment = environment_variables
         self.experiment_args_str = commands
         os.makedirs(self.save_dir, exist_ok=True)
         subprocess.run(
-            run_cmd.split() + commands, 
+            self.shell_command, 
             capture_output=False,
             stdout=open(self.stdout_filename, "w"),
             stderr=open(self.stderr_filename, "w"),
@@ -341,6 +352,66 @@ class Experiment:
 
         return None if len(results) == 0 else results
 
+    def write_result(self):
+        "Function to write a json result file"
+
+        # save some basic args
+        save_result = ConfigUtils.convert_args_to_dict(self.experiment_args_str)
+
+        # if there is an error we save the error message else we save the final result
+        maybe_error_messages = self.maybe_get_experiment_error_traceback()
+        if maybe_error_messages is None:
+            other_results = self.get_experiment_final_metrics()
+            save_result = {
+                **save_result, **self.get_experiment_final_metrics(),
+            }
+        else:
+            other_results = {"error_messages": maybe_error_messages}
+
+        # combine the final thing
+        save_result = {**save_result, **other_results}
+
+        with open(self.results_filename, 'w') as f:
+            json.dump(save_result, f, indent=4, sort_keys=True)
+
+    # NOTE: can be improved. Not sure if this really gets parity with 
+    # subprocess.run
+    def write_shell_command(self):
+
+        def _escape(x: str):
+            # if there is is whitespace we just escape with single quotes
+            # not sure if this is the best thing to do
+            return x if not re.search(r"\s", x) else f"\'{x}\'"
+
+        "Write a shell script to repro the run"
+        with open(self.command_filename, 'w') as f:
+            f.write("#!/bin/bash\n\n")
+            for key, val in self.environment.items():
+                f.write(f"{key}={val}\n")
+            f.write(" ".join([
+                _escape(x) for x in self.shell_command
+            ]))
+
+class DryRunExperiment(Experiment):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def run(self, run_cmd: str, environment_variables: Dict = None):
+        def _dummy(*args, **kwargs):
+            pass
+        _old = subprocess.run
+        subprocess.run = _dummy
+        super().run(run_cmd, environment_variables)
+        subprocess.run = _old
+
+    def get_experiment_final_metrics(
+        self, final_metrics_keys: List[str] = ["train_loss", "train_runtime"]
+    ):
+        return {}
+
+    def maybe_get_experiment_error_traceback(self):
+        return None
 
 def prepare_arguments(args):
     defaults = ConfigUtils.read_yaml(args.defaults_config_path)
@@ -384,6 +455,7 @@ def generate_list_of_experiments(
     experiment_args: List[Tuple[int, List]],
     output_dir: str = "results",
     hf_products_dir: str = "hf",
+    dry_run: bool = False,
 ) -> List[Experiment]:
     """Construct list of experiments to be run. Takes in default_config and
     any matrices in scenario and experiment_config
@@ -396,7 +468,8 @@ def generate_list_of_experiments(
             "--output_dir",
             os.path.join(experiment_output_dir, hf_products_dir),
         ]
-        _expr = Experiment(
+        expr_cls = Experiment if not dry_run else DryRunExperiment
+        _expr = expr_cls(
             num_gpus,
             expr_arg_w_outputdir,
             save_dir=experiment_output_dir,
@@ -410,8 +483,9 @@ def main(args):
 
     # 1. Prepares a standard BenchmarkDataset
     # TODO: consider caching the json file
-    benchmark_dataset = BenchmarkDataset(args.dataset_name, format_fn)
-    benchmark_dataset.save_to_path(args.dataset_save_path)
+    if not args.no_data_processing:
+        benchmark_dataset = BenchmarkDataset(args.dataset_name, format_fn)
+        benchmark_dataset.save_to_path(args.dataset_save_path)
 
     # 2. Prepares a list of experiment arguments from a set of configs
     experiment_args = prepare_arguments(args)
@@ -420,7 +494,8 @@ def main(args):
     experiment_stats = {}
     experiment: Experiment
     for experiment in tqdm(generate_list_of_experiments(
-        experiment_args, output_dir=args.results_output_path
+        experiment_args, output_dir=args.results_output_path,
+        dry_run=args.dry_run,
     )):
         if experiment.num_gpus > 1:
             prefix = COMMAND_ACCELERATE.format(
@@ -437,18 +512,15 @@ def main(args):
             environment_variables={"CUDA_VISIBLE_DEVICES": device_ids},
         )
 
-        # if there is an error we save the error message else we save the final result
-        maybe_error_messages = experiment.maybe_get_experiment_error_traceback()
-        if maybe_error_messages is None:
-            save_result = {
-                **ConfigUtils.convert_args_to_dict(experiment.experiment_args_str),
-                **experiment.get_experiment_final_metrics(),
-            }
-            experiment_stats[experiment.tag] = save_result
-        else:
-            experiment_stats[experiment.tag] = {"error_messages": maybe_error_messages}
+        # write results and store pointers to files
+        experiment.write_result()
+        experiment.write_shell_command()
+        experiment_stats[experiment.tag] = experiment.results_filename
 
     # 4. Consolidates the experiment results into a summary
+    for tag, path in experiment_stats.items():
+        with open(path) as f:
+            experiment_stats[tag] = json.load(f)
     df = pd.DataFrame.from_dict(experiment_stats, orient="index")
     df.to_csv(
         os.path.join(args.results_output_path, FILE_SUMMARY_CSV), index=None
@@ -546,6 +618,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--process_port", type=int, default=29500, help="accelerate process port"
+    )
+    parser.add_argument(
+        "--no_data_processing", action='store_true', help="skip the json data prep"
+    )
+    parser.add_argument(
+        "--dry_run", action='store_true', help="dry run"
     )
     args = parser.parse_args()
     main(args)

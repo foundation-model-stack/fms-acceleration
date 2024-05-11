@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -x
+
 echo "FMS Acceleration Benchmarking Script"
 echo "Please run this script as "
 echo "bash scripts/run_benchmarks.sh ... from the root of the repo"
@@ -32,6 +34,10 @@ SCNTAG_PEFT_AUTOGPTQ=accelerated-peft-gptq
 # data will be cached in here
 DATA_CACHE=data/cache.json
 
+# env inputs
+DRY_RUN=${DRY_RUN:-"false"}
+NO_DATA_PROCESSING=${NO_DATA_PROCESSING:-"false"}
+
 # inputs
 NUM_GPUS_MATRIX=${1-"1 2"}
 RESULT_DIR=${2:-"benchmark_outputs"}
@@ -55,6 +61,14 @@ EXTRA_ARGS=""
 
 if [ ! -z "$SCENARIOS_FILTER" ]; then 
     EXTRA_ARGS="$EXTRA_ARGS --run_only_scenarios $SCENARIOS_FILTER"
+fi
+
+if [ "$DRY_RUN" = "true" ]; then 
+    EXTRA_ARGS="$EXTRA_ARGS --dry_run"
+fi
+
+if [ "$NO_DATA_PROCESSING" = "true" ]; then 
+    EXTRA_ARGS="$EXTRA_ARGS --no_data_processing"
 fi
 
 # run the bench
