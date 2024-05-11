@@ -240,9 +240,10 @@ class ScenarioMatrix:
                 scenario_defaults[arg_name] = [x for x in arg_value]
             else:
                 scenario_defaults[arg_name] = arg_value
-        matrices["acceleration_framework_config_file"] = getattr(
-            self, "framework_config", []
-        )
+        if hasattr(self, "framework_config"):
+            matrices["acceleration_framework_config_file"] = getattr(
+                self, "framework_config", []
+            )
         return matrices, scenario_defaults
 
 
@@ -426,25 +427,33 @@ def prepare_arguments(args):
         "packing": args.packing_matrix,
         "max_seq_len": args.max_seq_len_matrix,
     }
+    experiment_factor = 1
+    for k, v in experiment_matrices.items():
+        print (f"Experiment has matrix '{k}' of len {len(v)}")
+        experiment_factor *= len(v)
+    print (f"Experiment matrices will product by factor of '{experiment_factor}'")
+
     for scenario_config in scenarios:
+        _scn_name = scenario_config["name"]
         # if a `run_only_scenarios` list exist, filter out any scenario not in the list
         if (
             args.run_only_scenarios
-            and scenario_config["name"] not in args.run_only_scenarios
+            and _scn_name not in args.run_only_scenarios
         ):
+            print (f"Skipping scenario '{_scn_name}'")
             continue
         scenario = ScenarioMatrix(scenario_config, acceleration_config_map)
         scenario_matrices, scenario_constants = (
             scenario.get_scenario_matrices_and_defaults()
         )
+        for k, v in scenario_matrices.items():
+            print (f"Scenario '{_scn_name}' has matrix '{k}' of len {len(v)}")
         # update defaults with scenario constants
         constants = {**scenario_constants, **defaults}
         # Remove any empty variables and combine matrices to dictionary to cartesian product on
         combined_matrices = {**scenario_matrices, **experiment_matrices}
-        combined_matrices = {
-            key: val for key, val in combined_matrices.items() if len(val) > 0
-        }
         products = ConfigUtils.cartesian_product_on_dict(combined_matrices)
+        print (f"Scenario '{_scn_name}' will add to the total products by: ----> '{len(products)}'")
         for num_gpus, experiment_arg in ConfigUtils.build_args_from_products(
             products, constants
         ):
