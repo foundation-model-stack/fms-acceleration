@@ -13,6 +13,8 @@ import pandas as pd
 import yaml
 from tqdm import tqdm
 from transformers import HfArgumentParser, TrainingArguments
+from transformers import AutoModelForCausalLM
+from accelerate import init_empty_weights
 
 """
 This benchmarking script 
@@ -230,6 +232,13 @@ class ScenarioMatrix:
                         if k in acceleration_config_map
                     ]
             setattr(self, key, val)
+
+    def preload_models(self):
+        for model_name in self.arguments['model_name_or_path']:
+            print(f"Scenario '{self.name}' preloading model '{model_name}'")
+            with warnings.catch_warnings(record=True):
+                with init_empty_weights():
+                    del AutoModelForCausalLM.from_pretrained(model_name)
 
     def get_scenario_matrices_and_defaults(self):
         scenario_defaults = {}
@@ -455,6 +464,8 @@ def prepare_arguments(args):
         combined_matrices = {**scenario_matrices, **experiment_matrices}
         products = ConfigUtils.cartesian_product_on_dict(combined_matrices)
         print (f"Scenario '{_scn_name}' will add to the total products by: ----> '{len(products)}'")
+        if len(products) > 0:
+            scenario.preload_models()
         for num_gpus, experiment_arg in ConfigUtils.build_args_from_products(
             products, constants
         ):
