@@ -22,9 +22,11 @@ ACCELERATE_CONFIG=accelerate.yaml
 
 # list down the framework configuration files
 CONFIG_PEFT_AUTOGPTQ=$CONFIG_DIR/accelerated-peft-autogptq-sample-configuration.yaml
+CONFIG_PEFT_BNB=$CONFIG_DIR/accelerated-peft-bnb-nf4-sample-configuration.yaml
 
 # list down the framework config tags inside scenarios.yaml
 CONFIGTAG_PEFT_AUTOGPTQ=accelerated-peft-autogptq
+CONFIGTAG_PEFT_BNB=accelerated-peft-bnb
 
 # ------------- SCENARIO CONFIGS -----------------
 SCNTAG_PEFT_AUTOGPTQ=accelerated-peft-gptq
@@ -76,6 +78,7 @@ python $WORKING_DIR/benchmark.py \
    --num_gpus $NUM_GPUS_MATRIX \
    --acceleration_framework_config_keypairs \
        $CONFIGTAG_PEFT_AUTOGPTQ $CONFIG_PEFT_AUTOGPTQ \
+       $CONFIGTAG_PEFT_BNB $CONFIG_PEFT_BNB \
    --scenarios_config_path $SCENARIOS_CONFIG \
    --accelerate_config $ACCELERATE_CONFIG \
    --defaults_config_path $DEFAULTS_CONFIG \

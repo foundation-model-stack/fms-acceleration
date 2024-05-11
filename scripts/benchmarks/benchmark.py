@@ -11,9 +11,10 @@ from typing import Callable, Dict, List, Tuple, Any
 import datasets
 import pandas as pd
 import yaml
+from functools import partial
 from tqdm import tqdm
 from transformers import HfArgumentParser, TrainingArguments
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoConfig
 from accelerate import init_empty_weights
 
 """
@@ -49,6 +50,8 @@ FILE_RESULTS = "results.json"
 FILE_SHELL_COMMAND = "command.sh"
 FILE_SCRIPT_ARGS = "script.json"
 FILE_SUMMARY_CSV = 'summary.csv'
+
+DIR_EXPERIMENT_PREFIX = 'exp'
 
 # regex to capture the start and end of tracebacks
 REGEX_START_OF_TRACEBACK = "Traceback\s\(most\srecent\scall\slast\)"
@@ -236,9 +239,11 @@ class ScenarioMatrix:
     def preload_models(self):
         for model_name in self.arguments['model_name_or_path']:
             print(f"Scenario '{self.name}' preloading model '{model_name}'")
-            with warnings.catch_warnings(record=True):
-                with init_empty_weights():
-                    del AutoModelForCausalLM.from_pretrained(model_name)
+            # with warnings.catch_warnings(record=True):
+            #     with init_empty_weights():
+            #         m = AutoModelForCausalLM.from_pretrained(model_name)
+            #         del m
+            AutoConfig.from_pretrained(model_name)
 
     def get_scenario_matrices_and_defaults(self):
         scenario_defaults = {}
@@ -368,6 +373,7 @@ class Experiment:
 
         # save some basic args
         save_result = ConfigUtils.convert_args_to_dict(self.experiment_args_str)
+        save_result['num_gpus'] = self.num_gpus
 
         # if there is an error we save the error message else we save the final result
         maybe_error_messages = self.maybe_get_experiment_error_traceback()
@@ -456,14 +462,17 @@ def prepare_arguments(args):
         scenario_matrices, scenario_constants = (
             scenario.get_scenario_matrices_and_defaults()
         )
+        scn_factor = 1
         for k, v in scenario_matrices.items():
             print (f"Scenario '{_scn_name}' has matrix '{k}' of len {len(v)}")
+            scn_factor *= len(v)
+
         # update defaults with scenario constants
         constants = {**scenario_constants, **defaults}
         # Remove any empty variables and combine matrices to dictionary to cartesian product on
         combined_matrices = {**scenario_matrices, **experiment_matrices}
         products = ConfigUtils.cartesian_product_on_dict(combined_matrices)
-        print (f"Scenario '{_scn_name}' will add to the total products by: ----> '{len(products)}'")
+        print (f"Scenario '{_scn_name}' will add to the total products by: ----> '{experiment_factor} x {scn_factor}' = '{len(products)}'\n")
         if len(products) > 0:
             scenario.preload_models()
         for num_gpus, experiment_arg in ConfigUtils.build_args_from_products(
@@ -483,7 +492,7 @@ def generate_list_of_experiments(
     """
     experiments = []
     for _expr_id, (num_gpus, exp_arg) in enumerate(experiment_args):
-        experiment_tag = f"exp_{_expr_id}"
+        experiment_tag = f"{DIR_EXPERIMENT_PREFIX}_{_expr_id}"
         experiment_output_dir = os.path.join(output_dir, experiment_tag)
         expr_arg_w_outputdir = exp_arg + [
             "--output_dir",
@@ -499,6 +508,45 @@ def generate_list_of_experiments(
         experiments.append(_expr)
     return experiments
 
+
+def gather_report(results_dir: str, raw: bool=True):
+
+    with open(os.path.join(results_dir, FILE_SCRIPT_ARGS)) as f:
+        script_args = json.load(f)
+
+    # map from config file to tag
+    fcm = convert_keypairs_to_map(
+        script_args['acceleration_framework_config_keypairs']
+    )
+    fcm = {v:k for k,v in fcm.items()}
+
+    experiment_stats = {}
+    exper_dirs = [x for x in os.listdir(results_dir) if x.startswith(DIR_EXPERIMENT_PREFIX)]
+    for tag in exper_dirs:
+        try:
+            with open(os.path.join(results_dir, tag, FILE_RESULTS)) as f:
+                tag = tag.replace(DIR_EXPERIMENT_PREFIX + '_', '')
+                tag = int(tag)
+                experiment_stats[tag] = json.load(f)
+        except FileNotFoundError:
+            pass
+    df = pd.DataFrame.from_dict(experiment_stats, orient="index").sort_index()
+    try:
+        df['framework_config'] = df['acceleration_framework_config_file'].map(
+            lambda x : fcm.get(x, 'none')
+        )
+    except KeyError: 
+        pass
+
+    if raw:
+        return df, None
+
+    _nunique = partial(pd.Series.nunique, dropna=False)
+    u = df.apply(_nunique) # columns that are unique
+    return df.loc[:,u != 1], df.iloc[0][u == 1].to_dict()
+
+def compress(df):
+    return df.loc[:,df.apply(pd.Series.nunique) != 1]
 
 def main(args):
 
