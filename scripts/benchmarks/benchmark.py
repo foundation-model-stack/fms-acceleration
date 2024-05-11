@@ -45,6 +45,7 @@ FILE_STDOUT = "stdout"
 FILE_STDERR = "stderr"
 FILE_RESULTS = "results.json"
 FILE_SHELL_COMMAND = "command.sh"
+FILE_SCRIPT_ARGS = "script.json"
 FILE_SUMMARY_CSV = 'summary.csv'
 
 # regex to capture the start and end of tracebacks
@@ -495,6 +496,11 @@ def main(args):
     if not args.no_data_processing:
         benchmark_dataset = BenchmarkDataset(args.dataset_name, format_fn)
         benchmark_dataset.save_to_path(args.dataset_save_path)
+
+    # dump out the script arguments 
+    os.makedirs(args.results_output_path, exist_ok=True)
+    with open(os.path.join(args.results_output_path, FILE_SCRIPT_ARGS), 'w') as f:
+        json.dump(vars(args), f, indent=4, sort_keys=True)
 
     # 2. Prepares a list of experiment arguments from a set of configs
     experiment_args = prepare_arguments(args)
