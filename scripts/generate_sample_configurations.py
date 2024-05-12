@@ -141,7 +141,8 @@ def read_configuration(path: str) -> Dict:
 # specified key path, with the value.
 KEY_AUTO_GPTQ = "auto_gptq"
 KEY_BNB_NF4 = "bnb-nf4"
-KEY_UNSLOTH = "unsloth"
+KEY_BNB_UNSLOTH = "unsloth-bnb"
+KEY_AUTOGPTQ_UNSLOTH = "unsloth-gptq"
 
 CONFIGURATIONS = {
     KEY_AUTO_GPTQ: "plugins/accelerated-peft/configs/autogptq.yaml",
@@ -149,13 +150,18 @@ CONFIGURATIONS = {
         "plugins/accelerated-peft/configs/bnb.yaml",
         [("peft.quantization.bitsandbytes.quant_type", "nf4")],
     ),
-    KEY_UNSLOTH: (
+    KEY_BNB_UNSLOTH: (
         "plugins/unsloth/configs/unsloth.yaml",
         [
             ("peft.quantization.unsloth.base_layer", "bitsandbytes"),
-            ("peft.quantization.unsloth.base_layer", "auto_gptq"),
         ],
     ),
+    KEY_AUTOGPTQ_UNSLOTH : (
+        "plugins/unsloth/configs/unsloth.yaml",
+        [
+            ("peft.quantization.unsloth.base_layer", "auto_gptq"),
+        ],
+    )
 }
 
 # list of (tag, combi) tuples
@@ -166,10 +172,13 @@ CONFIGURATIONS = {
 COMBINATIONS = [
     ("accelerated-peft-autogptq", (KEY_AUTO_GPTQ,)),
     ("accelerated-peft-bnb-nf4", (KEY_BNB_NF4,)),    
-    ("accelerated-peft-autogptq-unsloth", (KEY_AUTO_GPTQ, KEY_UNSLOTH)),
-    ("accelerated-peft-bnb-nf4-unsloth", (KEY_BNB_NF4, KEY_UNSLOTH)),    
+    ("accelerated-peft-autogptq-unsloth", (KEY_AUTO_GPTQ, KEY_AUTOGPTQ_UNSLOTH)),
+    ("accelerated-peft-bnb-nf4-unsloth", (KEY_BNB_NF4, KEY_BNB_UNSLOTH)),    
 ]
 
+
+# TODO: throw error if merge conflicts
+from typing import List, Dict
 
 # TODO: throw error if merge conflicts
 def merge_configs(config_contents: List[Dict]):
@@ -178,24 +187,25 @@ def merge_configs(config_contents: List[Dict]):
     # merge in place
     def _merge(result: Dict, new_contents: Dict):
         for k, v in new_contents.items():
-            # creates a new dictionary item if does not already exist in result
+            
             if k not in result:
-                result[k] = v
-            if isinstance(v, dict):
-                _merge(result[k], v)               
-        return result
+                # if k is not in result, it means v does not 
+                # exist as a subtree under result, so we just do
+                # an assingment
+                result[k] = v 
+            else:
+                # otherwise we call the merge
+                _merge(result[k], v)
 
     if len(config_contents) == 0:
         return {}
 
-    # this is a left merge of the 1st plugin
     result = config_contents[0]
     if len(config_contents) == 1:
         return result
 
-    # this is for 2nd plugin onwards:
     for new_contents in config_contents[1:]:
-        result = _merge(result, new_contents)
+        _merge(result, new_contents)
 
     return result
 
