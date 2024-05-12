@@ -31,7 +31,7 @@ dependencies = [
 flash-attn = ["flash-attn"]
 
 [tool.hatch.build.targets.wheel]
-only-include = ["src/fms_accelerate_unsloth"]
+only-include = ["src/fms_acceleration_unsloth"]
 
 [tool.hatch.build.targets.wheel.sources]
 "src" = ""
