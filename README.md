@@ -12,15 +12,15 @@ Plugin | Description | Depends | License | Status
 [framework](./plugins/framework/README.md) | This acceleration framework for integration with huggingface trainers | | | Beta
 [accelerated-peft](./plugins/accelerated-peft/README.md) | For PEFT-training, e.g., 4bit QLoRA. | Huggingface<br>AutoGPTQ | Apache 2.0<br>MIT | Beta
  TBA | Unsloth-inspired. Fused LoRA and triton kernels (e.g., fast cross-entropy, rms, rope) | Xformers | Apache 2.0 with exclusions. | Under Development
- TBA | Triton Kernels for Mixture-of-Experts. | [MegaBlocks](https://github.com/databricks/megablocks) | Apache 2.0 | Under Development
+ TBA | [MegaBlocks](https://github.com/databricks/megablocks) inspired triton Kernels and acclerations for Mixture-of-Expert models |  | Apache 2.0 | Under Development
 
 ## Usage with FMS HF Tuning
 
-This is intended to be a collection of many acceleration routines (including PeFT and other techniques). Below demonstrates a concrete example to show how to accelerate your tuning experience with [tuning/sft_trainer.py](https://github.com/foundation-model-stack/fms-hf-tuning/blob/main/tuning/sft_trainer.py) from `fms-hf-tuning`.
+This is intended to be a collection of many acceleration routines (including accelerated peft and other techniques). Below demonstrates a concrete example to show how to accelerate your tuning experience with [tuning/sft_trainer.py](https://github.com/foundation-model-stack/fms-hf-tuning/blob/main/tuning/sft_trainer.py) from `fms-hf-tuning`.
 
-### Accelerated GPTQ-LoRA Training
+### Example: Accelerated GPTQ-LoRA Training
 
-These instructions perfor accelerated PeFT fine-tuning using this package, in particular GPTQ-LoRA tuning with the AutoGPTQ `triton_v2` kernel; this kernel is state-of-the-art [provided by `jeromeku` on Mar 2024](https://github.com/AutoGPTQ/AutoGPTQ/pull/596):
+Below instructions for accelerated peft fine-tuning. In particular GPTQ-LoRA tuning with the AutoGPTQ `triton_v2` kernel; this kernel is state-of-the-art [provided by `jeromeku` on Mar 2024](https://github.com/AutoGPTQ/AutoGPTQ/pull/596):
 1. Checkout [fms-hf-tuning](https://github.com/foundation-model-stack/fms-hf-tuning) and install the [framework library](./plugins/framework):
     ```
     pip install -e .[fms-accel]
@@ -29,57 +29,62 @@ These instructions perfor accelerated PeFT fine-tuning using this package, in pa
     ```
     pip install git+https://github.com/foundation-model-stack/fms-acceleration.git#subdirectory=plugins/framework
     ```
-3. The above installs the command line utility `fms_acceleration.cli`, which can then be used to install plugins. Use `list` to view available plugins; this list will be updated [as more plugins get developed](#plugins):
+3. The above installs the command line utility `fms_acceleration.cli`, which can then be used to install plugins. Use `list` to view available plugins; this list updates [as more plugins get developed](#plugins):
     ```
     $ python -m fms_acceleration.cli list
 
     Choose from the list of plugin shortnames, and do:
     * 'python -m fms_acceleration.cli install <pip-install-flags> PLUGIN_NAME'.
 
-    Alternatively, specify a local path <PATH> and do:
-    * 'python -m fms_acceleration.cli install <pip-install-flags> <PATH>'.
-
     List of PLUGIN_NAME [PLUGIN_SHORTNAME]:
 
     1. fms_acceleration_peft [peft]
     ```
-    and then `install` the plugin:
+    and then `install` the plugin. We install the `fms-acceleration-peft` plugin for GPTQ-LoRA tuning with triton v2 as:
     ```
     python -m fms_acceleration.cli install fms_acceleration_peft
     ```
-    The above example command installs the plugin for GPTQ-LoRA tuning with triton v2, and is the equivalent of:
+    The above is the equivalent of:
     ```
     pip install git+https://github.com/foundation-model-stack/fms-acceleration.git#subdirectory=plugins/accelerated-peft
     ```
-4. Prepare a YAML configuration for the acceleration framework plugins, see our [acccelerated-peft sample configuration](sample-configurations/accelerated-peft-autogptq-sample-configuration.yaml) that configures triton v2 kernels.
-    * The framework configures the *installed* plugins based on this framework; for more details [see framework/README.md](./plugins/framework/README.md#configuration-of-plugins).
-5. Run `sft_trainer.py` passing `--acceleration_framework_config_file` pointing to the acceleration framework configuration YAML:
-    ```
-    python sft_trainer.py \
-    	--acceleration_framework_config_file fixtures/acceleration_framework_debug.yaml \
-        ...
-    ```
-    Also, ensure that the appropriate arguments are passed, e.g., when using `fms_acceleration_peft` pass the appropriate `peft` arguments. 
-      * For samples of these arguments consult the relevant discussion in the [section on benchmarks](#benchmarks).
+4. Prepare a YAML configuration for the acceleration framework plugins
+    * [Full sample configuration list](./sample-configurations/CONTENTS.yaml) shows the `plugins` required for the configs.
+    * [Accelerated GPTQ-LoRA configuration here](sample-configurations/accelerated-peft-autogptq-sample-configuration.yaml). 
+    * Once `fms-acceleration-peft` plugin was installed (recall above), the framework uses the plugins given the framework configuration; for more details [see framework/README.md](./plugins/framework/README.md#configuration-of-plugins).
+5. Run `sft_trainer.py` with the following arguments: 
+    * `--acceleration_framework_config_file` pointing to framework configuration YAML. 
+    * arguments required for correct operation (e.g., if using accelerated peft, then `peft_method` is required).
+        * For [sample configurations](./sample-configurations/CONTENTS.yaml), these arguments can be referred from [defaults.yaml](./scripts/benchmarks/defaults.yaml) and [scenarios.yaml](./scripts/benchmarks/scenarios.yaml). 
+        * Arguments *not critical to the plugins* found in [defaults.yaml](./scripts/benchmarks/defaults.yaml). These can be taken with liberty.
+        * Arguments *critcal to plugins* found in [scenarios.yaml](./scripts/benchmarks/scenarios.yaml). The relevant section of [scenarios.yaml](./scripts/benchmarks/scenarios.yaml), is the one whose `framework_config` entries, match the `shortname` of the sample configuration of [interest](./sample-configurations/CONTENTS.yaml).
+    * More info on `defaults.yaml` and `scenarios.yaml` [found here](./scripts/benchmarks/README.md#benchmark-scenarios).
+
+        ```
+        # when using sample-configurations, arguments can be referred from
+        # defaults.yaml and scenarios.yaml
+        python sft_trainer.py \
+            --acceleration_framework_config_file sample-configurations/acceleration_framework.yaml \
+            ... # arguments from default.yaml
+            ...  # arguments from scenarios.yaml
+        ```
 
 **Over time, more [plugins](#plugins) will be updated, so please check here for the latest accelerations!**.
 
 ### CUDA Dependencies
 
-This repo requires CUDA to compute the kernels. We have tested with the following [NVidia Pytorch Containers](https://docs.nvidia.com/deeplearning/frameworks/support-matrix/index.html).
+This repo requires CUDA to compute the kernels, and it is convinient to use [NVidia Pytorch Containers](https://docs.nvidia.com/deeplearning/frameworks/support-matrix/index.html) that already comets with CUDA installed. We have tested with the following versions:
 - `pytorch:24.03-py3`
 
 ### Benchmarks
 
-Our [benchmark code](./scripts/benchmarks) generates throughputs for different acceleration scenarios. To reproduce (requires `tox`):
+The benchmarks can be reproduced [with the provided scripts](./scripts/benchmarks). 
+- includes baseline benches (e.g., standard fine-tuning, standard peft).
+- benches for various [acceleration sample configs](./sample-configurations/CONTENTS.yaml).
 
-```
-tox -e run-benches
-```
-which runs a small set of benches using [benchmark.py](./scripts/benchmarks/benchmark.py).
-
-We have some (draft) benches here:
-- [A100-80GB (CSV file)](./scripts/benchmarks/summary.csv).
+See below CSV files for various results:
+- [A100-80GB](./scripts/benchmarks/refs/a100_80gb.csv).
+- [L40-40GB](./scripts/benchmarks/refs/l40_40gb.csv).
 
 ### Code Architecture
 

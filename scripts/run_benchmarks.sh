@@ -18,17 +18,8 @@ SCENARIOS_CONFIG=scenarios.yaml
 DEFAULTS_CONFIG=defaults.yaml
 ACCELERATE_CONFIG=accelerate.yaml
 
-# ------------- FRAMEWORK CONFIGS -----------------
-
-# list down the framework configuration files
-CONFIG_PEFT_AUTOGPTQ=$CONFIG_DIR/accelerated-peft-autogptq-sample-configuration.yaml
-CONFIG_PEFT_BNB=$CONFIG_DIR/accelerated-peft-bnb-nf4-sample-configuration.yaml
-
-# list down the framework config tags inside scenarios.yaml
-CONFIGTAG_PEFT_AUTOGPTQ=accelerated-peft-autogptq
-CONFIGTAG_PEFT_BNB=accelerated-peft-bnb
-
 # ------------- SCENARIO CONFIGS -----------------
+# this determines which is the default subset
 SCNTAG_PEFT_AUTOGPTQ=accelerated-peft-gptq
 
 # ------------- OTHER CONFIGS -----------------
@@ -59,7 +50,8 @@ DATA_CACHE=$RESULT_DIR/$DATA_CACHE
 
 # ------------- EXTRA ARGS -----------------
 
-EXTRA_ARGS=""
+# preload models by default
+EXTRA_ARGS="--preload_models"
 
 if [ ! -z "$SCENARIOS_FILTER" ]; then 
     EXTRA_ARGS="$EXTRA_ARGS --run_only_scenarios $SCENARIOS_FILTER"
@@ -76,9 +68,6 @@ fi
 # run the bench
 python $WORKING_DIR/benchmark.py \
    --num_gpus $NUM_GPUS_MATRIX \
-   --acceleration_framework_config_keypairs \
-       $CONFIGTAG_PEFT_AUTOGPTQ $CONFIG_PEFT_AUTOGPTQ \
-       $CONFIGTAG_PEFT_BNB $CONFIG_PEFT_BNB \
    --scenarios_config_path $SCENARIOS_CONFIG \
    --accelerate_config $ACCELERATE_CONFIG \
    --defaults_config_path $DEFAULTS_CONFIG \

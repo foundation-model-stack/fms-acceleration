@@ -4,18 +4,14 @@ import os
 import re
 import subprocess
 import warnings
-from copy import copy
 from itertools import product
 from typing import Callable, Dict, List, Tuple, Any, Union
 
 import datasets
 import pandas as pd
 import yaml
-from functools import partial
 from tqdm import tqdm
-from transformers import HfArgumentParser, TrainingArguments
-from transformers import AutoModelForCausalLM, AutoConfig
-from accelerate import init_empty_weights
+from transformers import HfArgumentParser, TrainingArguments, AutoConfig
 
 """
 This benchmarking script 
@@ -51,7 +47,20 @@ FILE_SHELL_COMMAND = "command.sh"
 FILE_SCRIPT_ARGS = "script.json"
 FILE_SUMMARY_CSV = 'summary.csv'
 
-DIR_EXPERIMENT_PREFIX = 'exp'
+DIR_BENCHMARKS = os.path.dirname(os.path.realpath(__file__))
+DIR_PREFIX_EXPERIMENT = 'exp'
+DIR_NAME_RESULTS_DEFAULT = 'benchmark_results'
+DIR_SAMP_CONFIGS = os.path.join(DIR_BENCHMARKS, '../../sample-configurations')
+
+# read list of sample configurations from contents file
+FRAMEWORK_CONFIG_KEYPAIRS = []
+with open(os.path.join(DIR_SAMP_CONFIGS, 'CONTENTS.yaml')) as f:
+    configs = yaml.safe_load(f)['framework_configs']
+    for d in configs:
+        FRAMEWORK_CONFIG_KEYPAIRS.append(d['shortname'])
+        FRAMEWORK_CONFIG_KEYPAIRS.append(
+            os.path.join(DIR_SAMP_CONFIGS, d['filename'])
+        )
 
 # regex to capture the start and end of tracebacks
 REGEX_START_OF_TRACEBACK = "Traceback\s\(most\srecent\scall\slast\)"
@@ -239,10 +248,7 @@ class ScenarioMatrix:
     def preload_models(self):
         for model_name in self.arguments['model_name_or_path']:
             print(f"Scenario '{self.name}' preloading model '{model_name}'")
-            # with warnings.catch_warnings(record=True):
-            #     with init_empty_weights():
-            #         m = AutoModelForCausalLM.from_pretrained(model_name)
-            #         del m
+            # just preload the config
             AutoConfig.from_pretrained(model_name)
 
     def get_scenario_matrices_and_defaults(self):
@@ -473,7 +479,7 @@ def prepare_arguments(args):
         combined_matrices = {**scenario_matrices, **experiment_matrices}
         products = ConfigUtils.cartesian_product_on_dict(combined_matrices)
         print (f"Scenario '{_scn_name}' will add to the total products by: ----> '{experiment_factor} x {scn_factor}' = '{len(products)}'\n")
-        if len(products) > 0:
+        if args.preload_models and len(products) > 0:
             scenario.preload_models()
         for num_gpus, experiment_arg in ConfigUtils.build_args_from_products(
             products, constants
@@ -492,7 +498,7 @@ def generate_list_of_experiments(
     """
     experiments = []
     for _expr_id, (num_gpus, exp_arg) in enumerate(experiment_args):
-        experiment_tag = f"{DIR_EXPERIMENT_PREFIX}_{_expr_id}"
+        experiment_tag = f"{DIR_PREFIX_EXPERIMENT}_{_expr_id}"
         experiment_output_dir = os.path.join(output_dir, experiment_tag)
         expr_arg_w_outputdir = exp_arg + [
             "--output_dir",
@@ -523,11 +529,11 @@ def gather_report(result_dir: Union[str, List[str]], raw: bool=True):
         fcm = {v:k for k,v in fcm.items()}
 
         experiment_stats = {}
-        exper_dirs = [x for x in os.listdir(rdir) if x.startswith(DIR_EXPERIMENT_PREFIX)]
+        exper_dirs = [x for x in os.listdir(rdir) if x.startswith(DIR_PREFIX_EXPERIMENT)]
         for tag in exper_dirs:
             try:
                 with open(os.path.join(rdir, tag, FILE_RESULTS)) as f:
-                    tag = tag.replace(DIR_EXPERIMENT_PREFIX + '_', '')
+                    tag = tag.replace(DIR_PREFIX_EXPERIMENT + '_', '')
                     tag = int(tag)
                     experiment_stats[tag] = json.load(f)
             except FileNotFoundError:
@@ -616,6 +622,18 @@ def main(args):
         os.path.join(args.results_output_path, FILE_SUMMARY_CSV), index=None
     )
 
+    # TO CREATE THE checked in CSV FILE DO
+    # df, constant = gather_report(..., raw=False)
+    # try:
+    #     errors = df.error_messages
+    #     df = df.loc[df.error_messages.isna()]
+    # except:
+    #     pass
+    # df = df.reset_index()
+    # df.drop('output_dir', axis=1).reindex(sorted(df.columns), axis=1).to_csv(
+    #     'results.csv',
+    #     index=False
+    # )
 
 if __name__ == "__main__":
 
@@ -655,12 +673,7 @@ if __name__ == "__main__":
         "--acceleration_framework_config_keypairs",
         type=str,
         nargs="+",
-        default=[
-            "accelerated-peft-autogptq",
-            "./sample-configurations/accelerated-peft-autogptq-sample-configuration.yaml",
-            "accelerated-peft-autogptq-unsloth",
-            "./sample-configurations/accelerated-peft-autogptq-unsloth-sample-configuration.yaml",
-        ],
+        default=FRAMEWORK_CONFIG_KEYPAIRS,
         help="list of (key, file) keypairs",
     )
     parser.add_argument(
@@ -673,13 +686,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--scenarios_config_path",
         type=str,
-        default="./scenarios.yaml",
+        default=f"{DIR_BENCHMARKS}/scenarios.yaml",
         help="path to scenarios config file",
     )
     parser.add_argument(
         "--defaults_config_path",
         type=str,
-        default="./defaults.yaml",
+        default=f"{DIR_BENCHMARKS}/defaults.yaml",
         help="path to defaults config file",
     )
     parser.add_argument(
@@ -691,29 +704,36 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset_save_path",
         type=str,
-        default="./data/benchmark_data.json",
+        default=f"{DIR_BENCHMARKS}/data/cache.json",
         help="dataset cache path",
     )
     parser.add_argument(
         "--accelerate_config",
         type=str,
-        default="./fsdp_defaults.yaml",
+        default=f"{DIR_BENCHMARKS}/accelerate.yaml",
         help="accelerate config file path",
     )
     parser.add_argument(
         "--results_output_path",
         type=str,
-        default="./results",
+        default=DIR_NAME_RESULTS_DEFAULT,
         help="accelerate config file path",
     )
     parser.add_argument(
         "--process_port", type=int, default=29500, help="accelerate process port"
     )
     parser.add_argument(
-        "--no_data_processing", action='store_true', help="skip the json data prep"
+        "--no_data_processing", action='store_true', 
+        help="skip the json data prep (useful for re-runs)"
     )
     parser.add_argument(
-        "--dry_run", action='store_true', help="dry run"
+        "--dry_run", action='store_true', 
+        help="perform a dry run only. Useful for debuging benchmark scenarios."
+    )
+    parser.add_argument(
+        "--preload_models", action='store_true', 
+        help="ensures 'model_name_or_paths 'specified in scenarios.yaml work. "
+        "Useful to check model paths specified correctly before lengthly benchmark runs."
     )
     args = parser.parse_args()
     main(args)
