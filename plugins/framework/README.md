@@ -88,3 +88,60 @@ Each [package](#packages) in this monorepo:
 
 - When instantiating `fms_acceleration.AccelerationFramework`, it internally parses through the configuration stanzas. For plugins that are installed, it will instantiate them; for those that are not, it will simply *passthrough*.
 - `AccelerationFramework` will manage plugins transparently for user. User only needs to call `AccelerationFramework.model_loader` and `AccelerationFramework.augmentation`.
+
+## Adding New Plugins
+To add new plugins to the acceleration framework, 
+
+1. Create the plugin folder and contents in `plugins/<plugin name>`
+2. Ensure there is a `pyproject.toml` and the plugin contents are contained in `plugins/<plugin name>/src/fms-acceleration-<plugin name>`
+2. Add plugin name into `plugins/framework/src/fms_acceleration/constants.py`, reference the project name in the plugin's `pyproject.toml`
+
+`pyproject.toml`
+
+```
+[project]
+name = "fms-acceleration-pluginA"
+```
+
+add to `constants.py`
+
+```
+PLUGINS = [
+    "peft",
+    "unsloth",
+    "pluginA",
+]
+```
+3. [OPTIONAL] For automatic config generation. Create a config template in `plugins/<plugin name>/configs/plugin_config.yaml`. The template is used to generate a stanza for the new plugin into the acceleration config yaml
+
+4. [OPTIONAL] For automatic config generation. Edit `scripts/generate_sample_configurations.py` with the following additions.
+
+```
+KEY_AUTO_GPTQ = "auto_gptq"
+KEY_BNB_NF4 = "bnb-nf4"
+PLUGIN_A = "<NEW PLUGIN NAME>"
+
+CONFIGURATIONS = {
+    KEY_AUTO_GPTQ: "plugins/accelerated-peft/configs/autogptq.yaml",
+    KEY_BNB_NF4: (
+        "plugins/accelerated-peft/configs/bnb.yaml",
+        [("peft.quantization.bitsandbytes.quant_type", "nf4")],
+    ),
+    PLUGIN_A: (
+	    "plugins/<plugin>/configs/plugin_config.yaml",
+	    [
+		    (<1st field in plugin_config.yaml>, <value>),
+		    (<2nd field in plugin_config.yaml>, <value>),
+	    ]
+    )
+}
+
+# Passing a tuple of configuration keys will combine the templates together
+COMBINATIONS = [
+    ("accelerated-peft-autogptq", (KEY_AUTO_GPTQ,)),
+    ("accelerated-peft-bnb-nf4", (KEY_BNB_NF4,)),    
+    (<"combined name with your plugin">), (KEY_AUTO_GPTQ, PLUGIN_A)
+    (<"combined name with your plugin">), (KEY_BNB_NF4, PLUGIN_A)
+]
+
+```
