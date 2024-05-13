@@ -9,32 +9,10 @@
 # - So anything that is critical for the scenario MUST be specified here 
 #   and not in the defaults, e.g. fp16
 scenarios:
-    -   name: full-finetuning
-        arguments:
-            learning_rate: 2e-5
-            model_name_or_path: 
-                - 'mistralai/Mistral-7B-v0.1'
-                - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
-                - 'NousResearch/Llama-2-70b-hf'
-            torch_dtype: float16
-
-    -   name: standard-peft
-        arguments:
-            learning_rate: 2e-4
-            torch_dtype: float16
-            peft_method: lora
-            r: 16
-            lora_alpha: 16
-            lora_dropout: 0.0
-            target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
-            model_name_or_path: 
-                - 'mistralai/Mistral-7B-v0.1'
-                - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
-                - 'NousResearch/Llama-2-70b-hf'
-
     -   name: accelerated-peft-bnb
         framework_config: 
             - accelerated-peft-bnb
+            - accelerated-peft-bnb-unsloth
         arguments:
             fp16: True
             learning_rate: 2e-4
@@ -52,6 +30,7 @@ scenarios:
     -   name: accelerated-peft-gptq
         framework_config: 
             - accelerated-peft-autogptq
+            - accelerated-peft-autogptq-unsloth
         arguments:
             learning_rate: 2e-4
             fp16: True
@@ -64,4 +43,27 @@ scenarios:
             model_name_or_path: 
                 - 'TheBloke/Mistral-7B-v0.1-GPTQ'
                 - 'TheBloke/Mixtral-8x7B-Instruct-v0.1-GPTQ'
-                - TheBloke/Nous-Hermes-Llama2-70B-GPTQ
+                - 'TheBloke/Llama-2-70B-GPTQ'
+
+    -   name: full-finetuning
+        arguments:
+            learning_rate: 2e-5
+            torch_dtype: float16
+            model_name_or_path:  
+                - 'mistralai/Mistral-7B-v0.1'
+                - 'mistralai/Mixtral-8x7B-Instruct-v0.1'                     
+                - 'NousResearch/Llama-2-70b-hf'
+
+    -   name: standard-peft
+        arguments:
+            learning_rate: 2e-4
+            torch_dtype: float16
+            peft_method: lora
+            r: 16
+            lora_alpha: 16
+            lora_dropout: 0.0
+            target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
+            model_name_or_path: 
+                - 'mistralai/Mistral-7B-v0.1'
+                - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
+                - 'NousResearch/Llama-2-70b-hf'
