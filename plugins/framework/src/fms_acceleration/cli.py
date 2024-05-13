@@ -55,8 +55,8 @@ def list_plugins():
     print(
         "\nChoose from the list of plugin shortnames, and do:\n"
         " * 'python -m fms_acceleration.cli install <pip-install-flags> PLUGIN_NAME'.\n\n"
-        "Alternatively, specify a local path <PATH> and do:\n"
-        " * 'python -m fms_acceleration.cli install <pip-install-flags> PLUGIN_NAME'.\n\n"
+        "Alternatively if the repository was checked out, pip install it from REPO_PATH:\n"
+        " * 'pip install <pip-install-flags> REPO_PATH/plugins/PLUGIN_NAME'.\n\n"
         "List of PLUGIN_NAME [PLUGIN_SHORTNAME]:\n"
     )
     for i, name in enumerate(PLUGINS):

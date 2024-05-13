@@ -1,0 +1,17 @@
+# this is a contents of framework acceleration sample configs
+# - shortname: for easy reference of the config, which otherwise may be troublesome due to the
+#              long filenames
+# - plugins: the plugins that need to be installed to use this acceleration config. 
+#             Could be more than one that needs to be simultaneously installed.
+# - filename: the actual filename of the config as it appears in the sample-configurations directory
+framework_configs:
+
+    - shortname: accelerated-peft-autogptq
+      plugins:
+        - accelerated-peft
+      filename: accelerated-peft-autogptq-sample-configuration.yaml
+
+    - shortname: accelerated-peft-bnb
+      plugins:
+        - accelerated-peft
+      filename: accelerated-peft-bnb-nf4-sample-configuration.yaml

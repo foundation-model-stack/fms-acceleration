@@ -15,12 +15,11 @@ gradient_accumulation_steps: 1
 gradient_checkpointing: True
 evaluation_strategy: "no"
 save_strategy: "no"
-learning_rate: 2e-4
 weight_decay: 0.01
 warmup_steps: 10
 adam_epsilon: 1e-4
 lr_scheduler_type: linear
 logging_strategy: steps
 logging_steps: 10
-max_steps: 10
+max_steps: 100
 

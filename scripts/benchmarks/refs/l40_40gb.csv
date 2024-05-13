@@ -1,0 +1,49 @@
+acceleration_framework_config_file,epoch,error_messages,fp16,framework_config,index,learning_rate,lora_alpha,lora_dropout,model_name_or_path,num_gpus,output_dir,peft_method,per_device_train_batch_size,r,target_modules,train_loss,train_runtime,train_samples_per_second,train_steps_per_second,train_tokens_per_second,training_data_path
+,,,,none,0,2e-5,,,mistralai/Mistral-7B-v0.1,1,,,4,,,,,,,,benchmark_outputs/data/cache.json
+,0.03,,,none,1,2e-5,,,mistralai/Mistral-7B-v0.1,2,,,2,,,0.9020393848419189,102.4493,0.781,0.195,1599.23,benchmark_outputs/data/cache.json
+,,,,none,2,2e-5,,,mistralai/Mistral-7B-v0.1,1,,,8,,,,,,,,benchmark_outputs/data/cache.json
+,0.06,,,none,3,2e-5,,,mistralai/Mistral-7B-v0.1,2,,,4,,,0.936076545715332,170.7722,0.937,0.117,1918.814,benchmark_outputs/data/cache.json
+,,,,none,4,2e-5,,,mistralai/Mixtral-8x7B-Instruct-v0.1,1,,,4,,,,,,,,benchmark_outputs/data/cache.json
+,,,,none,5,2e-5,,,mistralai/Mixtral-8x7B-Instruct-v0.1,2,,,2,,,,,,,,benchmark_outputs/data/cache.json
+,,,,none,6,2e-5,,,mistralai/Mixtral-8x7B-Instruct-v0.1,1,,,8,,,,,,,,benchmark_outputs/data/cache.json
+,,,,none,7,2e-5,,,mistralai/Mixtral-8x7B-Instruct-v0.1,2,,,4,,,,,,,,benchmark_outputs/data/cache.json
+,,,,none,8,2e-5,,,NousResearch/Llama-2-70b-hf,1,,,4,,,,,,,,benchmark_outputs/data/cache.json
+,,,,none,9,2e-5,,,NousResearch/Llama-2-70b-hf,2,,,2,,,,,,,,benchmark_outputs/data/cache.json
+,,,,none,10,2e-5,,,NousResearch/Llama-2-70b-hf,1,,,8,,,,,,,,benchmark_outputs/data/cache.json
+,,,,none,11,2e-5,,,NousResearch/Llama-2-70b-hf,2,,,4,,,,,,,,benchmark_outputs/data/cache.json
+,0.03,,,none,12,2e-4,16,0.0,mistralai/Mistral-7B-v0.1,1,,lora,4,16,q_proj k_proj v_proj o_proj,0.9326287746429444,120.2794,0.665,0.166,2724.324,benchmark_outputs/data/cache.json
+,0.03,,,none,13,2e-4,16,0.0,mistralai/Mistral-7B-v0.1,2,,lora,2,16,q_proj k_proj v_proj o_proj,0.9157441139221192,78.5825,1.018,0.255,2084.943,benchmark_outputs/data/cache.json
+,0.06,,,none,14,2e-4,16,0.0,mistralai/Mistral-7B-v0.1,1,,lora,8,16,q_proj k_proj v_proj o_proj,1.0113807678222657,241.3246,0.663,0.083,2715.679,benchmark_outputs/data/cache.json
+,0.06,,,none,15,2e-4,16,0.0,mistralai/Mistral-7B-v0.1,2,,lora,4,16,q_proj k_proj v_proj o_proj,0.9433841228485107,133.2158,1.201,0.15,2459.768,benchmark_outputs/data/cache.json
+,,,,none,16,2e-4,16,0.0,mistralai/Mixtral-8x7B-Instruct-v0.1,1,,lora,4,16,q_proj k_proj v_proj o_proj,,,,,,benchmark_outputs/data/cache.json
+,,,,none,17,2e-4,16,0.0,mistralai/Mixtral-8x7B-Instruct-v0.1,2,,lora,2,16,q_proj k_proj v_proj o_proj,,,,,,benchmark_outputs/data/cache.json
+,,,,none,18,2e-4,16,0.0,mistralai/Mixtral-8x7B-Instruct-v0.1,1,,lora,8,16,q_proj k_proj v_proj o_proj,,,,,,benchmark_outputs/data/cache.json
+,,,,none,19,2e-4,16,0.0,mistralai/Mixtral-8x7B-Instruct-v0.1,2,,lora,4,16,q_proj k_proj v_proj o_proj,,,,,,benchmark_outputs/data/cache.json
+,,,,none,20,2e-4,16,0.0,NousResearch/Llama-2-70b-hf,1,,lora,4,16,q_proj k_proj v_proj o_proj,,,,,,benchmark_outputs/data/cache.json
+,,,,none,21,2e-4,16,0.0,NousResearch/Llama-2-70b-hf,2,,lora,2,16,q_proj k_proj v_proj o_proj,,,,,,benchmark_outputs/data/cache.json
+,,,,none,22,2e-4,16,0.0,NousResearch/Llama-2-70b-hf,1,,lora,8,16,q_proj k_proj v_proj o_proj,,,,,,benchmark_outputs/data/cache.json
+,,,,none,23,2e-4,16,0.0,NousResearch/Llama-2-70b-hf,2,,lora,4,16,q_proj k_proj v_proj o_proj,,,,,,benchmark_outputs/data/cache.json
+sample-configurations/accelerated-peft-autogptq-sample-configuration.yaml,0.03,,True,accelerated-peft-autogptq,36,2e-4,16,0.0,TheBloke/Mistral-7B-v0.1-GPTQ,1,,lora,4,16,q_proj k_proj v_proj o_proj,1.6183419704437256,137.2634,0.583,0.146,2387.235,benchmark_outputs/data/cache.json
+sample-configurations/accelerated-peft-autogptq-sample-configuration.yaml,0.03,,True,accelerated-peft-autogptq,37,2e-4,16,0.0,TheBloke/Mistral-7B-v0.1-GPTQ,2,,lora,2,16,q_proj k_proj v_proj o_proj,1.7251328945159912,73.906,1.082,0.271,2216.871,benchmark_outputs/data/cache.json
+sample-configurations/accelerated-peft-autogptq-sample-configuration.yaml,0.06,,True,accelerated-peft-autogptq,38,2e-4,16,0.0,TheBloke/Mistral-7B-v0.1-GPTQ,1,,lora,8,16,q_proj k_proj v_proj o_proj,1.5904263019561768,272.1958,0.588,0.073,2407.679,benchmark_outputs/data/cache.json
+sample-configurations/accelerated-peft-autogptq-sample-configuration.yaml,0.06,,True,accelerated-peft-autogptq,39,2e-4,16,0.0,TheBloke/Mistral-7B-v0.1-GPTQ,2,,lora,4,16,q_proj k_proj v_proj o_proj,1.515465259552002,138.6152,1.154,0.144,2363.954,benchmark_outputs/data/cache.json
+sample-configurations/accelerated-peft-autogptq-sample-configuration.yaml,0.03,,True,accelerated-peft-autogptq,40,2e-4,16,0.0,TheBloke/Mixtral-8x7B-Instruct-v0.1-GPTQ,1,,lora,4,16,q_proj k_proj v_proj o_proj,1.012540912628174,227.0536,0.352,0.088,1443.183,benchmark_outputs/data/cache.json
+sample-configurations/accelerated-peft-autogptq-sample-configuration.yaml,0.03,,True,accelerated-peft-autogptq,41,2e-4,16,0.0,TheBloke/Mixtral-8x7B-Instruct-v0.1-GPTQ,2,,lora,2,16,q_proj k_proj v_proj o_proj,1.0235525131225587,121.7118,0.657,0.164,1346.13,benchmark_outputs/data/cache.json
+sample-configurations/accelerated-peft-autogptq-sample-configuration.yaml,,,True,accelerated-peft-autogptq,42,2e-4,16,0.0,TheBloke/Mixtral-8x7B-Instruct-v0.1-GPTQ,1,,lora,8,16,q_proj k_proj v_proj o_proj,,,,,,benchmark_outputs/data/cache.json
+sample-configurations/accelerated-peft-autogptq-sample-configuration.yaml,0.06,,True,accelerated-peft-autogptq,43,2e-4,16,0.0,TheBloke/Mixtral-8x7B-Instruct-v0.1-GPTQ,2,,lora,4,16,q_proj k_proj v_proj o_proj,1.0152217864990234,229.6679,0.697,0.087,1426.756,benchmark_outputs/data/cache.json
+sample-configurations/accelerated-peft-autogptq-sample-configuration.yaml,,,True,accelerated-peft-autogptq,44,2e-4,16,0.0,TheBloke/Nous-Hermes-Llama2-70B-GPTQ,1,,lora,4,16,q_proj k_proj v_proj o_proj,,,,,,benchmark_outputs/data/cache.json
+sample-configurations/accelerated-peft-autogptq-sample-configuration.yaml,,,True,accelerated-peft-autogptq,45,2e-4,16,0.0,TheBloke/Nous-Hermes-Llama2-70B-GPTQ,2,,lora,2,16,q_proj k_proj v_proj o_proj,,,,,,benchmark_outputs/data/cache.json
+sample-configurations/accelerated-peft-autogptq-sample-configuration.yaml,,,True,accelerated-peft-autogptq,46,2e-4,16,0.0,TheBloke/Nous-Hermes-Llama2-70B-GPTQ,1,,lora,8,16,q_proj k_proj v_proj o_proj,,,,,,benchmark_outputs/data/cache.json
+sample-configurations/accelerated-peft-autogptq-sample-configuration.yaml,,,True,accelerated-peft-autogptq,47,2e-4,16,0.0,TheBloke/Nous-Hermes-Llama2-70B-GPTQ,2,,lora,4,16,q_proj k_proj v_proj o_proj,,,,,,benchmark_outputs/data/cache.json
+sample-configurations/accelerated-peft-bnb-nf4-sample-configuration.yaml,0.03,,True,accelerated-peft-bnb,0,2e-4,16,0.0,mistralai/Mistral-7B-v0.1,1,,lora,4,16,q_proj k_proj v_proj o_proj,0.9979345798492432,130.1845,0.615,0.154,2517.044,benchmark_bnb_outputs/data/cache.json
+sample-configurations/accelerated-peft-bnb-nf4-sample-configuration.yaml,0.03,,True,accelerated-peft-bnb,1,2e-4,16,0.0,mistralai/Mistral-7B-v0.1,2,,lora,2,16,q_proj k_proj v_proj o_proj,0.942676591873169,69.8209,1.146,0.286,2346.575,benchmark_bnb_outputs/data/cache.json
+sample-configurations/accelerated-peft-bnb-nf4-sample-configuration.yaml,0.06,,True,accelerated-peft-bnb,2,2e-4,16,0.0,mistralai/Mistral-7B-v0.1,1,,lora,8,16,q_proj k_proj v_proj o_proj,0.9919514656066895,259.8776,0.616,0.077,2521.802,benchmark_bnb_outputs/data/cache.json
+sample-configurations/accelerated-peft-bnb-nf4-sample-configuration.yaml,0.06,,True,accelerated-peft-bnb,3,2e-4,16,0.0,mistralai/Mistral-7B-v0.1,2,,lora,4,16,q_proj k_proj v_proj o_proj,0.933735466003418,133.6157,1.197,0.15,2452.406,benchmark_bnb_outputs/data/cache.json
+sample-configurations/accelerated-peft-bnb-nf4-sample-configuration.yaml,0.03,,True,accelerated-peft-bnb,4,2e-4,16,0.0,mistralai/Mixtral-8x7B-Instruct-v0.1,1,,lora,4,16,q_proj k_proj v_proj o_proj,1.015654945373535,218.3215,0.366,0.092,1500.906,benchmark_bnb_outputs/data/cache.json
+sample-configurations/accelerated-peft-bnb-nf4-sample-configuration.yaml,0.03,,True,accelerated-peft-bnb,5,2e-4,16,0.0,mistralai/Mixtral-8x7B-Instruct-v0.1,2,,lora,2,16,q_proj k_proj v_proj o_proj,0.9546889305114746,173.2373,0.462,0.115,945.755,benchmark_bnb_outputs/data/cache.json
+sample-configurations/accelerated-peft-bnb-nf4-sample-configuration.yaml,,,True,accelerated-peft-bnb,6,2e-4,16,0.0,mistralai/Mixtral-8x7B-Instruct-v0.1,1,,lora,8,16,q_proj k_proj v_proj o_proj,,,,,,benchmark_bnb_outputs/data/cache.json
+sample-configurations/accelerated-peft-bnb-nf4-sample-configuration.yaml,0.06,,True,accelerated-peft-bnb,7,2e-4,16,0.0,mistralai/Mixtral-8x7B-Instruct-v0.1,2,,lora,4,16,q_proj k_proj v_proj o_proj,0.9585415840148925,273.4507,0.585,0.073,1198.315,benchmark_bnb_outputs/data/cache.json
+sample-configurations/accelerated-peft-bnb-nf4-sample-configuration.yaml,,,True,accelerated-peft-bnb,8,2e-4,16,0.0,NousResearch/Llama-2-70b-hf,1,,lora,4,16,q_proj k_proj v_proj o_proj,,,,,,benchmark_bnb_outputs/data/cache.json
+sample-configurations/accelerated-peft-bnb-nf4-sample-configuration.yaml,,,True,accelerated-peft-bnb,9,2e-4,16,0.0,NousResearch/Llama-2-70b-hf,2,,lora,2,16,q_proj k_proj v_proj o_proj,,,,,,benchmark_bnb_outputs/data/cache.json
+sample-configurations/accelerated-peft-bnb-nf4-sample-configuration.yaml,,,True,accelerated-peft-bnb,10,2e-4,16,0.0,NousResearch/Llama-2-70b-hf,1,,lora,8,16,q_proj k_proj v_proj o_proj,,,,,,benchmark_bnb_outputs/data/cache.json
+sample-configurations/accelerated-peft-bnb-nf4-sample-configuration.yaml,,,True,accelerated-peft-bnb,11,2e-4,16,0.0,NousResearch/Llama-2-70b-hf,2,,lora,4,16,q_proj k_proj v_proj o_proj,,,,,,benchmark_bnb_outputs/data/cache.json
