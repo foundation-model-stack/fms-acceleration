@@ -16,39 +16,45 @@
 import argparse
 import os
 import sys
-from typing import List
+import subprocess
+from typing import List, Union
+import yaml
 
 from .constants import PLUGIN_PREFIX, PLUGINS
 
 from pip._internal.cli.main import main as pipmain
 
+from transformers.utils.import_utils import _is_package_available
+
 GITHUB_URL = "github.com/foundation-model-stack/fms-acceleration.git"
+
+REPO_CACHE_DIR = '.fms/repository'
 
 # TODO: make a version that fetches the
 def install_plugin(
     *args: List[str],
 ):
-    "function to install plugin. pkg_name_or_path can be a name or local path"
+    "function to install plugin. Inputs should contain a pkg_name."
 
-    pkg_name_or_path = [x for x in args if not x.startswith('-')]
-    assert len(pkg_name_or_path) == 1,\
+    pkg_name = [x for x in args if not x.startswith('-')]
+    assert len(pkg_name) == 1,\
         "Please specify exactly one plugin to install"
-    pkg_name_or_path = pkg_name_or_path[0]
+    pkg_name = pkg_name[0]
 
     # take the flags
     args = [x for x in args if x.startswith('-')]
 
-    if os.path.exists(pkg_name_or_path):
-        pipmain(['install', *args, pkg_name_or_path])
+    if os.path.exists(pkg_name):
+        pipmain(['install', *args, pkg_name])
         return 
 
-    if not pkg_name_or_path.startswith(PLUGIN_PREFIX):
-        pkg_name_or_path = f"{PLUGIN_PREFIX}{pkg_name_or_path}"
+    if pkg_name.startswith(PLUGIN_PREFIX):
+        pkg_name = pkg_name.replace(PLUGIN_PREFIX, "")
 
     # otherwise should be an internet install
     pipmain([
         'install', *args, 
-        f'git+https://{GITHUB_URL}#subdirectory=plugins/accelerated-{pkg_name_or_path}' 
+        f'git+https://{GITHUB_URL}#subdirectory=plugins/accelerated-{pkg_name}' 
     ])
 
 def list_plugins():
@@ -60,7 +66,88 @@ def list_plugins():
         "List of PLUGIN_NAME [PLUGIN_SHORTNAME]:\n"
     )
     for i, name in enumerate(PLUGINS):
-        print(f"{i+1}. {PLUGIN_PREFIX}{name} [{name}]")
+        full_name = f"{PLUGIN_PREFIX}{name}"
+        installed = _is_package_available(full_name)
+
+        postfix = ""
+        if installed:
+            postfix += "(installed)"
+
+        print(f"{i+1}. {full_name} [{name}] {postfix}")
+
+def get_benchmark_artifacts(dest_dir: str):
+    if not os.path.exists(dest_dir):
+        os.makedirs(dest_dir)
+
+
+    if not os.path.exists(os.path.join(dest_dir, '.git')):
+        command = f"""cd {dest_dir} && git init && git remote add -f origin https://{GITHUB_URL} && \
+            git config --global init.defaultBranch main && \
+            git config core.sparsecheckout true && \
+            echo scripts/benchmarks >> .git/info/sparse-checkout && \
+            echo sample-configurations >> .git/info/sparse-checkout && \
+        """
+    else:
+        command = "git fetch origin && "
+    command += "git pull origin main "
+
+    out = subprocess.run(command, shell=True, capture_output=True)
+    if out.returncode != 0:
+        raise RuntimeError(f"could not get benchmark artifacts with error code {out.returncode}")
+    return out 
+
+def list_sample_configs(
+    configs_dir: str, 
+    contents_file: str = 'sample-configurations/CONTENTS.yaml', 
+    get_artifacts: bool = True,
+):
+    if get_artifacts:
+        get_benchmark_artifacts(REPO_CACHE_DIR)
+    with open(os.path.join(configs_dir, contents_file)) as f:
+        for i, entry in enumerate(yaml.safe_load(f)['framework_configs']):
+            shortname = entry['shortname']
+            plugins = entry['plugins']
+            filename = entry['filename']
+            print (f"{i+1}. {shortname} ({filename}) - plugins: {plugins}")
+
+def list_arguments(
+    scenario_dir: str, 
+    config_shortnames: Union[str, List[str]],
+    scenario_file: str = 'scripts/benchmarks/scenarios.yaml',
+    ignored_fields = ['model_name_or_path'],
+    get_artifacts: bool = True,
+):
+    if get_artifacts:
+        get_benchmark_artifacts(REPO_CACHE_DIR)
+
+    if isinstance(config_shortnames, str):
+        config_shortnames = [config_shortnames]
+
+    with open(os.path.join(scenario_dir, scenario_file)) as f:
+        scenarios = yaml.safe_load(f)['scenarios']
+        found = 0
+        print (f"Searching for configuration shortnames: {config_shortnames}")
+        for scn in scenarios:
+            if 'framework_config' not in scn:
+                continue
+
+            hit_sn = [x for x in config_shortnames if x in scn['framework_config']]
+            if len(hit_sn) > 0:
+                found += 1
+                name = scn['name']
+                arguments = scn['arguments']
+                hit_sn = ", ".join(hit_sn)
+                print (f"{found}. scenario: {name}\n   configs: {hit_sn}\n   arguments:")
+                lines = []
+                for key, val in arguments.items():
+                    if key not in ignored_fields:
+                        lines.append(f"      --{key} {val}")
+                    
+                print (" \\\n".join(lines))
+                print ("\n")
+
+        if not found:
+            print(f"ERROR: Could not list arguments for configuration shortname '{config_shortnames}'")
 
 def cli():
     # not using argparse since its so simple
@@ -82,9 +169,15 @@ def cli():
     if command == 'install':
         assert len(variadic) >= 1, "Please provide the acceleration plugin name"
         install_plugin(*variadic)
-    elif command == 'list':
+    elif command == 'plugins':
         assert len(variadic) == 0, "list does not require arguments"
         list_plugins()
+    elif command == 'configs':
+        assert len(variadic) == 0, "list-config does not require arguments"
+        list_sample_configs(REPO_CACHE_DIR)
+    elif command == 'arguments':
+        assert len(variadic) >= 1, "Please provide the config shortname"
+        list_arguments(REPO_CACHE_DIR, *variadic)
     else:
         raise NotImplementedError(
             f"Unknown fms_acceleration.cli command '{command}'"
