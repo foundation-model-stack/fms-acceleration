@@ -12,6 +12,7 @@ import pandas as pd
 import yaml
 from tqdm import tqdm
 from transformers import HfArgumentParser, TrainingArguments, AutoConfig
+import torch
 
 """
 This benchmarking script 
@@ -71,6 +72,10 @@ IGNORE_ERROR_PATTERNS = [
     # dont need to surface torch distributed errors
     "torch.distributed.elastic.multiprocessing.errors.ChildFailedError"
 ]
+
+GPU_LOGS_FILENAME = "gpu_memory_logs.csv"
+GPU_LOG_USED_MEM_COLUMN_NAME = 'memory.used [MiB]'
+GPU_LOG_METRIC_SUFFIX = ' MiB'
 
 
 def get_hf_arguments_with_no_value(dataclass_types):
@@ -292,8 +297,10 @@ class Experiment:
         self.stderr_filename = os.path.join(self.save_dir, FILE_STDERR)
         self.command_filename = os.path.join(self.save_dir, FILE_SHELL_COMMAND)
         self.results_filename = os.path.join(self.save_dir, FILE_RESULTS)
+        self.gpu_log_filename = os.path.join(self.save_dir, GPU_LOGS_FILENAME)
 
-    def run(self, run_cmd: str, environment_variables: Dict = None):
+
+    def run(self, run_cmd: str, environment_variables: Dict = None, log_memory:bool=False, memory_log_interval_secs:int=1):
 
         # form the command line
         commands = []
@@ -308,6 +315,26 @@ class Experiment:
         self.environment = environment_variables
         self.experiment_args_str = commands
         os.makedirs(self.save_dir, exist_ok=True)
+
+        if log_memory:
+            assert torch.cuda.device_count()>0, "No device detected for memory logging!"
+            nvidia_logging_cmd = [
+                "nvidia-smi",
+                "--query-gpu",
+                "timestamp,name,index,utilization.gpu,utilization.memory,memory.total,memory.free,memory.used",
+                "--format",
+                "csv",
+                "--id",
+                str(environment_variables['CUDA_VISIBLE_DEVICES']),
+                "--loop",
+                str(memory_log_interval_secs),
+            ]
+            memory_process = subprocess.Popen(
+                nvidia_logging_cmd, 
+                stdout=open(self.gpu_log_filename, "w"), 
+                text=True,
+            )
+
         subprocess.run(
             self.shell_command, 
             capture_output=False,
@@ -316,6 +343,8 @@ class Experiment:
             text=True,
             env={**os.environ.copy(), **environment_variables},
         )
+
+        if log_memory: memory_process.terminate()
 
     def get_experiment_final_metrics(
         self, final_metrics_keys: List[str] = ["train_loss", "train_runtime"]
@@ -374,12 +403,29 @@ class Experiment:
 
         return None if len(results) == 0 else results
 
+    def get_avg_mem_usage_per_sec_by_device_id(self, min_measurement_in_mib=0):
+        '''
+        This function retrieves the gpu memory logs and returns the average memory consumed per sec and then averaged across devices
+        Returns a pd.Series of avg mem usage per sec in MiB for each device id
+        ''' 
+        grouped_indices = pd.read_csv(self.gpu_log_filename, delimiter=', ').groupby('index')
+        # Calculate the average memory consumption per sec in each device
+        mem_usage_by_device_id = grouped_indices.apply(
+            lambda x: x[GPU_LOG_USED_MEM_COLUMN_NAME].str.replace(GPU_LOG_METRIC_SUFFIX, '').astype(float)
+            )
+        # filter only mem measurements that are above a min MiB value before taking the average mem usage per device
+        mem_usage_by_device_id = mem_usage_by_device_id[mem_usage_by_device_id>min_measurement_in_mib]
+        # squeeze to a series with gpu indices as index and the avg mem for each device
+        mem_usage_by_device_id = mem_usage_by_device_id.groupby(by='index').mean().squeeze()
+        return mem_usage_by_device_id
+
     def write_result(self):
         "Function to write a json result file"
 
         # save some basic args
         save_result = ConfigUtils.convert_args_to_dict(self.experiment_args_str)
         save_result['num_gpus'] = self.num_gpus
+        save_result['avg_mem_usage_per_sec_across_devices'] = self.get_avg_mem_usage_per_sec_by_device_id().mean()
 
         # if there is an error we save the error message else we save the final result
         maybe_error_messages = self.maybe_get_experiment_error_traceback()
@@ -572,6 +618,9 @@ def compress(df):
 
 def main(args):
 
+    if args.dry_run and args.log_memory:
+        setattr(args, "log_memory", False)
+
     # 1. Prepares a standard BenchmarkDataset
     # TODO: consider caching the json file
     if not args.no_data_processing:
@@ -606,6 +655,7 @@ def main(args):
         experiment.run(
             f"{prefix} {FMS_TRAINER}",
             environment_variables={"CUDA_VISIBLE_DEVICES": device_ids},
+            log_memory = args.log_memory,
         )
 
         # write results and store pointers to files
@@ -732,6 +782,11 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--preload_models", action='store_true', 
+        help="ensures 'model_name_or_paths 'specified in scenarios.yaml work. "
+        "Useful to check model paths specified correctly before lengthly benchmark runs."
+    )
+    parser.add_argument(
+        "--log_memory", action='store_true', 
         help="ensures 'model_name_or_paths 'specified in scenarios.yaml work. "
         "Useful to check model paths specified correctly before lengthly benchmark runs."
     )
