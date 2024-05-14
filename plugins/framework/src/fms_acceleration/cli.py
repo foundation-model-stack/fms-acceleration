@@ -88,7 +88,7 @@ def get_benchmark_artifacts(dest_dir: str):
             echo sample-configurations >> .git/info/sparse-checkout && \
         """
     else:
-        command = "git fetch origin && "
+        command = f"cd {dest_dir} && git fetch origin && "
     command += "git pull origin main "
 
     out = subprocess.run(command, shell=True, capture_output=True)
