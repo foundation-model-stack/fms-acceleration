@@ -23,7 +23,10 @@ from transformers.utils.import_utils import _is_package_available
 import torch
 import yaml
 
+# want to use the transformers logger, but a bit of pain
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
+logger.setLevel(logging._get_default_logging_level())
+logger.addHandler(logging._default_handler)
 
 # First Party
 from .framework_plugin import (
