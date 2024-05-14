@@ -47,7 +47,7 @@ Below instructions for accelerated peft fine-tuning. In particular GPTQ-LoRA tun
 
 3. Install the required `plugins`. Use `list` to view available plugins; this list updates [as more plugins get developed](#plugins). Recall that `configs` list the required `plugins` for the sample configurations; make sure all of them are installed.
     ```
-    $ python -m fms_acceleration.cli list
+    $ python -m fms_acceleration.cli plugins
 
     Choose from the list of plugin shortnames, and do:
     * 'python -m fms_acceleration.cli install <pip-install-flags> PLUGIN_NAME'.
