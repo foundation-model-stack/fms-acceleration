@@ -1,9 +1,27 @@
 # FMS Acceleration
 
-This [monorepo](https://github.com/tweag/python-monorepo-example) collects libraries of packages that accelerate fine-tuning / training of large models, 
-intended to be part of the [fms-hf-tuning](https://github.com/foundation-model-stack/fms-hf-tuning) suite.
 
-**This package is in BETA under extensive development. Expect breaking changes!**
+[This [monorepo](https://github.com/tweag/python-monorepo-example) is designed to accelerate the fine-tuning and training of large models. This framework comprises a collection of libraries
+intended to be used with the [fms-hf-tuning](https://github.com/foundation-model-stack/fms-hf-tuning) suite.
+
+This fms-acceleration framework includes accelerators for Parameter Efficient Fine Tuning (PEFT), including
+
+ - Low Rank Adaptation (LoRA) acceleration
+ - Bits-and-Bytes (BNB) quantised LoRA : QLoRA acceleration
+ - AutoGPTQ quantised LoRA : GPTQ-LoRA acceleration
+ - Full Fine Tuning acceleration (coming soon)
+
+Our tests have shown an increase in training token throughput using this fms-acceleration framework.
+
+For example:
+
+- QLoRA: xx % token throughput increase on 1 GPU
+- QLoRA: xx % token throughput increase on 2 GPU
+- QLoRA: xx % token throughput increase on 1 GPU
+- QLoRA: xx % token throughput increase on 1 GPU
+
+**This package is in BETA and is under development. Expect breaking changes!**
+](https://github.com/foundation-model-stack/fms-acceleration/invitations)
 
 ## Plugins
 
