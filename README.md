@@ -1,24 +1,24 @@
 # FMS Acceleration
 
 
-[This [monorepo](https://github.com/tweag/python-monorepo-example) is designed to accelerate the fine-tuning and training of large models. This framework comprises a collection of libraries
+[The [monorepo](https://github.com/tweag/python-monorepo-example) is designed to accelerate the fine-tuning and training of large models. This framework comprises a collection of libraries
 intended to be used with the [fms-hf-tuning](https://github.com/foundation-model-stack/fms-hf-tuning) suite.
 
-This fms-acceleration framework includes accelerators for Parameter Efficient Fine Tuning (PEFT), including
+The fms-acceleration framework includes accelerators for Full and Parameter Efficient Fine Tuning (PEFT), including
 
  - Low Rank Adaptation (LoRA) acceleration (coming soon)
  - Bits-and-Bytes (BNB) quantised LoRA : QLoRA acceleration
  - AutoGPTQ quantised LoRA : GPTQ-LoRA acceleration
  - Full Fine Tuning acceleration (coming soon)
 
-Our tests have shown an increase in training token throughput using this fms-acceleration framework.
+Our tests show a significant increase in training token throughput using this fms-acceleration framework.
 
 For example:
 
-- QLoRA: xx % token throughput increase on 1 GPU as compared to using Hugging Face BNB QLoRA
-- QLoRA: xx % token throughput increase on 2 GPU as compared to using Hugging Face BNB QLoRA
-- GPTQ-LoRA: xx % token throughput increase on 1 GPU as compared to using Hugging Face BNB QLoRA 
-- GPTQ-LoRA: xx % token throughput increase on 2 GPU as compared to using Hugging Face BNB QLoRA
+- QLoRA: 22-43 % token throughput increase on 1 GPU as compared to using Hugging Face BNB QLoRA
+- QLoRA: Straightforward integration with multiple GPU as compared to using Hugging Face BNB QLoRA
+- GPTQ-LoRA: 22-44 % token throughput increase on 1 GPU as compared to using Hugging Face BNB QLoRA 
+- GPTQ-LoRA: Straightforward integration with multiple GPU as compared to using Hugging Face BNB QLoRA
 
 
 
@@ -31,8 +31,8 @@ Plugin | Description | Depends | License | Status
 --|--|--|--|--
 [framework](./plugins/framework/README.md) | This acceleration framework for integration with huggingface trainers | | | Beta
 [accelerated-peft](./plugins/accelerated-peft/README.md) | For PEFT-training, e.g., 4bit QLoRA. | Huggingface<br>AutoGPTQ | Apache 2.0<br>MIT | Beta
- TBA | Unsloth-inspired. Fused LoRA and triton kernels (e.g., fast cross-entropy, rms, rope) | Xformers | Apache 2.0 with exclusions. | Under Development
- TBA | [MegaBlocks](https://github.com/databricks/megablocks) inspired triton Kernels and acclerations for Mixture-of-Expert models |  | Apache 2.0 | Under Development
+ fusedOps-and-kernels | Fused LoRA and triton kernels (e.g., fast cross-entropy, rms, rope) | -- | Apache 2.0 with exclusions. | Under Development
+ MOE-training-acceleration  | [MegaBlocks](https://github.com/databricks/megablocks) inspired triton Kernels and acclerations for Mixture-of-Expert models |  | Apache 2.0 | Under Development
 
 ## Usage with FMS HF Tuning
 
