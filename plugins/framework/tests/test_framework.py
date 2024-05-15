@@ -272,14 +272,16 @@ def test_plugin_registration_order():
 
     # build a set of hooks that register the activation order
     def hook_builder(act_order=None):
+
+        if act_order is None:
+            act_order = []
+
         def _hook(
             self,
             model,
             train_args,
             modifiable_args,
         ):
-            if act_order is None:
-                act_order = []
             act_order.append(str(self.__class__))
             return model, modifiable_args
 
