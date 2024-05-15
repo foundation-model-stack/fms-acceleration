@@ -98,7 +98,10 @@ class AccelerationPlugin:
 
         # get the package metadata
         pkg_name = sys.modules[plugin.__module__].__package__
-        package_version = importlib.metadata.version(pkg_name)
+        try:
+            package_version = importlib.metadata.version(pkg_name)
+        except importlib.metadata.PackageNotFoundError: 
+            package_version = None
 
         PLUGIN_REGISTRATIONS.append(
             PluginRegistration(

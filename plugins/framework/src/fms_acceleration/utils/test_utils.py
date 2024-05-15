@@ -65,11 +65,12 @@ def configure_framework_from_json(
 
 
 @contextmanager
-def build_framework_and_instantiate(
+def build_framework_and_maybe_instantiate(
     plugins_to_be_registered: List[
         Tuple[List[str], Type[AccelerationPlugin]]  # and_paths, plugin_class
     ],
-    configuration_contents: Dict,
+    configuration_contents: Dict = {},
+    instantiate: bool = True,
     reset_registrations: bool = True,
     require_packages_check: bool = True,
 ):
@@ -91,7 +92,10 @@ def build_framework_and_instantiate(
             configuration_and_paths=path,
         )
 
-    yield configure_framework_from_json(configuration_contents, require_packages_check)
+    if instantiate:
+        yield configure_framework_from_json(configuration_contents, require_packages_check)
+    else:
+        yield
 
     # put back
     if reset_registrations:
@@ -100,6 +104,8 @@ def build_framework_and_instantiate(
     AccelerationFramework.active_plugins = old_active_plugins
     AccelerationFramework.plugins_require_custom_loading = old_custom_loading_plugins
 
+# alias because default instantiate=True 
+build_framework_and_instantiate = build_framework_and_maybe_instantiate
 
 def instantiate_framework(
     configuration_contents: Dict,
