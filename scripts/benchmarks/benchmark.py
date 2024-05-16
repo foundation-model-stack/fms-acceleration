@@ -1,17 +1,19 @@
+# Standard
+from itertools import product
+from typing import Any, Callable, Dict, List, Tuple, Union
 import argparse
 import json
 import os
 import re
 import subprocess
 import warnings
-from itertools import product
-from typing import Callable, Dict, List, Tuple, Any, Union
 
+# Third Party
+from tqdm import tqdm
+from transformers import AutoConfig, HfArgumentParser, TrainingArguments
 import datasets
 import pandas as pd
 import yaml
-from tqdm import tqdm
-from transformers import HfArgumentParser, TrainingArguments, AutoConfig
 
 """
 This benchmarking script 
@@ -45,22 +47,20 @@ FILE_STDERR = "stderr"
 FILE_RESULTS = "results.json"
 FILE_SHELL_COMMAND = "command.sh"
 FILE_SCRIPT_ARGS = "script.json"
-FILE_SUMMARY_CSV = 'summary.csv'
+FILE_SUMMARY_CSV = "summary.csv"
 
 DIR_BENCHMARKS = os.path.dirname(os.path.realpath(__file__))
-DIR_PREFIX_EXPERIMENT = 'exp'
-DIR_NAME_RESULTS_DEFAULT = 'benchmark_results'
-DIR_SAMP_CONFIGS = os.path.join(DIR_BENCHMARKS, '../../sample-configurations')
+DIR_PREFIX_EXPERIMENT = "exp"
+DIR_NAME_RESULTS_DEFAULT = "benchmark_results"
+DIR_SAMP_CONFIGS = os.path.join(DIR_BENCHMARKS, "../../sample-configurations")
 
 # read list of sample configurations from contents file
 FRAMEWORK_CONFIG_KEYPAIRS = []
-with open(os.path.join(DIR_SAMP_CONFIGS, 'CONTENTS.yaml')) as f:
-    configs = yaml.safe_load(f)['framework_configs']
+with open(os.path.join(DIR_SAMP_CONFIGS, "CONTENTS.yaml")) as f:
+    configs = yaml.safe_load(f)["framework_configs"]
     for d in configs:
-        FRAMEWORK_CONFIG_KEYPAIRS.append(d['shortname'])
-        FRAMEWORK_CONFIG_KEYPAIRS.append(
-            os.path.join(DIR_SAMP_CONFIGS, d['filename'])
-        )
+        FRAMEWORK_CONFIG_KEYPAIRS.append(d["shortname"])
+        FRAMEWORK_CONFIG_KEYPAIRS.append(os.path.join(DIR_SAMP_CONFIGS, d["filename"]))
 
 # regex to capture the start and end of tracebacks
 REGEX_START_OF_TRACEBACK = "Traceback\s\(most\srecent\scall\slast\)"
@@ -203,7 +203,7 @@ class ConfigUtils:
             list_of_products.append(
                 {
                     name: arg
-                for name, arg in zip(variable_matrices.keys(), arg_combinations)
+                    for name, arg in zip(variable_matrices.keys(), arg_combinations)
                 }
             )
         return list_of_products
@@ -223,14 +223,14 @@ class ConfigUtils:
                     argument_dict[current_key] = item
                 else:
                     # otherwise it was from a list, so make into sequence
-                    argument_dict[current_key] = v + ' ' + item
+                    argument_dict[current_key] = v + " " + item
 
         return argument_dict
 
 
 class ScenarioMatrix:
 
-    matrix_args = ['model_name_or_path']
+    matrix_args = ["model_name_or_path"]
 
     def __init__(self, scenario: Dict, acceleration_config_map: Dict = None) -> None:
         assert "arguments" in scenario.keys(), "Missing `arguments` key in `scenario`"
@@ -246,7 +246,7 @@ class ScenarioMatrix:
             setattr(self, key, val)
 
     def preload_models(self):
-        for model_name in self.arguments['model_name_or_path']:
+        for model_name in self.arguments["model_name_or_path"]:
             print(f"Scenario '{self.name}' preloading model '{model_name}'")
             # just preload the config
             AutoConfig.from_pretrained(model_name)
@@ -302,14 +302,14 @@ class Experiment:
                 commands.extend([str(x) for x in c])
             else:
                 commands.append(str(c))
-            
+
         # will save the command line in str
         self.shell_command = run_cmd.split() + commands
         self.environment = environment_variables
         self.experiment_args_str = commands
         os.makedirs(self.save_dir, exist_ok=True)
         subprocess.run(
-            self.shell_command, 
+            self.shell_command,
             capture_output=False,
             stdout=open(self.stdout_filename, "w"),
             stderr=open(self.stderr_filename, "w"),
@@ -379,14 +379,15 @@ class Experiment:
 
         # save some basic args
         save_result = ConfigUtils.convert_args_to_dict(self.experiment_args_str)
-        save_result['num_gpus'] = self.num_gpus
+        save_result["num_gpus"] = self.num_gpus
 
         # if there is an error we save the error message else we save the final result
         maybe_error_messages = self.maybe_get_experiment_error_traceback()
         if maybe_error_messages is None:
             other_results = self.get_experiment_final_metrics()
             save_result = {
-                **save_result, **self.get_experiment_final_metrics(),
+                **save_result,
+                **self.get_experiment_final_metrics(),
             }
         else:
             other_results = {"error_messages": maybe_error_messages}
@@ -394,26 +395,25 @@ class Experiment:
         # combine the final thing
         save_result = {**save_result, **other_results}
 
-        with open(self.results_filename, 'w') as f:
+        with open(self.results_filename, "w") as f:
             json.dump(save_result, f, indent=4, sort_keys=True)
 
-    # NOTE: can be improved. Not sure if this really gets parity with 
+    # NOTE: can be improved. Not sure if this really gets parity with
     # subprocess.run
     def write_shell_command(self):
 
         def _escape(x: str):
             # if there is is whitespace we just escape with single quotes
             # not sure if this is the best thing to do
-            return x if not re.search(r"\s", x) else f"\'{x}\'"
+            return x if not re.search(r"\s", x) else f"'{x}'"
 
         "Write a shell script to repro the run"
-        with open(self.command_filename, 'w') as f:
+        with open(self.command_filename, "w") as f:
             f.write("#!/bin/bash\n\n")
             for key, val in self.environment.items():
                 f.write(f"{key}={val}\n")
-            f.write(" ".join([
-                _escape(x) for x in self.shell_command
-            ]))
+            f.write(" ".join([_escape(x) for x in self.shell_command]))
+
 
 class DryRunExperiment(Experiment):
 
@@ -423,6 +423,7 @@ class DryRunExperiment(Experiment):
     def run(self, run_cmd: str, environment_variables: Dict = None):
         def _dummy(*args, **kwargs):
             pass
+
         _old = subprocess.run
         subprocess.run = _dummy
         super().run(run_cmd, environment_variables)
@@ -435,6 +436,7 @@ class DryRunExperiment(Experiment):
 
     def maybe_get_experiment_error_traceback(self):
         return None
+
 
 def prepare_arguments(args):
     defaults = ConfigUtils.read_yaml(args.defaults_config_path)
@@ -451,18 +453,15 @@ def prepare_arguments(args):
     }
     experiment_factor = 1
     for k, v in experiment_matrices.items():
-        print (f"Experiment has matrix '{k}' of len {len(v)}")
+        print(f"Experiment has matrix '{k}' of len {len(v)}")
         experiment_factor *= len(v)
-    print (f"Experiment matrices will product by factor of '{experiment_factor}'")
+    print(f"Experiment matrices will product by factor of '{experiment_factor}'")
 
     for scenario_config in scenarios:
         _scn_name = scenario_config["name"]
         # if a `run_only_scenarios` list exist, filter out any scenario not in the list
-        if (
-            args.run_only_scenarios
-            and _scn_name not in args.run_only_scenarios
-        ):
-            print (f"Skipping scenario '{_scn_name}'")
+        if args.run_only_scenarios and _scn_name not in args.run_only_scenarios:
+            print(f"Skipping scenario '{_scn_name}'")
             continue
         scenario = ScenarioMatrix(scenario_config, acceleration_config_map)
         scenario_matrices, scenario_constants = (
@@ -470,7 +469,7 @@ def prepare_arguments(args):
         )
         scn_factor = 1
         for k, v in scenario_matrices.items():
-            print (f"Scenario '{_scn_name}' has matrix '{k}' of len {len(v)}")
+            print(f"Scenario '{_scn_name}' has matrix '{k}' of len {len(v)}")
             scn_factor *= len(v)
 
         # update defaults with scenario constants
@@ -478,7 +477,9 @@ def prepare_arguments(args):
         # Remove any empty variables and combine matrices to dictionary to cartesian product on
         combined_matrices = {**scenario_matrices, **experiment_matrices}
         products = ConfigUtils.cartesian_product_on_dict(combined_matrices)
-        print (f"Scenario '{_scn_name}' will add to the total products by: ----> '{experiment_factor} x {scn_factor}' = '{len(products)}'\n")
+        print(
+            f"Scenario '{_scn_name}' will add to the total products by: ----> '{experiment_factor} x {scn_factor}' = '{len(products)}'\n"
+        )
         if args.preload_models and len(products) > 0:
             scenario.preload_models()
         for num_gpus, experiment_arg in ConfigUtils.build_args_from_products(
@@ -515,7 +516,7 @@ def generate_list_of_experiments(
     return experiments
 
 
-def gather_report(result_dir: Union[str, List[str]], raw: bool=True):
+def gather_report(result_dir: Union[str, List[str]], raw: bool = True):
 
     def _gather(rdir):
 
@@ -524,26 +525,28 @@ def gather_report(result_dir: Union[str, List[str]], raw: bool=True):
 
         # map from config file to tag
         fcm = convert_keypairs_to_map(
-            script_args['acceleration_framework_config_keypairs']
+            script_args["acceleration_framework_config_keypairs"]
         )
-        fcm = {v:k for k,v in fcm.items()}
+        fcm = {v: k for k, v in fcm.items()}
 
         experiment_stats = {}
-        exper_dirs = [x for x in os.listdir(rdir) if x.startswith(DIR_PREFIX_EXPERIMENT)]
+        exper_dirs = [
+            x for x in os.listdir(rdir) if x.startswith(DIR_PREFIX_EXPERIMENT)
+        ]
         for tag in exper_dirs:
             try:
                 with open(os.path.join(rdir, tag, FILE_RESULTS)) as f:
-                    tag = tag.replace(DIR_PREFIX_EXPERIMENT + '_', '')
+                    tag = tag.replace(DIR_PREFIX_EXPERIMENT + "_", "")
                     tag = int(tag)
                     experiment_stats[tag] = json.load(f)
             except FileNotFoundError:
                 pass
         df = pd.DataFrame.from_dict(experiment_stats, orient="index").sort_index()
         try:
-            df['framework_config'] = df['acceleration_framework_config_file'].map(
-                lambda x : fcm.get(x, 'none')
+            df["framework_config"] = df["acceleration_framework_config_file"].map(
+                lambda x: fcm.get(x, "none")
             )
-        except KeyError: 
+        except KeyError:
             pass
 
         return df
@@ -564,11 +567,14 @@ def gather_report(result_dir: Union[str, List[str]], raw: bool=True):
             # if unique does not work, then return number of non-na
             # elements
             return len(series) - series.isna().sum()
-    u = df.apply(_nunique) # columns that are unique
-    return df.loc[:,u != 1], df.iloc[0][u == 1].to_dict()
+
+    u = df.apply(_nunique)  # columns that are unique
+    return df.loc[:, u != 1], df.iloc[0][u == 1].to_dict()
+
 
 def compress(df):
-    return df.loc[:,df.apply(pd.Series.nunique) != 1]
+    return df.loc[:, df.apply(pd.Series.nunique) != 1]
+
 
 def main(args):
 
@@ -578,9 +584,9 @@ def main(args):
         benchmark_dataset = BenchmarkDataset(args.dataset_name, format_fn)
         benchmark_dataset.save_to_path(args.dataset_save_path)
 
-    # dump out the script arguments 
+    # dump out the script arguments
     os.makedirs(args.results_output_path, exist_ok=True)
-    with open(os.path.join(args.results_output_path, FILE_SCRIPT_ARGS), 'w') as f:
+    with open(os.path.join(args.results_output_path, FILE_SCRIPT_ARGS), "w") as f:
         json.dump(vars(args), f, indent=4, sort_keys=True)
 
     # 2. Prepares a list of experiment arguments from a set of configs
@@ -589,10 +595,13 @@ def main(args):
     # 3. Builds a list of experiment objects to run based on the set of experiment arguments
     experiment_stats = {}
     experiment: Experiment
-    for experiment in tqdm(generate_list_of_experiments(
-        experiment_args, output_dir=args.results_output_path,
-        dry_run=args.dry_run,
-    )):
+    for experiment in tqdm(
+        generate_list_of_experiments(
+            experiment_args,
+            output_dir=args.results_output_path,
+            dry_run=args.dry_run,
+        )
+    ):
         if experiment.num_gpus > 1:
             prefix = COMMAND_ACCELERATE.format(
                 accelerate_config_path=args.accelerate_config,
@@ -618,9 +627,7 @@ def main(args):
         with open(path) as f:
             experiment_stats[tag] = json.load(f)
     df = pd.DataFrame.from_dict(experiment_stats, orient="index")
-    df.to_csv(
-        os.path.join(args.results_output_path, FILE_SUMMARY_CSV), index=None
-    )
+    df.to_csv(os.path.join(args.results_output_path, FILE_SUMMARY_CSV), index=None)
 
     # TO CREATE THE checked in CSV FILE DO
     # df, constant = gather_report(..., raw=False)
@@ -634,6 +641,7 @@ def main(args):
     #     'results.csv',
     #     index=False
     # )
+
 
 if __name__ == "__main__":
 
@@ -723,17 +731,20 @@ if __name__ == "__main__":
         "--process_port", type=int, default=29500, help="accelerate process port"
     )
     parser.add_argument(
-        "--no_data_processing", action='store_true', 
-        help="skip the json data prep (useful for re-runs)"
+        "--no_data_processing",
+        action="store_true",
+        help="skip the json data prep (useful for re-runs)",
     )
     parser.add_argument(
-        "--dry_run", action='store_true', 
-        help="perform a dry run only. Useful for debuging benchmark scenarios."
+        "--dry_run",
+        action="store_true",
+        help="perform a dry run only. Useful for debuging benchmark scenarios.",
     )
     parser.add_argument(
-        "--preload_models", action='store_true', 
+        "--preload_models",
+        action="store_true",
         help="ensures 'model_name_or_paths 'specified in scenarios.yaml work. "
-        "Useful to check model paths specified correctly before lengthly benchmark runs."
+        "Useful to check model paths specified correctly before lengthly benchmark runs.",
     )
     args = parser.parse_args()
     main(args)
