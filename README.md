@@ -1,7 +1,9 @@
+![image](https://github.com/foundation-model-stack/fms-acceleration/assets/88785285/84643739-da14-4bfb-b3c3-3fca77089075)
+
+
 # FMS Acceleration
 
-
-[The [monorepo](https://github.com/tweag/python-monorepo-example) is designed to accelerate the fine-tuning and training of large models. This framework comprises a collection of libraries
+[FMS Acceleration is designed to accelerate the fine-tuning and training of large models. This framework comprises a collection of libraries
 intended to be used with the [fms-hf-tuning](https://github.com/foundation-model-stack/fms-hf-tuning) suite.
 
 The fms-acceleration framework includes accelerators for Full and Parameter Efficient Fine Tuning (PEFT), including
@@ -23,7 +25,7 @@ For example:
 
 
 **This package is in BETA and is under development. Expect breaking changes!**
-](https://github.com/foundation-model-stack/fms-acceleration/invitations)
+]
 
 ## Plugins
 
@@ -36,12 +38,12 @@ Plugin | Description | Depends | License | Status
 
 ## Usage with FMS HF Tuning
 
-This is intended to be a collection of many acceleration routines (including accelerated peft and other techniques). Below demonstrates a concrete example to show how to accelerate your tuning experience with [tuning/sft_trainer.py](https://github.com/foundation-model-stack/fms-hf-tuning/blob/main/tuning/sft_trainer.py) from `fms-hf-tuning`.
+Below we demonstrate how to accelerate your tuning experience with [tuning/sft_trainer.py](https://github.com/foundation-model-stack/fms-hf-tuning/blob/main/tuning/sft_trainer.py) from `fms-hf-tuning`.
 
 ### Example: Accelerated GPTQ-LoRA Training
 
-Below instructions for accelerated peft fine-tuning. In particular GPTQ-LoRA tuning with the AutoGPTQ `triton_v2` kernel; this kernel is state-of-the-art [provided by `jeromeku` on Mar 2024](https://github.com/AutoGPTQ/AutoGPTQ/pull/596):
-1. Checkout [fms-hf-tuning](https://github.com/foundation-model-stack/fms-hf-tuning) and install the [framework library](./plugins/framework):
+Below we illustrate accelerated quantised PEFT using GPTQ-LoRA tuning with the AutoGPTQ `triton_v2` kernel; this kernel is state-of-the-art [provided by `jeromeku` on Mar 2024](https://github.com/AutoGPTQ/AutoGPTQ/pull/596):
+1. First go to [fms-hf-tuning](https://github.com/foundation-model-stack/fms-hf-tuning) and install the [framework library](./plugins/framework):
     ```
     $ pip install -e .[fms-accel]
     ```
@@ -50,7 +52,7 @@ Below instructions for accelerated peft fine-tuning. In particular GPTQ-LoRA tun
     $ pip install git+https://github.com/foundation-model-stack/fms-acceleration.git#subdirectory=plugins/framework
     ```
 
-    The above installs the command line utility `fms_acceleration.cli`, which can then be used to install plugins and view sample configurations. 
+    The above installs the command line utility `fms_acceleration.cli`, which is used to install plugins and view sample configurations. 
 
 2. Prepare a YAML configuration for the acceleration framework plugins. To help with this, `fms_acceleration.cli` provides a `configs` utility to search for sample configs by entering the following:
     ```
@@ -136,7 +138,7 @@ Below instructions for accelerated peft fine-tuning. In particular GPTQ-LoRA tun
     Number of trainable parameters = 13,631,488
     ```
 
-**Over time, more [plugins](#plugins) will be updated, so please check here for the latest accelerations!**.
+**New exciting [plugins](#plugins) will be added, so please check here for the latest accelerations!**.
 
 ### CUDA Dependencies
 
