@@ -1,9 +1,30 @@
-# FMS Acceleration
 
-This [monorepo](https://github.com/tweag/python-monorepo-example) collects libraries of packages that accelerate fine-tuning / training of large models, 
-intended to be part of the [fms-hf-tuning](https://github.com/foundation-model-stack/fms-hf-tuning) suite.
+# FMS Acceleration 🚀
 
-**This package is in BETA under extensive development. Expect breaking changes!**
+FMS Acceleration is designed to accelerate the fine-tuning and training of large models. This framework comprises a collection of libraries
+intended to be used with the [fms-hf-tuning](https://github.com/foundation-model-stack/fms-hf-tuning) suite.
+
+The fms-acceleration framework includes accelerators for Full and Parameter Efficient Fine Tuning (PEFT), including
+
+ - Low Rank Adaptation (LoRA) acceleration (coming soon)
+ - Bits-and-Bytes (BNB) quantised LoRA : QLoRA acceleration
+ - AutoGPTQ quantised LoRA : GPTQ-LoRA acceleration
+ - Full Fine Tuning acceleration (coming soon)
+
+Our tests show a significant increase in training token throughput using this fms-acceleration framework.
+
+
+For example:
+
+- QLoRA: 22-43 % token throughput increase on 1 GPU as compared to using Hugging Face BNB QLoRA
+- QLoRA: Straightforward integration with multiple GPU as compared to using Hugging Face BNB QLoRA
+- GPTQ-LoRA: 22-44 % token throughput increase on 1 GPU as compared to using Hugging Face BNB QLoRA 
+- GPTQ-LoRA: Straightforward integration with multiple GPU as compared to using Hugging Face BNB QLoRA
+
+*Huggingface BNB QLoRA numbers taken with legacy approaches, but we are aware of [this issue](https://github.com/foundation-model-stack/fms-acceleration/issues/10) and will update our benches*.
+*The above includes numbers using fusedOps-and-kernels and actual impl coming soon, see below*.
+
+**This package is in BETA and is under development. Expect breaking changes!**
 
 ## Plugins
 
@@ -11,17 +32,30 @@ Plugin | Description | Depends | License | Status
 --|--|--|--|--
 [framework](./plugins/framework/README.md) | This acceleration framework for integration with huggingface trainers | | | Beta
 [accelerated-peft](./plugins/accelerated-peft/README.md) | For PEFT-training, e.g., 4bit QLoRA. | Huggingface<br>AutoGPTQ | Apache 2.0<br>MIT | Beta
- TBA | Unsloth-inspired. Fused LoRA and triton kernels (e.g., fast cross-entropy, rms, rope) | Xformers | Apache 2.0 with exclusions. | Under Development
- TBA | [MegaBlocks](https://github.com/databricks/megablocks) inspired triton Kernels and acclerations for Mixture-of-Expert models |  | Apache 2.0 | Under Development
+ fusedOps-and-kernels | Fused LoRA and triton kernels (e.g., fast cross-entropy, rms, rope) | -- | Apache 2.0 with exclusions. | Coming Soon
+ MOE-training-acceleration  | [MegaBlocks](https://github.com/databricks/megablocks) inspired triton Kernels and acclerations for Mixture-of-Expert models |  | Apache 2.0 | Coming Soon
 
 ## Usage with FMS HF Tuning
 
-This is intended to be a collection of many acceleration routines (including accelerated peft and other techniques). Below demonstrates a concrete example to show how to accelerate your tuning experience with [tuning/sft_trainer.py](https://github.com/foundation-model-stack/fms-hf-tuning/blob/main/tuning/sft_trainer.py) from `fms-hf-tuning`.
+Below we demonstrate how to accelerate your tuning experience with [tuning/sft_trainer.py](https://github.com/foundation-model-stack/fms-hf-tuning/blob/main/tuning/sft_trainer.py) from `fms-hf-tuning`. 
 
 ### Example: Accelerated GPTQ-LoRA Training
 
-Below instructions for accelerated peft fine-tuning. In particular GPTQ-LoRA tuning with the AutoGPTQ `triton_v2` kernel; this kernel is state-of-the-art [provided by `jeromeku` on Mar 2024](https://github.com/AutoGPTQ/AutoGPTQ/pull/596):
-1. Checkout [fms-hf-tuning](https://github.com/foundation-model-stack/fms-hf-tuning) and install the [framework library](./plugins/framework):
+Below we illustrate accelerated quantised PEFT using GPTQ-LoRA tuning with the AutoGPTQ `triton_v2` kernel; this kernel is state-of-the-art [provided by `jeromeku` on Mar 2024](https://github.com/AutoGPTQ/AutoGPTQ/pull/596):
+
+There is both a *basic* and *advanced* usage low
+
+![Usage Flows](img/fms-accel-flows.png)
+
+#### Basic Flow 🤡
+
+Most users of `fms-hf-tuning` only require the basic flow:
+- Assumption 1: user has an already prepared configuration, say from [fms-hf-tuning/fixtures](https://github.com/foundation-model-stack/fms-hf-tuning).
+- Assumption 2: user knows exactly what acceleration 'plugins` are required (based on the configuration).
+- Assumption 3: the arguments for running `sft_trainer.py` is the same; save for one extra argument `--acceleration_framework_config_file` used to pass in the acceleration config.
+
+In this case then the basic flow comprises of 3 steps:
+1. First go to [fms-hf-tuning](https://github.com/foundation-model-stack/fms-hf-tuning) and install the [framework library](./plugins/framework):
     ```
     $ pip install -e .[fms-accel]
     ```
@@ -30,9 +64,56 @@ Below instructions for accelerated peft fine-tuning. In particular GPTQ-LoRA tun
     $ pip install git+https://github.com/foundation-model-stack/fms-acceleration.git#subdirectory=plugins/framework
     ```
 
-    The above installs the command line utility `fms_acceleration.cli`, which can then be used to install plugins and view sample configurations. 
+    The above installs the command line utility `fms_acceleration.cli`, which is used to install plugins (and also other things like view sample configurations). 
 
-2. Prepare a YAML configuration for the acceleration framework plugins. To help with this, `fms_acceleration.cli` provides a `configs` utility to search for sample configs by entering the following:
+3. `install` the required framework plugins; we install the `fms-acceleration-peft` plugin for GPTQ-LoRA tuning with triton v2 as:
+    ```
+    python -m fms_acceleration.cli install fms_acceleration_peft
+    ```
+    The above is the equivalent of:
+    ```
+    pip install git+https://github.com/foundation-model-stack/fms-acceleration.git#subdirectory=plugins/accelerated-peft
+    ```
+
+5. Run `sft_trainer.py` providing the acceleration configuration and arguments; given the basic flow assumption that we simply re-use the same `sft_trainer.py` arguments as we had without using the `fms_acceleration` package:
+    ```
+    # when using sample-configurations, arguments can be referred from
+    # defaults.yaml and scenarios.yaml
+    python sft_trainer.py \
+        --acceleration_framework_config_file framework.yaml \
+        ...  # arguments
+    ```
+
+    The framework activates relevant plugins given the framework configuration; for more details [see framework/README.md](./plugins/framework/README.md#configuration-of-plugins).
+
+    Activate `TRANSFORMERS_VERBOSITY=info` to see the huggingface trainer printouts and verify that `AccelerationFramework` is activated!
+
+    ```
+    # this printout will be seen in huggingface trainer logs if acceleration is activated
+    ***** FMS AccelerationFramework *****
+    Active Plugin: AutoGPTQAccelerationPlugin. Python package: fms_acceleration_peft. Version: 0.0.1.
+    ***** Running training *****
+    Num examples = 1,549
+    Num Epochs = 1
+    Instantaneous batch size per device = 4
+    Total train batch size (w. parallel, distributed & accumulation) = 4
+    Gradient Accumulation steps = 1
+    Total optimization steps = 200
+    Number of trainable parameters = 13,631,488
+    ```
+
+**New exciting [plugins](#plugins) will be added, so please check here for the latest accelerations!**.
+
+#### Advanced Flow 🥷 🦹
+
+The advanced flow makes further use of `fms_acceleration.cli` to: 
+* list all available configs and acceleration plugins the configs depend on. 
+* list all available plugins and check which are the installed ones.
+* identify critical `sft_trainer` arguments required for correct operation of a particular framework config.
+
+The advanced flow comprises of 5 steps:
+1. Same as Step 1 of basic flow.
+2. Use `fms_acceleration.cli configs` to search for sample configs:
     ```
     $ python -m fms_acceleration.cli configs
 
@@ -40,12 +121,10 @@ Below instructions for accelerated peft fine-tuning. In particular GPTQ-LoRA tun
     2. accelerated-peft-bnb (accelerated-peft-bnb-nf4-sample-configuration.yaml) - plugins: ['accelerated-peft']
     ```
 
-    or alternatively search the configurations manually:
-    * [Full sample configuration list](./sample-configurations/CONTENTS.yaml) shows the `plugins` required for the configs.
+    This is equivalent to the searching over the:
+    * [Full sample configuration list](./sample-configurations/CONTENTS.yaml) that shows `plugins` required for all available configs.
     * E.g., [Accelerated GPTQ-LoRA configuration here](sample-configurations/accelerated-peft-autogptq-sample-configuration.yaml). 
-
-
-3. Install the required `plugins`. Use `list` to view available plugins; this list updates [as more plugins get developed](#plugins). Recall that `configs` list the required `plugins` for the sample configurations; make sure all of them are installed.
+3. `install` plugins same as Step 2 of basic flow, noting that in addition we can use `plugins` to display all available plugins; this list updates [as more plugins get developed](#plugins). Recall that `configs` list the required `plugins` for the sample configurations; make sure all of them are installed.
     ```
     $ python -m fms_acceleration.cli plugins
 
@@ -56,17 +135,9 @@ Below instructions for accelerated peft fine-tuning. In particular GPTQ-LoRA tun
 
     1. fms_acceleration_peft [peft]
     ```
-    and then `install` the plugin. We install the `fms-acceleration-peft` plugin for GPTQ-LoRA tuning with triton v2 as:
-    ```
-    python -m fms_acceleration.cli install fms_acceleration_peft
-    ```
-    The above is the equivalent of:
-    ```
-    pip install git+https://github.com/foundation-model-stack/fms-acceleration.git#subdirectory=plugins/accelerated-peft
-    ```
-
-4. Run `sft_trainer.py` while providing the correct arguments: 
-    * `--acceleration_framework_config_file` pointing to framework configuration YAML.  The framework activates relevant plugins given the framework configuration; for more details [see framework/README.md](./plugins/framework/README.md#configuration-of-plugins).
+    After `install` the list will update to indicate the installed plugins.
+4. Get the correct arguments for `sft_trainer.py`: 
+    
     * arguments required for correct operation (e.g., if using accelerated peft, then `peft_method` is required).
 
         * Use `arguments` along with the [sample configuration `shortname`](./sample-configurations/CONTENTS.yaml) to display the relevant *critical arguments*; these arguments can be manually referred from [scenarios.yaml](./scripts/benchmarks/scenarios.yaml):
@@ -91,37 +162,10 @@ Below instructions for accelerated peft fine-tuning. In particular GPTQ-LoRA tun
         * Arguments *not critical to the plugins* found in [defaults.yaml](./scripts/benchmarks/defaults.yaml). These can be taken with liberty.
         * Arguments *critcal to plugins* found in [scenarios.yaml](./scripts/benchmarks/scenarios.yaml). The relevant section of [scenarios.yaml](./scripts/benchmarks/scenarios.yaml), is the one whose `framework_config` entries, match the `shortname` of the sample configuration of [interest](./sample-configurations/CONTENTS.yaml).
 
-5. Run `sft_trainer.py` providing the acceleration configuration and arguments:
-    ```
-    # when using sample-configurations, arguments can be referred from
-    # defaults.yaml and scenarios.yaml
-    python sft_trainer.py \
-        --acceleration_framework_config_file framework.yaml \
-        ...  # arguments 
-    ```
-
-    Activate `TRANSFORMERS_VERBOSITY=info` to see the huggingface trainer printouts and verify that `AccelerationFramework` is activated!
-
-    ```
-    # this printout will be seen in huggingface trainer logs if acceleration is activated
-    ***** FMS AccelerationFramework *****
-    Active Plugin: AutoGPTQAccelerationPlugin. Python package: fms_acceleration_peft. Version: 0.0.1.
-    ***** Running training *****
-    Num examples = 1,549
-    Num Epochs = 1
-    Instantaneous batch size per device = 4
-    Total train batch size (w. parallel, distributed & accumulation) = 4
-    Gradient Accumulation steps = 1
-    Total optimization steps = 200
-    Number of trainable parameters = 13,631,488
-    ```
-
-**Over time, more [plugins](#plugins) will be updated, so please check here for the latest accelerations!**.
-
 ### CUDA Dependencies
 
 This repo requires CUDA to compute the kernels, and it is convinient to use [NVidia Pytorch Containers](https://docs.nvidia.com/deeplearning/frameworks/support-matrix/index.html) that already comets with CUDA installed. We have tested with the following versions:
-- `pytorch:24.03-py3`
+- `pytorch:24.01-py3`
 
 ### Benchmarks
 
