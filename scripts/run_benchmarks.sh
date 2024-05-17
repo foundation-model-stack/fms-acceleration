@@ -30,6 +30,7 @@ DATA_CACHE=data/cache.json
 # env inputs
 DRY_RUN=${DRY_RUN:-"false"}
 NO_DATA_PROCESSING=${NO_DATA_PROCESSING:-"false"}
+NO_OVERWRITE=${NO_OVERWRITE:-"false"}
 
 # inputs
 NUM_GPUS_MATRIX=${1-"1 2"}
@@ -41,6 +42,18 @@ echo "NUM_GPUS_MATRIX: $NUM_GPUS_MATRIX"
 echo "RESULT_DIR: $RESULT_DIR"
 echo "SCENARIOS_CONFIG: $SCENARIOS_CONFIG"
 echo "SCENARIOS_FILTER: $SCENARIOS_FILTER"
+
+if [ -n "$RESULT_DIR" ]; then
+    echo "The results directory is not empty. "
+    if [ "$NO_OVERWRITE" = "true" ]; then 
+        echo "Results dir $RESULT_DIR is not empty, but NO_OVERWRITE=true"
+        echo "If intending to overwrite please delete the folder manually"
+        echo "or do not set NO_OVERWRITE"
+        exit 1
+    fi
+    echo "Deleting $RESULT_DIR"
+    rm -rf $RESULT_DIR
+fi
 
 # tag on the directories
 SCENARIOS_CONFIG=$WORKING_DIR/$SCENARIOS_CONFIG
