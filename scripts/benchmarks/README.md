@@ -59,7 +59,9 @@ The best way is via `tox` which manages the dependencies, including installing t
     ```
     tox -e run-benches -- "1 2" 
     ```
-ationFramework` to demonstrate the various plugins.
+
+Note:
+- `tox` command above accepts environment variables `DRY_RUN, NO_DATA_PROCESSING, NO_OVERWRITE`. See `scripts/run_benchmarks.sh`
 
 ## Running Benchmarks
 
@@ -82,3 +84,6 @@ Alternatively run [`benchmark.py`](./benchmark.py) directly. To see the help do:
 ```
 python benchmark.py --help
 ```
+
+Note:
+- in `run_benchmarks.sh` we will clear the `RESULT_DIR` if it exists, to avoid contaimination with old results. To protect against overwrite, then always run with `NO_OVERWRITE=true`.
