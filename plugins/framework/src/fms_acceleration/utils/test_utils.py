@@ -51,7 +51,7 @@ def update_configuration_contents(
 
 def read_configuration(path: str) -> Dict:
     "helper function to read yaml config into json"
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
@@ -69,12 +69,15 @@ def build_framework_and_maybe_instantiate(
     plugins_to_be_registered: List[
         Tuple[List[str], Type[AccelerationPlugin]]  # and_paths, plugin_class
     ],
-    configuration_contents: Dict = {},
+    configuration_contents: Dict = None,
     instantiate: bool = True,
     reset_registrations: bool = True,
     require_packages_check: bool = True,
 ):
     "helper function to register plugins and instantiate an acceleration framework for testing"
+
+    if configuration_contents is None:
+        configuration_contents = {}
 
     # empty out
     if reset_registrations:
@@ -93,7 +96,9 @@ def build_framework_and_maybe_instantiate(
         )
 
     if instantiate:
-        yield configure_framework_from_json(configuration_contents, require_packages_check)
+        yield configure_framework_from_json(
+            configuration_contents, require_packages_check
+        )
     else:
         yield
 
@@ -104,8 +109,10 @@ def build_framework_and_maybe_instantiate(
     AccelerationFramework.active_plugins = old_active_plugins
     AccelerationFramework.plugins_require_custom_loading = old_custom_loading_plugins
 
-# alias because default instantiate=True 
+
+# alias because default instantiate=True
 build_framework_and_instantiate = build_framework_and_maybe_instantiate
+
 
 def instantiate_framework(
     configuration_contents: Dict,
@@ -122,8 +129,12 @@ def instantiate_framework(
     )
 
 
-def create_noop_model_with_archs(class_name: str = "ModelNoop", archs: List[str] = []):
+def create_noop_model_with_archs(
+    class_name: str = "ModelNoop", archs: List[str] = None
+):
     "helper function to create a dummy model with mocked architectures"
+    if archs is None:
+        archs = []
 
     config = type("Config", (object,), {"architectures": archs})
     return type(class_name, (torch.nn.Module,), {"config": config})
@@ -131,14 +142,19 @@ def create_noop_model_with_archs(class_name: str = "ModelNoop", archs: List[str]
 
 def create_plugin_cls(
     class_name: str = "PluginNoop",
-    restricted_models: Set = {},
-    require_pkgs: Set = {},
+    restricted_models: Set = None,
+    require_pkgs: Set = None,
     requires_custom_loading: bool = False,
     requires_agumentation: bool = False,
     agumentation: Callable = None,
     model_loader: Callable = None,
 ):
     "helper function to create plugin class"
+
+    if restricted_models is None:
+        restricted_models = set()
+    if require_pkgs is None:
+        require_pkgs = set()
 
     attributes = {
         "restricted_model_archs": restricted_models,
