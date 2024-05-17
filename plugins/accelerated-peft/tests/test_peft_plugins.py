@@ -122,6 +122,20 @@ def test_configure_bnb_plugin():
             assert framework.requires_agumentation
             assert len(framework.get_callbacks_and_ready_for_train()) == 0
 
+    # test no_peft_model is true skips plugin.augmentation
+    for key, correct_value in [
+        ("peft.quantization.bitsandbytes.no_peft_model", True),
+        ("peft.quantization.bitsandbytes.no_peft_model", False),
+    ]:
+        with instantiate_framework(
+            update_configuration_contents(
+                read_configuration(CONFIG_PATH_BNB), key, correct_value
+            ),
+            require_packages_check=False,
+        ):
+            # check flags and callbacks
+            assert (not correct_value)==framework.requires_agumentation
+
     # attempt to activate plugin with configuration pointing to wrong path
     # - raise with message that no plugins can be configured
     with pytest.raises(ValueError) as e:

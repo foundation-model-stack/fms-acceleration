@@ -32,6 +32,23 @@ scenarios:
                 - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
                 - 'NousResearch/Llama-2-70b-hf'
 
+    -   name: baseline-peft-bnb
+        framework_config: 
+            - baseline-peft-bnb
+        arguments:
+            fp16: True
+            learning_rate: 2e-4
+            torch_dtype: float16
+            peft_method: lora
+            r: 16
+            lora_alpha: 16
+            lora_dropout: 0.0
+            target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
+            model_name_or_path: 
+                - 'mistralai/Mistral-7B-v0.1'
+                - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
+                - 'NousResearch/Llama-2-70b-hf'
+
     -   name: accelerated-peft-bnb
         framework_config: 
             - accelerated-peft-bnb
