@@ -51,6 +51,11 @@ A `scenario` has the following key components:
 
 The best way is via `tox` which manages the dependencies, including installing the correct version [fms-hf-tuning](https://github.com/foundation-model-stack/fms-hf-tuning).
 
+- install the `setup_requirements.txt` to get `tox`:
+    ```
+    pip install -r setup_requirements.txt
+    ```
+
 - run a *small* representative set of benches:
     ```
     tox -e run-benches
