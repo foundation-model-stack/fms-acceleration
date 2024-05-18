@@ -47,7 +47,7 @@ FILE_STDERR = "stderr"
 FILE_RESULTS = "results.json"
 FILE_SHELL_COMMAND = "command.sh"
 FILE_SCRIPT_ARGS = "script.json"
-FILE_SUMMARY_CSV = "summary.csv"
+FILE_SUMMARY_CSV = "raw_summary.csv"
 
 DIR_BENCHMARKS = os.path.dirname(os.path.realpath(__file__))
 DIR_PREFIX_EXPERIMENT = "exp"

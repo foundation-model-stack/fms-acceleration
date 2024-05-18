@@ -27,6 +27,9 @@ SCNTAG_PEFT_AUTOGPTQ=accelerated-peft-gptq
 # data will be cached in here
 DATA_CACHE=data/cache.json
 
+# final result placed here
+BENCH_RESULT_FILE=benchmarks.csv
+
 # env inputs
 DRY_RUN=${DRY_RUN:-"false"}
 NO_DATA_PROCESSING=${NO_DATA_PROCESSING:-"false"}
@@ -60,6 +63,7 @@ SCENARIOS_CONFIG=$WORKING_DIR/$SCENARIOS_CONFIG
 DEFAULTS_CONFIG=$WORKING_DIR/$DEFAULTS_CONFIG
 ACCELERATE_CONFIG=$WORKING_DIR/$ACCELERATE_CONFIG
 DATA_CACHE=$RESULT_DIR/$DATA_CACHE
+BENCH_RESULT_FILE=$RESULT_DIR/$BENCH_RESULT_FILE
 
 # ------------- EXTRA ARGS -----------------
 
@@ -88,7 +92,8 @@ python $WORKING_DIR/benchmark.py \
    --results_output_path $RESULT_DIR $EXTRA_ARGS
 
 # produce the final CSV for checkin
-# need to set PYTHONPATH because there is an imoort inside
-# this will write to the default location
+# need to set PYTHONPATH because there is an import inside
+# this will write to the BENCH_RESULT_FILE
 PYTHONPATH=. \
-    python $WORKING_DIR/display_bench_results.py benchmark_outputs
+    python $WORKING_DIR/display_bench_results.py benchmark_outputs \
+    --result_file $BENCH_RESULT_FILE

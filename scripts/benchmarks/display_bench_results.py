@@ -18,8 +18,8 @@ def main(*directories: str, output_filename: str = "results.csv"):
         df = df.loc[df.error_messages.isna()]
     except:
         pass
-    df = df.reset_index()
-    df.drop("output_dir", axis=1).reindex(sorted(df.columns), axis=1).to_csv(
+    df = df.reset_index().drop("output_dir", axis=1)
+    df.reindex(sorted(df.columns), axis=1).to_csv(
         output_filename, index=False
     )
     print("***************** Report Created ******************")
