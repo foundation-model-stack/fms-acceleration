@@ -86,3 +86,9 @@ python $WORKING_DIR/benchmark.py \
    --defaults_config_path $DEFAULTS_CONFIG \
    --dataset_save_path $DATA_CACHE \
    --results_output_path $RESULT_DIR $EXTRA_ARGS
+
+# produce the final CSV for checkin
+# need to set PYTHONPATH because there is an imoort inside
+# this will write to the default location
+PYTHONPATH=. \
+    python $WORKING_DIR/display_bench_results.py benchmark_outputs
