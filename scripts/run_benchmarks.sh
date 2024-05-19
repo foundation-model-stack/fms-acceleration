@@ -30,6 +30,9 @@ DATA_CACHE=data/cache.json
 # final result placed here
 BENCH_RESULT_FILE=benchmarks.csv
 
+# freeze the pip requirements here
+PIP_REQUIREMENTS_FILE=requirements.txt
+
 # env inputs
 DRY_RUN=${DRY_RUN:-"false"}
 NO_DATA_PROCESSING=${NO_DATA_PROCESSING:-"false"}
@@ -64,6 +67,7 @@ DEFAULTS_CONFIG=$WORKING_DIR/$DEFAULTS_CONFIG
 ACCELERATE_CONFIG=$WORKING_DIR/$ACCELERATE_CONFIG
 DATA_CACHE=$RESULT_DIR/$DATA_CACHE
 BENCH_RESULT_FILE=$RESULT_DIR/$BENCH_RESULT_FILE
+PIP_REQUIREMENTS_FILE=$RESULT_DIR/$PIP_REQUIREMENTS_FILE
 
 # ------------- EXTRA ARGS -----------------
 
@@ -81,6 +85,9 @@ fi
 if [ "$NO_DATA_PROCESSING" = "true" ]; then 
     EXTRA_ARGS="$EXTRA_ARGS --no_data_processing"
 fi
+
+# dump out the environment
+pip freeze > $PIP_REQUIREMENTS_FILE
 
 # run the bench
 python $WORKING_DIR/benchmark.py \
