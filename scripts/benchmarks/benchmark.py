@@ -78,6 +78,7 @@ GPU_LOG_USED_MEM_COLUMN_NAME = "memory.used [MiB]"
 GPU_LOG_METRIC_SUFFIX = " MiB"
 GPU_TABLE = "timestamp,name,index,memory.used"
 REPORT_GPU_FIELD_NAME = "gpu_mem"
+REPORT_DEVICE_FIELD_NAME = "gpu_device_name"
 
 def get_hf_arguments_with_no_value(dataclass_types):
     """this function will return a map (str, bool) of true/false arguments.
@@ -330,7 +331,6 @@ class Experiment:
             Can log more details from nvidia-smi by expanding GPU_Table argument
             e.g. "timestamp,name,index,utilization.gpu,utilization.memory,memory.total,memory.free,memory.used"
             '''
-            assert torch.cuda.device_count()>0, "No device detected for memory logging!"
             nvidia_logging_cmd = [
                 "nvidia-smi",
                 "--query-gpu",
@@ -416,21 +416,26 @@ class Experiment:
 
         return None if len(results) == 0 else results
 
-    def get_avg_mem_usage_per_sec_by_device_id(self, min_measurement_in_mib=0):
+    def get_median_mem_usage_by_device_id(self, min_measurement_in_mib=0):
         '''
         This function retrieves the gpu memory logs and returns the average memory consumed per device across the experiment
-        Returns a pd.Series of avg mem usage per sec in MiB for each device id
+        Returns a pd.Series of median mem usage in MiB for each device id
         ''' 
-        grouped_indices = pd.read_csv(self.gpu_log_filename, skipinitialspace=True).groupby(by='index')
-        # Calculate the average memory consumption per sec in each device
+        # group the gpu readings into device ids
+        gpu_logs = pd.read_csv(self.gpu_log_filename, skipinitialspace=True)
+        # assume that all the devices have the same device name
+        device_name = gpu_logs.name.iloc[-1]
+        grouped_indices = gpu_logs.groupby(by='index')
+        # extract out the gpu memory usage as float values
         mem_usage_by_device_id = grouped_indices.apply(
             lambda x: x[GPU_LOG_USED_MEM_COLUMN_NAME].str.replace(GPU_LOG_METRIC_SUFFIX, '').astype(float)
-            )
-        # filter only mem measurements that are above a min MiB value before taking the average mem usage per device
-        mem_usage_by_device_id = mem_usage_by_device_id[mem_usage_by_device_id>min_measurement_in_mib]
-        # reduce to a series with index as GPU ID and the corresponding avg mem for each device
-        mem_usage_by_device_id = mem_usage_by_device_id.groupby(by='index').mean().squeeze()
-        return mem_usage_by_device_id
+            ).reset_index(level=1, drop=True)
+        # Calibrate values by subtracting out the initial values of the GPU readings 
+        # to ensure no existing memory is counted in addition with the experiment
+        initial_values = mem_usage_by_device_id.groupby("index").first()
+        mem_usage_by_device_id = mem_usage_by_device_id.sub(initial_values)
+        # Return the median memory for each device
+        return mem_usage_by_device_id.groupby("index").median(), device_name
 
     def write_result(self):
         "Function to write a json result file"
@@ -438,7 +443,12 @@ class Experiment:
         # save some basic args
         save_result = ConfigUtils.convert_args_to_dict(self.experiment_args_str)
         save_result['num_gpus'] = self.num_gpus
-        save_result[REPORT_GPU_FIELD_NAME] = self.get_avg_mem_usage_per_sec_by_device_id().mean()
+
+        # Add GPU info and measurements into the result saving
+        median_mem_usage_by_device_id, device_name = self.get_median_mem_usage_by_device_id()
+        save_result[REPORT_DEVICE_FIELD_NAME] = device_name
+        # Memory usage is averaged across all devices in the final result
+        save_result[REPORT_GPU_FIELD_NAME] = median_mem_usage_by_device_id.mean()
 
         # if there is an error we save the error message else we save the final result
         maybe_error_messages = self.maybe_get_experiment_error_traceback()
@@ -634,8 +644,21 @@ def gather_report(result_dir: Union[str, List[str]], raw: bool = True):
 def compress(df):
     return df.loc[:, df.apply(pd.Series.nunique) != 1]
 
+def get_available_gpu_ids():
+    '''
+    Gathers available gpu device ids that will be used for benchmarking.
+    If "CUDA_VISIBLE_DEVICES" is specified, it will return the specified device ids
+    if no gpu ids are specified, it will default to the enumeration of available ids
+    '''
+    assert torch.cuda.device_count()>0, "No device detected for memory logging!"
+    specified_device_ids = os.environ.get("CUDA_VISIBLE_DEVICES")
+    if specified_device_ids:
+        return specified_device_ids.split(",") 
+    else:
+        return [str(i) for i in range(torch.cuda.device_count())]
 
 def main(args):
+    available_gpus_indices = get_available_gpu_ids()
 
     if args.dry_run and args.log_memory:
         setattr(args, "log_memory", False)
@@ -672,8 +695,15 @@ def main(args):
             )
         else:
             prefix = COMMAND_PYTHON
+        
+        assert experiment.num_gpus <= len(available_gpus_indices), "Experiment requires more gpus than is available on the platform."
+        '''
+        Experiment will take only the ids from the available gpu indices, 
+        this ensures that whatever GPUs are exposed to benchmark.py are the only 
+        devices that each experiment can have access to.
+        '''
+        device_ids = ",".join(available_gpus_indices[:experiment.num_gpus])
 
-        device_ids = ",".join([str(i) for i in range(experiment.num_gpus)])
         experiment.run(
             f"{prefix} {FMS_TRAINER}",
             environment_variables={"CUDA_VISIBLE_DEVICES": device_ids},
