@@ -96,7 +96,7 @@ class BNBAccelerationPlugin(AccelerationPlugin):
         self._quant_type = self._check_config_and_maybe_check_values(
             key="peft.quantization.bitsandbytes.quant_type", values=["fp4", "nf4"]
         )
-        self.no_peft_model = self._check_config_and_maybe_check_values(
+        self._no_peft_model = self._check_config_and_maybe_check_values(
             key="peft.quantization.bitsandbytes.no_peft_model", values=[True, False]
         )
 
@@ -150,8 +150,8 @@ class BNBAccelerationPlugin(AccelerationPlugin):
 
     @property
     def requires_agumentation(self):
-        # requires augmentation if no_peft_model is False
-        return not self.no_peft_model
+        # will skip the augmentation if _no_peft_model == True
+        return not self._no_peft_model
 
     def augmentation(
         self,
