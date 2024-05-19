@@ -411,7 +411,7 @@ class Experiment:
         with open(self.command_filename, "w") as f:
             f.write("#!/bin/bash\n\n")
             for key, val in self.environment.items():
-                f.write(f"{key}={val}\n")
+                f.write(f"export {key}={val}\n")
             f.write(" ".join([_escape(x) for x in self.shell_command]))
 
 
