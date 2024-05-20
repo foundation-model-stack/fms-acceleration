@@ -25,6 +25,7 @@ from typing import Dict, Tuple
 from fms_acceleration import AccelerationPlugin
 from peft import LoraConfig, prepare_model_for_kbit_training
 from peft.tuners.lora.model import LoraModel
+import torch.distributed
 from transformers import AutoModelForCausalLM, TrainingArguments
 import torch
 
@@ -120,6 +121,30 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
             trainable=True,  # only support trainable mode
             device_map=device_map,
         )
+
+        from auto_gptq.nn_modules.qlinear.qlinear_tritonv2 import QuantLinear, QuantLinearFunction
+        def forward(self, x):
+            out_shape = x.shape[:-1] + (self.outfeatures,)
+            quant_linear_fn = QuantLinearFunction
+
+            out = quant_linear_fn.apply(
+                x.reshape(-1, x.shape[-1]),
+                self.qweight.view(torch.int32),
+                self.scales,
+                self.qzeros.view(torch.int32),
+                self.g_idx,
+                self.bits,
+                self.maxq,
+            )
+            out = out.half().reshape(out_shape)
+            out = out + self.bias if self.bias is not None else out
+            return out
+
+        for mod in model.modules():
+            if isinstance(mod, QuantLinear):
+                mod.qweight = torch.nn.Parameter(mod.qweight.view(torch_dtype), requires_grad=False)
+                mod.qzeros = torch.nn.Parameter(mod.qzeros.view(torch_dtype), requires_grad=False)
+                mod.forward = MethodType(forward, mod)
 
         # replace
         AutoModelForCausalLM.from_config = _old_from_config
