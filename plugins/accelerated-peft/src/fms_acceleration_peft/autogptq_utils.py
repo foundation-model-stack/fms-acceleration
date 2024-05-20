@@ -18,7 +18,7 @@
 # Third Party
 from peft import LoraConfig
 from peft.tuners.lora.gptq import QuantLinear as LoraLinearGPTQ
-from transformers.utils.import_utils import _is_package_available
+from typing import List, Callable
 import torch
 
 
@@ -54,3 +54,32 @@ def create_new_module_peft(
 
     # if module cannot be found, return None which results in a raise in the call-stack
     return new_module
+
+# consider to move this somewhere more general
+def patch_forward_to_view_attributes_before_call(
+    old_forward: Callable,
+    attribute_names: List[str], torch_dtype,
+):
+    # patch old_forward to view attribtues to torch_dype
+    # before call
+
+    def _forward(self, *args, **kwargs):
+        # perform a view on all these attributes
+        for attr_name in attribute_names:
+
+            # the view should be a passthrough 
+            # if attr.dtype == torch_dtype
+            attr = getattr(self, attr_name)
+
+            # perform view
+            attr = attr.view(torch_dtype)
+
+            try:
+                setattr(self, attr_name, attr)
+            except TypeError:
+                # this means already have attr_name as a parameter, then
+                # just assign this way
+                self.__dict__[attr_name] = attr
+        
+        return old_forward(*args, **kwargs)
+    return _forward
