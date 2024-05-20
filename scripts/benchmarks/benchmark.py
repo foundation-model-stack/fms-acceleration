@@ -302,7 +302,7 @@ class Experiment:
         self.gpu_log_filename = os.path.join(self.save_dir, FILE_MEM)
 
 
-    def run(self, run_cmd: str, environment_variables: Dict = None, log_memory:bool=False, memory_log_interval_secs:int=1):
+    def run(self, run_cmd: str, environment_variables: Dict = None, log_nvidia_smi:bool=False, memory_log_interval_secs:int=1):
 
         # form the command line
         commands = []
@@ -318,18 +318,20 @@ class Experiment:
         self.experiment_args_str = commands
         os.makedirs(self.save_dir, exist_ok=True)
 
-        if log_memory:
+        if log_nvidia_smi:
             '''
             Opens a parallel process to log the device memory of the main experiment process. 
             - Logs memory at intervals to a csv file in `self.save_dir`
             - Terminates at the end of experiment
             - GPU log is read and aggregated when the experiment ends & results are saved in Experiment.write_result, 
 
-            NOTE: assumes the experiment is the only process on the gpu devices -
+            NOTE: This feature assumes the following
+            1. Experiment is the only process on the gpu devices -
             there are no other processes running on the device in parallel.
 
-            Can log more details from nvidia-smi by expanding GPU_Table argument
+            Can log more info from nvidia-smi by expanding GPU_Table argument
             e.g. "timestamp,name,index,utilization.gpu,utilization.memory,memory.total,memory.free,memory.used"
+            Use `nvidia-smi --help-query-gpu` for more reference
             '''
             nvidia_logging_cmd = [
                 "nvidia-smi",
@@ -357,7 +359,7 @@ class Experiment:
             env={**os.environ.copy(), **environment_variables},
         )
 
-        if log_memory: memory_process.terminate()
+        if log_nvidia_smi: memory_process.terminate()
 
     def get_experiment_final_metrics(
         self, final_metrics_keys: List[str] = ["train_loss", "train_runtime"]
@@ -416,11 +418,23 @@ class Experiment:
 
         return None if len(results) == 0 else results
 
-    def get_median_mem_usage_by_device_id(self, min_measurement_in_mib=0):
+    def get_peak_mem_usage_by_device_id(self):
         '''
-        This function retrieves the gpu memory logs and returns the average memory consumed per device across the experiment
-        Returns a pd.Series of median mem usage in MiB for each device id
+        This function retrieves the raw measurements of reserved GPU memory per device across the experiment -
+        and perform some simple calibration (subtracts values by the first reading) before computing the peak value for each gpu.
+        Returns:
+            - pd.Series of peak memory usage per device id
+            - the device name as string - e.g. "NVIDIA A100-SXM4-80GB"
+
+        Example: For 2 devices with GPU Indices 0,1 - it will return the max measurement value (in MiB) of each device as a Series:
+
+        - pd.Series
+        index
+        0    52729.0
+        1    52783.0
+        Name: memory.used [MiB], dtype: float64
         ''' 
+
         # group the gpu readings into device ids
         gpu_logs = pd.read_csv(self.gpu_log_filename, skipinitialspace=True)
         # assume that all the devices have the same device name
@@ -430,12 +444,13 @@ class Experiment:
         mem_usage_by_device_id = grouped_indices.apply(
             lambda x: x[GPU_LOG_USED_MEM_COLUMN_NAME].str.replace(GPU_LOG_METRIC_SUFFIX, '').astype(float)
             ).reset_index(level=1, drop=True)
+
         # Calibrate values by subtracting out the initial values of the GPU readings 
         # to ensure no existing memory is counted in addition with the experiment
         initial_values = mem_usage_by_device_id.groupby("index").first()
         mem_usage_by_device_id = mem_usage_by_device_id.sub(initial_values)
-        # Return the median memory for each device
-        return mem_usage_by_device_id.groupby("index").median(), device_name
+        # Return the max memory for each device
+        return mem_usage_by_device_id.groupby("index").max(), device_name
 
     def write_result(self):
         "Function to write a json result file"
@@ -445,10 +460,10 @@ class Experiment:
         save_result['num_gpus'] = self.num_gpus
 
         # Add GPU info and measurements into the result saving
-        median_mem_usage_by_device_id, device_name = self.get_median_mem_usage_by_device_id()
+        peak_mem_usage_by_device_id, device_name = self.get_peak_mem_usage_by_device_id()
         save_result[REPORT_DEVICE_FIELD_NAME] = device_name
         # Memory usage is averaged across all devices in the final result
-        save_result[REPORT_GPU_FIELD_NAME] = median_mem_usage_by_device_id.mean()
+        save_result[REPORT_GPU_FIELD_NAME] = peak_mem_usage_by_device_id.mean()
 
         # if there is an error we save the error message else we save the final result
         maybe_error_messages = self.maybe_get_experiment_error_traceback()
@@ -644,24 +659,20 @@ def gather_report(result_dir: Union[str, List[str]], raw: bool = True):
 def compress(df):
     return df.loc[:, df.apply(pd.Series.nunique) != 1]
 
-def get_available_gpu_ids():
-    '''
-    Gathers available gpu device ids that will be used for benchmarking.
-    If "CUDA_VISIBLE_DEVICES" is specified, it will return the specified device ids
-    if no gpu ids are specified, it will default to the enumeration of available ids
-    '''
+def main(args):
+    
+    # Gathers available gpu device ids that will be used for benchmarking.
+    # If "CUDA_VISIBLE_DEVICES" is specified, it will return the specified device ids
+    # if no gpu ids are specified, it will default to the enumeration of available ids
     assert torch.cuda.device_count()>0, "No device detected for memory logging!"
     specified_device_ids = os.environ.get("CUDA_VISIBLE_DEVICES")
     if specified_device_ids:
-        return specified_device_ids.split(",") 
+        available_gpus_indices = specified_device_ids.split(",") 
     else:
-        return [str(i) for i in range(torch.cuda.device_count())]
+        available_gpus_indices = [str(i) for i in range(torch.cuda.device_count())]
 
-def main(args):
-    available_gpus_indices = get_available_gpu_ids()
-
-    if args.dry_run and args.log_memory:
-        setattr(args, "log_memory", False)
+    if args.dry_run and args.log_nvidia_smi:
+        setattr(args, "log_nvidia_smi", False)
 
     # 1. Prepares a standard BenchmarkDataset
     # TODO: consider caching the json file
@@ -707,7 +718,7 @@ def main(args):
         experiment.run(
             f"{prefix} {FMS_TRAINER}",
             environment_variables={"CUDA_VISIBLE_DEVICES": device_ids},
-            log_memory = args.log_memory,
+            log_nvidia_smi = args.log_nvidia_smi,
         )
 
         # write results and store pointers to files
@@ -840,9 +851,8 @@ if __name__ == "__main__":
         "Useful to check model paths specified correctly before lengthly benchmark runs.",
     )
     parser.add_argument(
-        "--log_memory", action='store_true', 
-        help="ensures 'model_name_or_paths 'specified in scenarios.yaml work. "
-        "Useful to check model paths specified correctly before lengthly benchmark runs."
+        "--log_nvidia_smi", action='store_true', 
+        help="Use `nvidia-smi` API to log reserved memory of benchmarks"
     )
     args = parser.parse_args()
     main(args)
