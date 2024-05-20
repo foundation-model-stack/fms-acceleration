@@ -157,7 +157,7 @@ CONFIGURATIONS = {
 #   config.
 COMBINATIONS = [
     ("accelerated-peft-autogptq", (KEY_AUTO_GPTQ,)),
-    # ("accelerated-peft-bnb-nf4", (KEY_BNB_NF4,)),
+    ("accelerated-peft-bnb-nf4", (KEY_BNB_NF4,)),
 ]
 
 

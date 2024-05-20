@@ -27,9 +27,16 @@ SCNTAG_PEFT_AUTOGPTQ=accelerated-peft-gptq
 # data will be cached in here
 DATA_CACHE=data/cache.json
 
+# final result placed here
+BENCH_RESULT_FILE=benchmarks.csv
+
+# freeze the pip requirements here
+PIP_REQUIREMENTS_FILE=requirements.txt
+
 # env inputs
 DRY_RUN=${DRY_RUN:-"false"}
 NO_DATA_PROCESSING=${NO_DATA_PROCESSING:-"false"}
+NO_OVERWRITE=${NO_OVERWRITE:-"false"}
 
 # inputs
 NUM_GPUS_MATRIX=${1-"1 2"}
@@ -42,11 +49,25 @@ echo "RESULT_DIR: $RESULT_DIR"
 echo "SCENARIOS_CONFIG: $SCENARIOS_CONFIG"
 echo "SCENARIOS_FILTER: $SCENARIOS_FILTER"
 
+if [ -n "$RESULT_DIR" ]; then
+    echo "The results directory is not empty. "
+    if [ "$NO_OVERWRITE" = "true" ]; then 
+        echo "Results dir $RESULT_DIR is not empty, but NO_OVERWRITE=true"
+        echo "If intending to overwrite please delete the folder manually"
+        echo "or do not set NO_OVERWRITE"
+        exit 1
+    fi
+    echo "Deleting $RESULT_DIR"
+    rm -rf $RESULT_DIR
+fi
+
 # tag on the directories
 SCENARIOS_CONFIG=$WORKING_DIR/$SCENARIOS_CONFIG
 DEFAULTS_CONFIG=$WORKING_DIR/$DEFAULTS_CONFIG
 ACCELERATE_CONFIG=$WORKING_DIR/$ACCELERATE_CONFIG
 DATA_CACHE=$RESULT_DIR/$DATA_CACHE
+BENCH_RESULT_FILE=$RESULT_DIR/$BENCH_RESULT_FILE
+PIP_REQUIREMENTS_FILE=$RESULT_DIR/$PIP_REQUIREMENTS_FILE
 
 # ------------- EXTRA ARGS -----------------
 
@@ -65,6 +86,9 @@ if [ "$NO_DATA_PROCESSING" = "true" ]; then
     EXTRA_ARGS="$EXTRA_ARGS --no_data_processing"
 fi
 
+# dump out the environment
+pip freeze > $PIP_REQUIREMENTS_FILE
+
 # run the bench
 python $WORKING_DIR/benchmark.py \
    --num_gpus $NUM_GPUS_MATRIX \
@@ -73,3 +97,10 @@ python $WORKING_DIR/benchmark.py \
    --defaults_config_path $DEFAULTS_CONFIG \
    --dataset_save_path $DATA_CACHE \
    --results_output_path $RESULT_DIR $EXTRA_ARGS
+
+# produce the final CSV for checkin
+# need to set PYTHONPATH because there is an import inside
+# this will write to the BENCH_RESULT_FILE
+PYTHONPATH=. \
+    python $WORKING_DIR/display_bench_results.py benchmark_outputs \
+    --result_file $BENCH_RESULT_FILE
