@@ -124,6 +124,16 @@ class BNBAccelerationPlugin(AccelerationPlugin):
                 "If running in FSDP, this is probably because accelerate is not used. "
                 "This will most probably result in error."
             )
+        elif (
+            world_size == 1
+            and self._no_peft_model == True
+        ):
+            warnings.warn(
+                """Running on single device and setting plugin config `no_peft_model` as `True`
+                PEFT preparation will be managed by SFTTrainer and will cause a slowdown in training speed 
+                due to extraneous dtype casting when SFTTrainer prepares the model using
+                https://github.com/huggingface/trl/blob/e90e8d91d2265e484f229c45a5eb8982f94a2936/trl/trainer/sft_trainer.py#L210"""
+            )            
 
         bnb_config = BitsAndBytesConfig(
             load_in_4bit=True,
