@@ -19,9 +19,7 @@ def main(*directories: str, output_filename: str = "results.csv"):
     except:
         pass
     df = df.reset_index().drop("output_dir", axis=1)
-    df.reindex(sorted(df.columns), axis=1).to_csv(
-        output_filename, index=False
-    )
+    df.reindex(sorted(df.columns), axis=1).to_csv(output_filename, index=False)
     print("***************** Report Created ******************")
     print(f"Total lines: '{len(df)}'")
     print(f"Number columns included: '{len(df.columns)}'")
