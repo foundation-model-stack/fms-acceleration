@@ -80,10 +80,9 @@ GPU_TABLE = "timestamp,name,index,memory.used"
 REPORT_GPU_FIELD_NAME = "reserved_gpu_mem"
 REPORT_DEVICE_FIELD_NAME = "gpu_device_name"
 
-GIB_CONVERSION_FACTOR = 1e9
 HF_TRAINER_LOG_GPU_MEMORY_STAGES = ['before', 'init', 'train']
-ARG_SKIP_MEMORY_METRIC = "skip_memory_metrics"
-RESULT_FIELD_ALLOCATED_GPU_MEM = "alloc_gpu_memory_in_gib"
+HF_ARG_SKIP_MEMORY_METRIC = "skip_memory_metrics"
+RESULT_FIELD_ALLOCATED_GPU_MEM = "alloc_gpu_memory_in_bytes"
 
 def extract_gpu_memory_metrics(output_metrics) -> Dict[str, float]:
     """
@@ -106,13 +105,13 @@ def extract_gpu_memory_metrics(output_metrics) -> Dict[str, float]:
     NOTE:
     - HFTrainer only takes the rank0 memory when in distributed mode
     - HFTrainer uses `torch.cuda.memory_allocated()` and `torch.cuda.max_memory_allocated()` underneath
-    - https://huggingface.co/docs/transformers/en/main_classes/trainer#transformers.TrainingArguments.skip_memory_metrics
+    - https://huggingface.co/docs/transformers/en/main_classes/trainer#transformers.Trainer.log_metrics:~:text=inject%20custom%20behavior.-,log_metrics,-%3C
 
-    Returns a dictionary of keys and gpu memory values (in GiB) 
+    Returns a dictionary of keys and gpu memory values (in bytes) 
     corresponding to the relevant stage and delta keys for training 
     """
     return {
-        key: val/GIB_CONVERSION_FACTOR
+        key: val
         for key, val in output_metrics.items() if 'gpu' in key and
         any([stage in key for stage in HF_TRAINER_LOG_GPU_MEMORY_STAGES])
     }
@@ -513,11 +512,12 @@ class Experiment:
             save_result[REPORT_GPU_FIELD_NAME] = peak_mem_usage_by_device_id.mean()
 
         # process gpu mem from output metrics and write to result
-        if save_result.get(ARG_SKIP_MEMORY_METRIC) == "False":
-            save_result[RESULT_FIELD_ALLOCATED_GPU_MEM] = "%.2f" % sum(
-                extract_gpu_memory_metrics(
-                    self.get_experiment_final_metrics()
-                ).values()
+        if save_result.get(HF_ARG_SKIP_MEMORY_METRIC) == "False":
+            save_result[RESULT_FIELD_ALLOCATED_GPU_MEM] = "{:.2f}".format(
+                sum(
+                    extract_gpu_memory_metrics(
+                        self.get_experiment_final_metrics()
+                    ).values())
             )
         
         # if there is an error we save the error message else we save the final result
@@ -580,7 +580,6 @@ class DryRunExperiment(Experiment):
 def prepare_arguments(args):
     defaults = ConfigUtils.read_yaml(args.defaults_config_path)
     defaults["training_data_path"] = args.dataset_save_path
-    defaults["skip_memory_metrics"] = not args.log_memory_hf
     scenarios = ConfigUtils.read_yaml(args.scenarios_config_path)["scenarios"]
     acceleration_config_map = convert_keypairs_to_map(
         args.acceleration_framework_config_keypairs
@@ -633,6 +632,7 @@ def generate_list_of_experiments(
     output_dir: str = "results",
     hf_products_dir: str = "hf",
     dry_run: bool = False,
+    log_memory_in_trainer: bool = False,
 ) -> List[Experiment]:
     """Construct list of experiments to be run. Takes in default_config and
     any matrices in scenario and experiment_config
@@ -644,6 +644,8 @@ def generate_list_of_experiments(
         expr_arg_w_outputdir = exp_arg + [
             "--output_dir",
             os.path.join(experiment_output_dir, hf_products_dir),
+            "--skip_memory_metrics",
+            not log_memory_in_trainer,
         ]
         expr_cls = Experiment if not dry_run else DryRunExperiment
         _expr = expr_cls(
@@ -729,7 +731,7 @@ def main(args):
         available_gpus_indices = [str(i) for i in range(torch.cuda.device_count())]
 
     if args.dry_run and args.log_nvidia_smi:
-        setattr(args, "log_nvidia_smi", False)
+        args.log_nvidia_smi = False
 
     # 1. Prepares a standard BenchmarkDataset
     # TODO: consider caching the json file
@@ -753,6 +755,7 @@ def main(args):
             experiment_args,
             output_dir=args.results_output_path,
             dry_run=args.dry_run,
+            log_memory_in_trainer=args.log_memory_hf,
         )
     ):
         if experiment.num_gpus > 1:

@@ -95,11 +95,11 @@ Note:
 
 ## Logging Memory
 
-There are 2 ways to benchmark memory in `benchmark.py`:
-- With Nvidia `nvidia-smi`'s API by passing argument `--log_nvidia_smi`
-- With HuggingFace `HFTrainer`'s API by passing argument `--log_memory_hf`
+There are 2 ways to benchmark memory in `run_benchmarks.sh`:
+- Setting the environment variable `MEMORY_LOGGING=nvidia` will use Nvidia `nvidia-smi`'s API
+- Setting the environment variable `MEMORY_LOGGING=huggingface` (default) will use HuggingFace `HFTrainer`'s API 
 
-Both approaches will print out the memory value to the benchmark report
+Both approaches will print out the memory values to the benchmark report.
 
 ### Nvidia `nvidia-smi`
 `nvidia-smi` is a command line utility (CLI) based on the Nvidia Manage Library (NVML)`. A separate process call is used to start, log and finally terminate the CLI for every experiment.  
@@ -121,7 +121,10 @@ The HFTrainer API is more granular than `nvidia-smi` as
   - It has memory logging probes at different stages of the Trainer - `init`, `train`, `evaluate`, `predict` 
 
 ##### NOTE:
-When in distributed mode, the Trainer will only log the rank 0 memory.
+- When in distributed mode, the Trainer will only log the rank 0 memory.
+- For stability purposes, it only tracks the outer level of train, evaluate and predict methods. i.e. if eval is called during train, there won't be a nested invocation of the memory probe.
+- Any GPU memory incurred outside of the supported Trainer stages won't be tracked.
+
 
 #### Deciphering the Memory Metrics
 When the memory metrics are logged, additional metrics are included in the output of `Trainer.train / Trainer.evaluate / Trainer.predict`. 
@@ -160,34 +163,14 @@ output_metrics = {
 }
 ```
 
-To compute the total GPU memory allocated for training
+To compute the total GPU memory allocated for training ([docs](https://huggingface.co/docs/transformers/en/main_classes/trainer#transformers.Trainer.log_metrics:~:text=inject%20custom%20behavior.-,log_metrics,-%3C))
 - Total memory delta for train stage = 126487040 bytes ('train_mem_gpu_alloc_delta') + 11016635392 bytes ('train_mem_gpu_peaked_delta')
 - Memory consumption for training = 4747206656 bytes ('before_init_mem_gpu') + 0 bytes ('init_mem_gpu_alloc_delta') + 0 bytes ('init_mem_gpu_peaked_delta') + 126487040 bytes ('train_mem_gpu_alloc_delta') + 11016635392 bytes ('train_mem_gpu_peaked_delta')
 
+#### Differences in Memory Values between the 2 Approaches
+
+Coming Soon
+
 #### No Significant Slowdown Using HF Memory Probes 
-| acceleration type         | model_name_or_path                       | num_gpus | batch size | throughput without mem probs (toks/s) | throughput with mem probs (toks/s) | allocated gpu memory (GiB) |
-| ------------------------- | ---------------------------------------- | -------- | ---------- | -------------------------- | ---------------------------------- | -------------------------- |
-| accelerated-peft-bnb      | mistralai/Mistral-7B-v0.1                | 1        | 4          | 3385                       | 3451                               | 15.9                       |
-| accelerated-peft-bnb      | mistralai/Mistral-7B-v0.1                | 1        | 8          | 3433                       | 3508                               | 26.9                       |
-| accelerated-peft-bnb      | mistralai/Mistral-7B-v0.1                | 2        | 2          | 3022                       | 2941                               | 10.0                       |
-| accelerated-peft-bnb      | mistralai/Mistral-7B-v0.1                | 2        | 4          | 3315                       | 3319                               | 16.6                       |
-| accelerated-peft-bnb      | mistralai/Mixtral-8x7B-Instruct-v0.1     | 1        | 4          | 1793                       | 1781                               | 36.2                       |
-| accelerated-peft-bnb      | mistralai/Mixtral-8x7B-Instruct-v0.1     | 1        | 8          | 1900                       | 1917                               | 47.2                       |
-| accelerated-peft-bnb      | mistralai/Mixtral-8x7B-Instruct-v0.1     | 2        | 2          | 1500                       | 1454                               | 21.9                       |
-| accelerated-peft-bnb      | mistralai/Mixtral-8x7B-Instruct-v0.1     | 2        | 4          | 1731                       | 1726                               | 29.4                       |
-| accelerated-peft-bnb      | NousResearch/Llama-2-70b-hf              | 1        | 4          | 445                        | 458                                | 68.2                       |
-| accelerated-peft-bnb      | NousResearch/Llama-2-70b-hf              | 1        | 8          | OOM                        | NaN                                | 0.0                        |
-| accelerated-peft-bnb      | NousResearch/Llama-2-70b-hf              | 2        | 2          | 422                        | 425                                | 46.5                       |
-| accelerated-peft-bnb      | NousResearch/Llama-2-70b-hf              | 2        | 4          | OOM                        | NaN                                | 0.0                        |
-| accelerated-peft-autogptq | TheBloke/Mistral-7B-v0.1-GPTQ            | 1        | 4          | 3386                       | 3422                               | 15.9                       |
-| accelerated-peft-autogptq | TheBloke/Mistral-7B-v0.1-GPTQ            | 1        | 8          | 3442                       | 3494                               | 26.9                       |
-| accelerated-peft-autogptq | TheBloke/Mistral-7B-v0.1-GPTQ            | 2        | 2          | 2988                       | 2780                               | 11.4                       |
-| accelerated-peft-autogptq | TheBloke/Mistral-7B-v0.1-GPTQ            | 2        | 4          | 3286                       | 3259                               | 17.7                       |
-| accelerated-peft-autogptq | TheBloke/Mixtral-8x7B-Instruct-v0.1-GPTQ | 1        | 4          | 1854                       | 1866                               | 35.5                       |
-| accelerated-peft-autogptq | TheBloke/Mixtral-8x7B-Instruct-v0.1-GPTQ | 1        | 8          | 1949                       | 1969                               | 46.5                       |
-| accelerated-peft-autogptq | TheBloke/Mixtral-8x7B-Instruct-v0.1-GPTQ | 2        | 2          | 1619                       | 1556                               | 31.6                       |
-| accelerated-peft-autogptq | TheBloke/Mixtral-8x7B-Instruct-v0.1-GPTQ | 2        | 4          | 1821                       | 1812                               | 38.4                       |
-| accelerated-peft-autogptq | TheBloke/Llama-2-70b-GPTQ                | 1        | 4          | 451                        | 465                                | 65.9                       |
-| accelerated-peft-autogptq | TheBloke/Llama-2-70b-GPTQ                | 1        | 8          | OOM                        | NaN                                | 0.0                        |
-| accelerated-peft-autogptq | TheBloke/Llama-2-70b-GPTQ                | 2        | 2          | 438                        | 437                                | 61.8                       |
-| accelerated-peft-autogptq | TheBloke/Llama-2-70b-GPTQ                | 2        | 4          | OOM                        | NaN                                | 0.0                        |
+
+Coming Soon

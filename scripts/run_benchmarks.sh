@@ -37,6 +37,7 @@ PIP_REQUIREMENTS_FILE=requirements.txt
 DRY_RUN=${DRY_RUN:-"false"}
 NO_DATA_PROCESSING=${NO_DATA_PROCESSING:-"false"}
 NO_OVERWRITE=${NO_OVERWRITE:-"false"}
+MEMORY_LOGGING=${MEMORY_LOGGING:-"huggingface"}
 
 # inputs
 NUM_GPUS_MATRIX=${1-"1 2"}
@@ -48,6 +49,7 @@ echo "NUM_GPUS_MATRIX: $NUM_GPUS_MATRIX"
 echo "RESULT_DIR: $RESULT_DIR"
 echo "SCENARIOS_CONFIG: $SCENARIOS_CONFIG"
 echo "SCENARIOS_FILTER: $SCENARIOS_FILTER"
+echo "MEMORY_LOGGING: $MEMORY_LOGGING"
 
 if [ -n "$RESULT_DIR" ]; then
     echo "The results directory is not empty. "
@@ -84,6 +86,14 @@ fi
 
 if [ "$NO_DATA_PROCESSING" = "true" ]; then 
     EXTRA_ARGS="$EXTRA_ARGS --no_data_processing"
+fi
+
+if [ "$MEMORY_LOGGING" = "huggingface" ]; then 
+    EXTRA_ARGS="$EXTRA_ARGS --log_memory_hf"
+elif [ "$MEMORY_LOGGING" = "nvidia" ]; then 
+    EXTRA_ARGS="$EXTRA_ARGS --log_nvidia_smi"
+elif [ "$MEMORY_LOGGING" = "all" ]; then 
+    EXTRA_ARGS="$EXTRA_ARGS --log_nvidia_smi --log_memory_hf"
 fi
 
 # dump out the environment
