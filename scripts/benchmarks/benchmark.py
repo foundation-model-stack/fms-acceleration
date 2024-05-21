@@ -463,7 +463,7 @@ class Experiment:
     def get_peak_mem_usage_by_device_id(self):
         """
         This function retrieves the raw measurements of reserved GPU memory per device across the experiment -
-        and perform some simple calibration (subtracts values by the first reading) before computing the peak value for each gpu.
+        computing the peak value for each gpu and then performing a simple calibration (subtracts peak values by the first reading).
         Returns:
             - pd.Series of peak memory usage per device id
             - the device name as string - e.g. "NVIDIA A100-SXM4-80GB"
@@ -481,20 +481,16 @@ class Experiment:
         gpu_logs = pd.read_csv(self.gpu_log_filename, skipinitialspace=True)
         # assume that all the devices have the same device name
         device_name = gpu_logs.name.iloc[-1]
-        grouped_indices = gpu_logs.groupby(by="index")
-        # extract out the gpu memory usage as float values
-        mem_usage_by_device_id = grouped_indices.apply(
-            lambda x: x[GPU_LOG_USED_MEM_COLUMN_NAME]
-            .str.replace(GPU_LOG_METRIC_SUFFIX, "")
-            .astype(float)
-        ).reset_index(level=1, drop=True)
-
+        # extract and convert the gpu memory usage as float values
+        gpu_logs[GPU_LOG_USED_MEM_COLUMN_NAME] = gpu_logs[GPU_LOG_USED_MEM_COLUMN_NAME].apply(
+            lambda x: float(x.replace(GPU_LOG_METRIC_SUFFIX, ""))
+        )
+        mem_usage_by_device_id = gpu_logs.groupby("index")[GPU_LOG_USED_MEM_COLUMN_NAME]
         # Calibrate values by subtracting out the initial values of the GPU readings
         # to ensure no existing memory is counted in addition with the experiment
-        initial_values = mem_usage_by_device_id.groupby("index").first()
-        mem_usage_by_device_id = mem_usage_by_device_id.sub(initial_values)
-        # Return the max memory for each device
-        return mem_usage_by_device_id.groupby("index").max(), device_name
+        initial_values = mem_usage_by_device_id.first()
+        peak_values = mem_usage_by_device_id.max()
+        return peak_values.sub(initial_values), device_name
 
     def write_result(self):
         "Function to write a json result file"
@@ -513,12 +509,9 @@ class Experiment:
 
         # process gpu mem from output metrics and write to result
         if save_result.get(HF_ARG_SKIP_MEMORY_METRIC) == "False":
-            save_result[RESULT_FIELD_ALLOCATED_GPU_MEM] = "{:.2f}".format(
-                sum(
-                    extract_gpu_memory_metrics(
-                        self.get_experiment_final_metrics()
-                    ).values())
-            )
+            save_result[RESULT_FIELD_ALLOCATED_GPU_MEM] = sum(extract_gpu_memory_metrics(
+                                                                self.get_experiment_final_metrics()
+                                                            ).values())
         
         # if there is an error we save the error message else we save the final result
         maybe_error_messages = self.maybe_get_experiment_error_traceback()
