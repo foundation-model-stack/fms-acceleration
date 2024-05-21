@@ -77,7 +77,7 @@ FILE_MEM = "gpu_memory_logs.csv"
 GPU_LOG_USED_MEM_COLUMN_NAME = "memory.used [MiB]"
 GPU_LOG_METRIC_SUFFIX = " MiB"
 GPU_TABLE = "timestamp,name,index,memory.used"
-REPORT_GPU_FIELD_NAME = "gpu_mem"
+REPORT_GPU_FIELD_NAME = "reserved_gpu_mem"
 REPORT_DEVICE_FIELD_NAME = "gpu_device_name"
 
 GIB_CONVERSION_FACTOR = 1e9
@@ -504,21 +504,22 @@ class Experiment:
         save_result = ConfigUtils.convert_args_to_dict(self.experiment_args_str)
         save_result["num_gpus"] = self.num_gpus
 
-        # Add GPU info and measurements into the result saving
-        peak_mem_usage_by_device_id, device_name = (
-            self.get_peak_mem_usage_by_device_id()
-        )
-        save_result[REPORT_DEVICE_FIELD_NAME] = device_name
-        # Memory usage is averaged across all devices in the final result
-        save_result[REPORT_GPU_FIELD_NAME] = peak_mem_usage_by_device_id.mean()
+        # if a gpu log file exist, process the raw nvidia logs and write to result
+        if os.path.isfile(self.gpu_log_filename):
+            # Add GPU info and measurements into the result saving
+            peak_mem_usage_by_device_id, device_name = self.get_peak_mem_usage_by_device_id()
+            save_result[REPORT_DEVICE_FIELD_NAME] = device_name
+            # Memory usage is averaged across all devices in the final result
+            save_result[REPORT_GPU_FIELD_NAME] = peak_mem_usage_by_device_id.mean()
 
+        # process gpu mem from output metrics and write to result
         if save_result.get(ARG_SKIP_MEMORY_METRIC) == "False":
             save_result[RESULT_FIELD_ALLOCATED_GPU_MEM] = "%.2f" % sum(
                 extract_gpu_memory_metrics(
                     self.get_experiment_final_metrics()
                 ).values()
             )
-
+        
         # if there is an error we save the error message else we save the final result
         maybe_error_messages = self.maybe_get_experiment_error_traceback()
         if maybe_error_messages is None:
