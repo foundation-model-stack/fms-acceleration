@@ -665,9 +665,9 @@ def main(args):
     # If "CUDA_VISIBLE_DEVICES" is specified, it will return the specified device ids
     # if no gpu ids are specified, it will default to the enumeration of available ids
     assert torch.cuda.device_count()>0, "No device detected for memory logging!"
-    specified_device_ids = os.environ.get("CUDA_VISIBLE_DEVICES")
-    if specified_device_ids:
-        available_gpus_indices = specified_device_ids.split(",") 
+    available_gpus_indices = os.environ.get("CUDA_VISIBLE_DEVICES")
+    if available_gpus_indices:
+        available_gpus_indices = available_gpus_indices.split(",") 
     else:
         available_gpus_indices = [str(i) for i in range(torch.cuda.device_count())]
 
