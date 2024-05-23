@@ -77,44 +77,56 @@ FILE_MEM = "gpu_memory_logs.csv"
 GPU_LOG_USED_MEM_COLUMN_NAME = "memory.used [MiB]"
 GPU_LOG_METRIC_SUFFIX = " MiB"
 GPU_TABLE = "timestamp,name,index,memory.used"
-REPORT_GPU_FIELD_NAME = "reserved_gpu_mem"
-REPORT_DEVICE_FIELD_NAME = "gpu_device_name"
+RESULT_FIELD_RESERVED_GPU_MEM = "nvidia_mem_reserved"
+RESULT_FIELD_DEVICE_NAME = "gpu_device_name"
 
-HF_TRAINER_LOG_GPU_MEMORY_STAGES = ['before', 'init', 'train']
+HF_TRAINER_LOG_GPU_STAGE_BEFORE_INIT = 'before_init_mem_gpu'
+HF_TRAINER_LOG_GPU_STAGE_INIT = 'init_mem_gpu'
+HF_TRAINER_LOG_GPU_STAGE_TRAIN = 'train_mem_gpu'
+HF_TRAINER_LOG_GPU_STAGE_EVALUATE = 'evaluate_mem_gpu'
+HF_TRAINER_LOG_GPU_STAGE_PREDICT = 'predict_mem_gpu'
+KEYWORD_PEAKED_DELTA = 'peaked_delta'
+KEYWORD_ALLOC_DELTA = 'alloc_delta'
 HF_ARG_SKIP_MEMORY_METRIC = "skip_memory_metrics"
-RESULT_FIELD_ALLOCATED_GPU_MEM = "alloc_gpu_memory_in_bytes"
+RESULT_FIELD_ALLOCATED_GPU_MEM = "torch_mem_alloc_in_bytes"
+RESULT_FIELD_PEAK_ALLOCATED_GPU_MEM = "peak_torch_mem_alloc_in_bytes"
 
-def extract_gpu_memory_metrics(output_metrics) -> Dict[str, float]:
+def extract_gpu_memory_metrics(output_metrics, peaked_stage:str = HF_TRAINER_LOG_GPU_STAGE_TRAIN) -> Tuple[float]:
     """
-    This function extracts the gpu memory metrics from the output of HFTrainer.train()
+    This function computes the gpu summary metrics from the output metrics of Trainer
     when `skip_memory_metrics` is set to `False` in transformers.TrainingArguments
-    HFTrainer.train will return memory logs in `train_metrics` for each of the following stages 
-    A. absolute memory before trainer initialization
-    B. delta of allocated memory of a stage
-    C. peaked_delta of a stage (extra mem consumed and freed in between) 
-    
-    B. & C. are taken before/after the following stages:
-    - <init>: `HFTrainer.__init__`
-    - <train>: `HFTrainer.train` (only if called)
-    - <evaluate>: `HFTrainer.evaluate` (only if called)
-    - <predict>: `HFTrainer.predict` (only if called)
 
-    - e.g. Memory for train stage = B_<train> + C_<train>
-    - e.g. Memory consumption in training = A + B_<init> + C_<init> + B_<train> + C_<train>
+    From the extracted gpu memory values,
+    - Computes a running sum of allocated memory over the stages to get the final gpu_usage, alloc_mem_i
+        - alloc_mem_0 = initial memory before trainer
+        - alloc_mem_delta_i = mem_at_end_i - mem_at_start_i
+        - alloc_mem_i = alloc_mem_(i-1) + max(0, alloc_mem_delta_i) 
+    - Computes the peak gpu memory, gpu_peak = peaked_delta + alloc_mem_i    
+    - peaked_delta is determined by the peaked delta value from the stage set in `peaked_stage` parameter 
+    and it may or may not be the last stage. Defaults to using the peaked_delta from train stage
 
-    NOTE:
-    - HFTrainer only takes the rank0 memory when in distributed mode
-    - HFTrainer uses `torch.cuda.memory_allocated()` and `torch.cuda.max_memory_allocated()` underneath
-    - https://huggingface.co/docs/transformers/en/main_classes/trainer#transformers.Trainer.log_metrics:~:text=inject%20custom%20behavior.-,log_metrics,-%3C
-
-    Returns a dictionary of keys and gpu memory values (in bytes) 
-    corresponding to the relevant stage and delta keys for training 
+    Returns 
+     - gpu_peak value in Bytes
+     - gpu_usage value in Bytes
     """
-    return {
-        key: val
-        for key, val in output_metrics.items() if 'gpu' in key and
-        any([stage in key for stage in HF_TRAINER_LOG_GPU_MEMORY_STAGES])
-    }
+    gpu_usage = 0 
+    gpu_peaked_delta = 0 
+    for key, val in output_metrics.items():
+        if key.startswith(HF_TRAINER_LOG_GPU_STAGE_BEFORE_INIT): 
+            gpu_usage += val # initial mem before the trainer, `alloc_end_0`
+        elif all([
+            (key.startswith(peaked_stage) or key.startswith(HF_TRAINER_LOG_GPU_STAGE_INIT)),
+            key.endswith(KEYWORD_ALLOC_DELTA),
+        ]):
+            gpu_usage += max(0, val) # ensure `alloc_end_i`` is non-negative 
+        elif all([
+            key.startswith(peaked_stage), 
+            key.endswith(KEYWORD_PEAKED_DELTA)
+        ]):
+            gpu_peaked_delta = val # peak_delta_i
+    gpu_peak = gpu_peaked_delta + gpu_usage # peaked_gpu_mem = peak_delta_i + alloc_end_i
+    return gpu_peak, gpu_usage
+
 
 def get_hf_arguments_with_no_value(dataclass_types):
     """this function will return a map (str, bool) of true/false arguments.
@@ -503,15 +515,15 @@ class Experiment:
         if os.path.isfile(self.gpu_log_filename):
             # Add GPU info and measurements into the result saving
             peak_mem_usage_by_device_id, device_name = self.get_peak_mem_usage_by_device_id()
-            save_result[REPORT_DEVICE_FIELD_NAME] = device_name
+            save_result[RESULT_FIELD_DEVICE_NAME] = device_name
             # Memory usage is averaged across all devices in the final result
-            save_result[REPORT_GPU_FIELD_NAME] = peak_mem_usage_by_device_id.mean()
+            save_result[RESULT_FIELD_RESERVED_GPU_MEM] = peak_mem_usage_by_device_id.mean()
 
         # process gpu mem from output metrics and write to result
         if save_result.get(HF_ARG_SKIP_MEMORY_METRIC) == "False":
-            save_result[RESULT_FIELD_ALLOCATED_GPU_MEM] = sum(extract_gpu_memory_metrics(
-                                                                self.get_experiment_final_metrics()
-                                                            ).values())
+            peak_gpu_mem, gpu_allocated_mem = extract_gpu_memory_metrics(self.get_experiment_final_metrics())
+            save_result[RESULT_FIELD_PEAK_ALLOCATED_GPU_MEM] = peak_gpu_mem
+            save_result[RESULT_FIELD_ALLOCATED_GPU_MEM] = gpu_allocated_mem
         
         # if there is an error we save the error message else we save the final result
         maybe_error_messages = self.maybe_get_experiment_error_traceback()
