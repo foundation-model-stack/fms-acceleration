@@ -85,7 +85,7 @@ HF_TRAINER_LOG_GPU_STAGE_INIT = 'init_mem_gpu'
 HF_TRAINER_LOG_GPU_STAGE_TRAIN = 'train_mem_gpu'
 KEYWORD_PEAKED_DELTA = 'peaked_delta'
 KEYWORD_ALLOC_DELTA = 'alloc_delta'
-HF_ARG_SKIP_MEMORY_METRIC = "skip_memory_metrics"
+HF_ARG_SKIP_MEMORY_METRIC = "--skip_memory_metrics"
 RESULT_FIELD_ALLOCATED_GPU_MEM = "torch_mem_alloc_in_bytes"
 RESULT_FIELD_PEAK_ALLOCATED_GPU_MEM = "peak_torch_mem_alloc_in_bytes"
 
@@ -103,7 +103,7 @@ def extract_gpu_memory_metrics(output_metrics) -> Tuple[float]:
         HF_TRAINER_LOG_GPU_STAGE_INIT,
         HF_TRAINER_LOG_GPU_STAGE_TRAIN,
     ]
-    alloc_running_sum = output_metrics.get(HF_TRAINER_LOG_GPU_STAGE_BEFORE_INIT)
+    alloc_running_sum = output_metrics[HF_TRAINER_LOG_GPU_STAGE_BEFORE_INIT]
     list_of_alloc_running_sums = [alloc_running_sum]
     list_of_peak_running_sums = []
     for STAGE_NAME in trainer_stage_order:
@@ -508,8 +508,9 @@ class Experiment:
             save_result[RESULT_FIELD_RESERVED_GPU_MEM] = peak_mem_usage_by_device_id.mean()
 
         # process gpu mem from output metrics and write to result
-        _experiment_dict = ConfigUtils.convert_args_to_dict(self.experiment_arg)
-        if _experiment_dict.get(HF_ARG_SKIP_MEMORY_METRIC) == False:
+        argument_idx = self.experiment_arg.index(HF_ARG_SKIP_MEMORY_METRIC)
+        write_memory_metric = not self.experiment_arg[argument_idx+1]
+        if write_memory_metric:
             peak_gpu_mem, gpu_allocated_mem = extract_gpu_memory_metrics(self.get_experiment_final_metrics())
             save_result[RESULT_FIELD_PEAK_ALLOCATED_GPU_MEM] = peak_gpu_mem
             save_result[RESULT_FIELD_ALLOCATED_GPU_MEM] = gpu_allocated_mem
@@ -638,7 +639,7 @@ def generate_list_of_experiments(
         expr_arg_w_outputdir = exp_arg + [
             "--output_dir",
             os.path.join(experiment_output_dir, hf_products_dir),
-            "--skip_memory_metrics",
+            HF_ARG_SKIP_MEMORY_METRIC,
             not log_memory_in_trainer,
         ]
         expr_cls = Experiment if not dry_run else DryRunExperiment
