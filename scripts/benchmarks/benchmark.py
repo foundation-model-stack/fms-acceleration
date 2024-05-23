@@ -83,49 +83,37 @@ RESULT_FIELD_DEVICE_NAME = "gpu_device_name"
 HF_TRAINER_LOG_GPU_STAGE_BEFORE_INIT = 'before_init_mem_gpu'
 HF_TRAINER_LOG_GPU_STAGE_INIT = 'init_mem_gpu'
 HF_TRAINER_LOG_GPU_STAGE_TRAIN = 'train_mem_gpu'
-HF_TRAINER_LOG_GPU_STAGE_EVALUATE = 'evaluate_mem_gpu'
-HF_TRAINER_LOG_GPU_STAGE_PREDICT = 'predict_mem_gpu'
 KEYWORD_PEAKED_DELTA = 'peaked_delta'
 KEYWORD_ALLOC_DELTA = 'alloc_delta'
 HF_ARG_SKIP_MEMORY_METRIC = "skip_memory_metrics"
 RESULT_FIELD_ALLOCATED_GPU_MEM = "torch_mem_alloc_in_bytes"
 RESULT_FIELD_PEAK_ALLOCATED_GPU_MEM = "peak_torch_mem_alloc_in_bytes"
 
-def extract_gpu_memory_metrics(output_metrics, peaked_stage:str = HF_TRAINER_LOG_GPU_STAGE_TRAIN) -> Tuple[float]:
+def extract_gpu_memory_metrics(output_metrics) -> Tuple[float]:
     """
     This function computes the gpu summary metrics from the output metrics of Trainer
     when `skip_memory_metrics` is set to `False` in transformers.TrainingArguments
-
-    From the extracted gpu memory values,
-    - Computes a running sum of allocated memory over the stages to get the final gpu_usage, alloc_mem_i
-        - alloc_mem_0 = initial memory before trainer
-        - alloc_mem_delta_i = mem_at_end_i - mem_at_start_i
-        - alloc_mem_i = alloc_mem_(i-1) + max(0, alloc_mem_delta_i) 
-    - Computes the peak gpu memory, gpu_peak = peaked_delta + alloc_mem_i    
-    - peaked_delta is determined by the peaked delta value from the stage set in `peaked_stage` parameter 
-    and it may or may not be the last stage. Defaults to using the peaked_delta from train stage
 
     Returns 
      - gpu_peak value in Bytes
      - gpu_usage value in Bytes
     """
-    gpu_usage = 0 
-    gpu_peaked_delta = 0 
-    for key, val in output_metrics.items():
-        if key.startswith(HF_TRAINER_LOG_GPU_STAGE_BEFORE_INIT): 
-            gpu_usage += val # initial mem before the trainer, `alloc_end_0`
-        elif all([
-            (key.startswith(peaked_stage) or key.startswith(HF_TRAINER_LOG_GPU_STAGE_INIT)),
-            key.endswith(KEYWORD_ALLOC_DELTA),
-        ]):
-            gpu_usage += max(0, val) # ensure `alloc_end_i`` is non-negative 
-        elif all([
-            key.startswith(peaked_stage), 
-            key.endswith(KEYWORD_PEAKED_DELTA)
-        ]):
-            gpu_peaked_delta = val # peak_delta_i
-    gpu_peak = gpu_peaked_delta + gpu_usage # peaked_gpu_mem = peak_delta_i + alloc_end_i
-    return gpu_peak, gpu_usage
+    # Assumes train stage is always called
+    trainer_stage_order = [
+        HF_TRAINER_LOG_GPU_STAGE_INIT,
+        HF_TRAINER_LOG_GPU_STAGE_TRAIN,
+    ]
+    alloc_running_sum = output_metrics.get(HF_TRAINER_LOG_GPU_STAGE_BEFORE_INIT)
+    list_of_alloc_running_sums = [alloc_running_sum]
+    list_of_peak_running_sums = []
+    for STAGE_NAME in trainer_stage_order:
+        alloc_running_sum += output_metrics[f"{STAGE_NAME}_{KEYWORD_ALLOC_DELTA}"]
+        list_of_alloc_running_sums.append(alloc_running_sum)      
+        peak_delta = output_metrics[f"{STAGE_NAME}_{KEYWORD_PEAKED_DELTA}"]
+        list_of_peak_running_sums.append(alloc_running_sum+peak_delta)
+    max_alloc_running_sum = max(list_of_alloc_running_sums)
+    max_peak_running_sum = max(list_of_peak_running_sums)
+    return max_peak_running_sum, max_alloc_running_sum
 
 
 def get_hf_arguments_with_no_value(dataclass_types):
@@ -520,7 +508,8 @@ class Experiment:
             save_result[RESULT_FIELD_RESERVED_GPU_MEM] = peak_mem_usage_by_device_id.mean()
 
         # process gpu mem from output metrics and write to result
-        if save_result.get(HF_ARG_SKIP_MEMORY_METRIC) == "False":
+        _experiment_dict = ConfigUtils.convert_args_to_dict(self.experiment_arg)
+        if _experiment_dict.get(HF_ARG_SKIP_MEMORY_METRIC) == False:
             peak_gpu_mem, gpu_allocated_mem = extract_gpu_memory_metrics(self.get_experiment_final_metrics())
             save_result[RESULT_FIELD_PEAK_ALLOCATED_GPU_MEM] = peak_gpu_mem
             save_result[RESULT_FIELD_ALLOCATED_GPU_MEM] = gpu_allocated_mem
