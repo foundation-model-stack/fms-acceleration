@@ -80,34 +80,35 @@ GPU_TABLE = "timestamp,name,index,memory.used"
 RESULT_FIELD_RESERVED_GPU_MEM = "nvidia_mem_reserved"
 RESULT_FIELD_DEVICE_NAME = "gpu_device_name"
 
-HF_TRAINER_LOG_GPU_STAGE_BEFORE_INIT = 'before_init_mem_gpu'
-HF_TRAINER_LOG_GPU_STAGE_INIT = 'init_mem_gpu'
-HF_TRAINER_LOG_GPU_STAGE_TRAIN = 'train_mem_gpu'
-KEYWORD_PEAKED_DELTA = 'peaked_delta'
-KEYWORD_ALLOC_DELTA = 'alloc_delta'
+HF_TRAINER_LOG_GPU_STAGE_BEFORE_INIT = "before_init_mem_gpu"
+HF_TRAINER_LOG_GPU_STAGE_INIT = "init_mem_gpu"
+HF_TRAINER_LOG_GPU_STAGE_TRAIN = "train_mem_gpu"
+KEYWORD_PEAKED_DELTA = "peaked_delta"
+KEYWORD_ALLOC_DELTA = "alloc_delta"
 HF_ARG_SKIP_MEMORY_METRIC = "--skip_memory_metrics"
 RESULT_FIELD_ALLOCATED_GPU_MEM = "torch_mem_alloc_in_bytes"
 RESULT_FIELD_PEAK_ALLOCATED_GPU_MEM = "peak_torch_mem_alloc_in_bytes"
+
 
 def extract_gpu_memory_metrics(output_metrics) -> Tuple[float]:
     """
     This function computes the gpu summary metrics from the output metrics of Trainer
     when `skip_memory_metrics` is set to `False` in transformers.TrainingArguments
-    
+
     This function is called only when `--skip_memory_metrics` exist in the experiment arg
     and is set to False. The memory key values are expected to be inside output_metrics. If
     output_metrics is empty, return peak=0 and usage=0
 
-    Returns 
+    Returns
      - gpu_peak value in Bytes
      - gpu_usage value in Bytes
     """
     # Assumes train stage is always called
     # this is a tuple of stage names, and a bool to say if it should be included in the summarized number
-    # we exclude the model loading stages for now, due to 
+    # we exclude the model loading stages for now, due to
     # https://github.com/foundation-model-stack/fms-acceleration/issues/18
     # we will renable the loading stages later on once this issue is addressed
-    if len(output_metrics.keys())<1:
+    if len(output_metrics.keys()) < 1:
         return 0, 0
 
     trainer_stage_order = [
@@ -120,11 +121,15 @@ def extract_gpu_memory_metrics(output_metrics) -> Tuple[float]:
     list_of_peak_running_sums = []
     for STAGE_NAME, include in trainer_stage_order:
         delta_key = f"{STAGE_NAME}_{KEYWORD_ALLOC_DELTA}"
-        alloc_running_sum += output_metrics[delta_key] if delta_key in output_metrics else output_metrics[STAGE_NAME]
+        alloc_running_sum += (
+            output_metrics[delta_key]
+            if delta_key in output_metrics
+            else output_metrics[STAGE_NAME]
+        )
         peak_delta = output_metrics.get(f"{STAGE_NAME}_{KEYWORD_PEAKED_DELTA}", 0)
         if include:
-            list_of_alloc_running_sums.append(alloc_running_sum)     
-            list_of_peak_running_sums.append(alloc_running_sum+peak_delta)
+            list_of_alloc_running_sums.append(alloc_running_sum)
+            list_of_peak_running_sums.append(alloc_running_sum + peak_delta)
 
     max_alloc_running_sum = max(list_of_alloc_running_sums)
     max_peak_running_sum = max(list_of_peak_running_sums)
@@ -497,9 +502,9 @@ class Experiment:
         # assume that all the devices have the same device name
         device_name = gpu_logs.name.iloc[-1]
         # extract and convert the gpu memory usage as float values
-        gpu_logs[GPU_LOG_USED_MEM_COLUMN_NAME] = gpu_logs[GPU_LOG_USED_MEM_COLUMN_NAME].apply(
-            lambda x: float(x.replace(GPU_LOG_METRIC_SUFFIX, ""))
-        )
+        gpu_logs[GPU_LOG_USED_MEM_COLUMN_NAME] = gpu_logs[
+            GPU_LOG_USED_MEM_COLUMN_NAME
+        ].apply(lambda x: float(x.replace(GPU_LOG_METRIC_SUFFIX, "")))
         mem_usage_by_device_id = gpu_logs.groupby("index")[GPU_LOG_USED_MEM_COLUMN_NAME]
         # Calibrate values by subtracting out the initial values of the GPU readings
         # to ensure no existing memory is counted in addition with the experiment
@@ -517,21 +522,27 @@ class Experiment:
         # if a gpu log file exist, process the raw nvidia logs and write to result
         if os.path.isfile(self.gpu_log_filename):
             # Add GPU info and measurements into the result saving
-            peak_mem_usage_by_device_id, device_name = self.get_peak_mem_usage_by_device_id()
+            peak_mem_usage_by_device_id, device_name = (
+                self.get_peak_mem_usage_by_device_id()
+            )
             save_result[RESULT_FIELD_DEVICE_NAME] = device_name
             # Memory usage is averaged across all devices in the final result
-            save_result[RESULT_FIELD_RESERVED_GPU_MEM] = peak_mem_usage_by_device_id.mean()
+            save_result[RESULT_FIELD_RESERVED_GPU_MEM] = (
+                peak_mem_usage_by_device_id.mean()
+            )
 
         # process gpu mem from output metrics and write to result
         # check if HF_ARG_SKIP_MEMORY_METRIC is set to False in experiment arg
         # this arg is specified explicitly inside `def generate_list_of_experiments``
         argument_idx = self.experiment_arg.index(HF_ARG_SKIP_MEMORY_METRIC)
-        write_memory_metric = not self.experiment_arg[argument_idx+1]
+        write_memory_metric = not self.experiment_arg[argument_idx + 1]
         if write_memory_metric:
-            peak_gpu_mem, gpu_allocated_mem = extract_gpu_memory_metrics(self.get_experiment_final_metrics())
+            peak_gpu_mem, gpu_allocated_mem = extract_gpu_memory_metrics(
+                self.get_experiment_final_metrics()
+            )
             save_result[RESULT_FIELD_PEAK_ALLOCATED_GPU_MEM] = peak_gpu_mem
             save_result[RESULT_FIELD_ALLOCATED_GPU_MEM] = gpu_allocated_mem
-        
+
         # if there is an error we save the error message else we save the final result
         maybe_error_messages = self.maybe_get_experiment_error_traceback()
         if maybe_error_messages is None:
