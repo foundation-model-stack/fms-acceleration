@@ -93,84 +93,94 @@ python benchmark.py --help
 Note:
 - in `run_benchmarks.sh` we will clear the `RESULT_DIR` if it exists, to avoid contaimination with old results. To protect against overwrite, then always run with `NO_OVERWRITE=true`.
 
-## Logging Memory
+## Logging GPU Memory
 
 There are 2 ways to benchmark memory in `run_benchmarks.sh`:
 - Setting the environment variable `MEMORY_LOGGING=nvidia` will use Nvidia `nvidia-smi`'s API
 - Setting the environment variable `MEMORY_LOGGING=huggingface` (default) will use HuggingFace `HFTrainer`'s API 
 
 Both approaches will print out the memory values to the benchmark report.
+ - For Nvidia, the result column will be `nvidia_mem_reserved`
+ - For Torch/HF, the result column will be `peak_torch_mem_alloc_in_bytes` and `torch_mem_alloc_in_bytes`
 
-### Nvidia `nvidia-smi`
+### Nvidia-SMI `nvidia-smi`
 `nvidia-smi` is a command line utility (CLI) based on the Nvidia Manage Library (NVML)`. A separate process call is used to start, log and finally terminate the CLI for every experiment.  
 
 The keyword `memory.used` is passed to `--query-gpu` argument to log the memory usage at some interval. The list of keywords that can be logged can be referenced from `nvidia-smi --help-query-gpu`
 
-Since it runs on a separate process, it is a less invasive logging approach and less likely to affect the training. However, it is a coarser approach than HF as NVML's definition of used memory in its [documentation](https://docs.nvidia.com/deploy/nvml-api/structnvmlMemory__t.html#structnvmlMemory__t:~:text=Sum%20of%20Reserved%20and%20Allocated%20device%20memory%20(in%20bytes).%20Note%20that%20the%20driver/GPU%20always%20sets%20aside%20a%20small%20amount%20of%20memory%20for%20bookkeeping) takes the sum of (memory allocated + memory reserved).
+Since it runs on a separate process, it is less likely to affect the training. However, it is a coarser approach than HF as NVML's definition of used memory takes the sum of (memory allocated + memory reserved). Refer to their [documentation](https://docs.nvidia.com/deploy/nvml-api/structnvmlMemory__t.html#structnvmlMemory__t:~:text=Sum%20of%20Reserved%20and%20Allocated%20device%20memory%20(in%20bytes).%20Note%20that%20the%20driver/GPU%20always%20sets%20aside%20a%20small%20amount%20of%20memory%20for%20bookkeeping) here.
 
 After every experiment, 
   - the logged values are calibrated to remove any existing foreign memory values
   - the peak values for each gpu device are taken
   - the values are finally averaged across all devices.
 
-### HuggingFace `HFTrainer`
+### Torch/HuggingFace `HFTrainer`
 HFTrainer has a feature to log memory through the `skip_memory_metrics=False` training argument. In their [documentation](https://huggingface.co/docs/transformers/en/main_classes/trainer#transformers.TrainingArguments.skip_memory_metrics), it is mentioned that setting this argument to `False` will affect training speed. In our tests so far (below), we do not see significant difference in throughput (tokens/sec) when using this argument.
 
-The HFTrainer API is more granular than `nvidia-smi` as 
+The HFTrainer API is more granular than `nvidia-smi` as it uses `torch.cuda` to pinpoint memory usage inside the trainer
   - It reports the allocated memory by calling `torch.cuda.memory_allocated()` and `torch.cuda.max_memory_allocated()` inside its probes
   - It has memory logging probes at different stages of the Trainer - `init`, `train`, `evaluate`, `predict` 
 
 ##### NOTE:
 - When in distributed mode, the Trainer will only log the rank 0 memory.
 - For stability purposes, it only tracks the outer level of train, evaluate and predict methods. i.e. if eval is called during train, there won't be a nested invocation of the memory probe.
-- Any GPU memory incurred outside of the supported Trainer stages won't be tracked.
+- Any GPU memory incurred outside of the defined Trainer stages won't be tracked.
 
+### Additional Details
 
-#### Deciphering the Memory Metrics
-When the memory metrics are logged, additional metrics are included in the output of `Trainer.train / Trainer.evaluate / Trainer.predict`. 
+#### Calculating Memory from HFTrainer Output Metrics
 
-The additional metrics consist of:
-A. absolute memory before trainer initialization
-B. delta of allocated memory of a stage
-C. peaked_delta of a stage (extra mem consumed and freed in between) 
-
-B & C are taken before/after each of the following stages:
-- <init>: `HFTrainer.__init__`
-- <train>: `HFTrainer.train` (only if called)
-- <evaluate>: `HFTrainer.evaluate` (only if called)
-- <predict>: `HFTrainer.predict` (only if called)
-
-Example Output:
-
+This is an example of the memory values that HFTrainer will produce in the outputs of `train()`
 ```
 output_metrics = {
-    'train_runtime': 143.6704, 
-    'train_samples_per_second': 0.835, 
-    'train_steps_per_second': 0.209, 
-    'train_tokens_per_second': 3421.164, 
-    'train_loss': 1.292790667215983, 
-    'init_mem_cpu_alloc_delta': 8192, 
+    'train_runtime': 191.2491, 
+    'train_samples_per_second': 0.209, 
+    'train_steps_per_second': 0.052, 
+    'train_tokens_per_second': 428.342, 
+    'train_loss': 1.0627506256103516, 
+    'init_mem_cpu_alloc_delta': 4096, 
     'init_mem_gpu_alloc_delta': 0, 
     'init_mem_cpu_peaked_delta': 0, 
     'init_mem_gpu_peaked_delta': 0, 
-    'train_mem_cpu_alloc_delta': 531410944, 
-    'train_mem_gpu_alloc_delta': 126487040, 
+    'train_mem_cpu_alloc_delta': 839086080, 
+    'train_mem_gpu_alloc_delta': -17491768832, 
     'train_mem_cpu_peaked_delta': 0, 
-    'train_mem_gpu_peaked_delta': 11016635392, 
-    'before_init_mem_cpu': 5831098368, 
-    'before_init_mem_gpu': 4747206656, 
-    'epoch': 0.04
+    'train_mem_gpu_peaked_delta': 26747825664, 
+    'before_init_mem_cpu': 5513297920, 
+    'before_init_mem_gpu': 36141687296, 
+    'epoch': 0.01
 }
 ```
 
-To compute the total GPU memory allocated for training ([docs](https://huggingface.co/docs/transformers/en/main_classes/trainer#transformers.Trainer.log_metrics:~:text=inject%20custom%20behavior.-,log_metrics,-%3C))
-- Total memory delta for train stage = 126487040 bytes ('train_mem_gpu_alloc_delta') + 11016635392 bytes ('train_mem_gpu_peaked_delta')
-- Memory consumption for training = 4747206656 bytes ('before_init_mem_gpu') + 0 bytes ('init_mem_gpu_alloc_delta') + 0 bytes ('init_mem_gpu_peaked_delta') + 126487040 bytes ('train_mem_gpu_alloc_delta') + 11016635392 bytes ('train_mem_gpu_peaked_delta')
+We refer to the keys of the memory metrics in this order 
+ - `before_init_mem_X` as stage0 
+ - `init_mem_X` as stage1 
+ - `train_mem_X` as stage2
+ - ... 
 
-#### Differences in Memory Values between the 2 Approaches
+We currently compute the memory values in the report by taking the largest of sums. For example:
 
-Coming Soon
+For allocated memory value
+```
+max([
+  stage0_mem + stage1_allocated_delta, 
+  stage0_mem + stage1_allocated_delta + stage2_allocated_delta,
+  ...
+])
+```
 
-#### No Significant Slowdown Using HF Memory Probes 
+For peak memory value
+```
+max([
+  stage0_mem + stage1_allocated_delta + stage1_peaked_delta, 
+  stage0_mem + stage1_allocated_delta + stage2_allocated_delta + stage2_peaked_delta,
+  ...
+])
+```
 
-Coming Soon
+Notice that we do not include `stage0_mem` alone when computing the max value. This is to avoid misleading comparisons between GPTQ-LoRA and others. GPTQ-LoRA + FSDP currently does not support low-memory mode as mentioned [here](https://github.com/foundation-model-stack/fms-acceleration/issues/18). The `stage0_mem` value of GPTQ-LoRA + FSDP will reflect a larger than expected value as it is loaded fully before the trainer is initialized and then subsequently will be sharded internally in `trainer.prepare`. This might cause some misleading comparisons when other variants are loaded in low-memory mode and have smaller `stage0_mem` memory consumption than GPTQ-LoRA + FSDP. Once low-memory mode is supported for GPTQ-LoRA, we will include `stage0_mem` back inside the max computation
+
+We compare memory values between Nvidia-SMI and Torch in this PR - [Memory Benchmarking](https://github.com/foundation-model-stack/fms-acceleration/pull/14).
+
+

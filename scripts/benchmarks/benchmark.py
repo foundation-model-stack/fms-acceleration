@@ -93,6 +93,9 @@ def extract_gpu_memory_metrics(output_metrics) -> Tuple[float]:
     """
     This function computes the gpu summary metrics from the output metrics of Trainer
     when `skip_memory_metrics` is set to `False` in transformers.TrainingArguments
+    
+    This function is called only when `--skip_memory_metrics` exist in the experiment arg
+    and is set to False. The memory key values are expected to be inside output_metrics.
 
     Returns 
      - gpu_peak value in Bytes
@@ -517,6 +520,8 @@ class Experiment:
             save_result[RESULT_FIELD_RESERVED_GPU_MEM] = peak_mem_usage_by_device_id.mean()
 
         # process gpu mem from output metrics and write to result
+        # check if HF_ARG_SKIP_MEMORY_METRIC is set to False in experiment arg
+        # this arg is specified explicitly inside `def generate_list_of_experiments``
         argument_idx = self.experiment_arg.index(HF_ARG_SKIP_MEMORY_METRIC)
         write_memory_metric = not self.experiment_arg[argument_idx+1]
         if write_memory_metric:
