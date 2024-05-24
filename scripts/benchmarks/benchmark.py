@@ -95,7 +95,8 @@ def extract_gpu_memory_metrics(output_metrics) -> Tuple[float]:
     when `skip_memory_metrics` is set to `False` in transformers.TrainingArguments
     
     This function is called only when `--skip_memory_metrics` exist in the experiment arg
-    and is set to False. The memory key values are expected to be inside output_metrics.
+    and is set to False. The memory key values are expected to be inside output_metrics. If
+    output_metrics is empty, return peak=0 and usage=0
 
     Returns 
      - gpu_peak value in Bytes
@@ -106,6 +107,9 @@ def extract_gpu_memory_metrics(output_metrics) -> Tuple[float]:
     # we exclude the model loading stages for now, due to 
     # https://github.com/foundation-model-stack/fms-acceleration/issues/18
     # we will renable the loading stages later on once this issue is addressed
+    if len(output_metrics.keys())<1:
+        return 0, 0
+
     trainer_stage_order = [
         (HF_TRAINER_LOG_GPU_STAGE_BEFORE_INIT, False),
         (HF_TRAINER_LOG_GPU_STAGE_INIT, False),
@@ -117,7 +121,6 @@ def extract_gpu_memory_metrics(output_metrics) -> Tuple[float]:
     for STAGE_NAME, include in trainer_stage_order:
         delta_key = f"{STAGE_NAME}_{KEYWORD_ALLOC_DELTA}"
         alloc_running_sum += output_metrics[delta_key] if delta_key in output_metrics else output_metrics[STAGE_NAME]
-         
         peak_delta = output_metrics.get(f"{STAGE_NAME}_{KEYWORD_PEAKED_DELTA}", 0)
         if include:
             list_of_alloc_running_sums.append(alloc_running_sum)     
