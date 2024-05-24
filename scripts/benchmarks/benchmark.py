@@ -99,18 +99,27 @@ def extract_gpu_memory_metrics(output_metrics) -> Tuple[float]:
      - gpu_usage value in Bytes
     """
     # Assumes train stage is always called
+    # this is a tuple of stage names, and a bool to say if it should be included in the summarized number
+    # we exclude the model loading stages for now, due to 
+    # https://github.com/foundation-model-stack/fms-acceleration/issues/18
+    # we will renable the loading stages later on once this issue is addressed
     trainer_stage_order = [
-        HF_TRAINER_LOG_GPU_STAGE_INIT,
-        HF_TRAINER_LOG_GPU_STAGE_TRAIN,
+        (HF_TRAINER_LOG_GPU_STAGE_BEFORE_INIT, False),
+        (HF_TRAINER_LOG_GPU_STAGE_INIT, False),
+        (HF_TRAINER_LOG_GPU_STAGE_TRAIN, True),
     ]
-    alloc_running_sum = output_metrics[HF_TRAINER_LOG_GPU_STAGE_BEFORE_INIT]
-    list_of_alloc_running_sums = [alloc_running_sum]
+    alloc_running_sum = 0
+    list_of_alloc_running_sums = []
     list_of_peak_running_sums = []
-    for STAGE_NAME in trainer_stage_order:
-        alloc_running_sum += output_metrics[f"{STAGE_NAME}_{KEYWORD_ALLOC_DELTA}"]
-        list_of_alloc_running_sums.append(alloc_running_sum)      
-        peak_delta = output_metrics[f"{STAGE_NAME}_{KEYWORD_PEAKED_DELTA}"]
-        list_of_peak_running_sums.append(alloc_running_sum+peak_delta)
+    for STAGE_NAME, include in trainer_stage_order:
+        delta_key = f"{STAGE_NAME}_{KEYWORD_ALLOC_DELTA}"
+        alloc_running_sum += output_metrics[delta_key] if delta_key in output_metrics else output_metrics[STAGE_NAME]
+         
+        peak_delta = output_metrics.get(f"{STAGE_NAME}_{KEYWORD_PEAKED_DELTA}", 0)
+        if include:
+            list_of_alloc_running_sums.append(alloc_running_sum)     
+            list_of_peak_running_sums.append(alloc_running_sum+peak_delta)
+
     max_alloc_running_sum = max(list_of_alloc_running_sums)
     max_peak_running_sum = max(list_of_peak_running_sums)
     return max_peak_running_sum, max_alloc_running_sum
