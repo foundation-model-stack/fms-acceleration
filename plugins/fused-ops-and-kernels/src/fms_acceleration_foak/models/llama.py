@@ -9,6 +9,9 @@ from ..kernels.unsloth.cross_entropy_loss import FastCrossEntropyLoss
 from .utils import trigger_fused_ops, build_lora_fused_ops
 from functools import partial
 
+# TODO: have a generic version of this rule
+# - do regex on RMSNorm class name
+# - check on the tensors required for fast_rms_layernorm
 ModelPatcher.register(
     ModelPatcherRule(
         rule_id='llama-rms', 
@@ -17,6 +20,9 @@ ModelPatcher.register(
     ),
 )
 
+# TODO: have a generic version of this rule
+# - do regex on Attention class name
+# - have a set of qkv / o module names and check on that
 ModelPatcher.register(
     ModelPatcherRule(
         rule_id='llama-qkvo', 
@@ -37,6 +43,7 @@ ModelPatcher.register(
 )
 
 # TODO: have a generic version of this rule
+# - get the module_name and reload on that
 ModelPatcher.register(
     ModelPatcherRule(
         rule_id='llama-cross-ent',
@@ -47,6 +54,10 @@ ModelPatcher.register(
     )
 )
 
+# TODO: have a generic version of this rule
+# - get the module name
+# - check if "apply_rotary_pos_emb" exists
+# - patch
 ModelPatcher.register(
     ModelPatcherRule(
         rule_id='llama-rope',

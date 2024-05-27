@@ -404,6 +404,8 @@ class ModelPatcher:
         model: torch.nn.Module, 
         **kwargs
     ):
+        # NOTE: for a set of rules, this patch function should be called
+        # only once. We do not have any checks for this at the moment
         try:
             ModelPatcher._import_and_reload(model.get_base_model())
         except AttributeError:
@@ -441,3 +443,6 @@ class ModelPatcher:
 def patch_model(model: torch.nn.Module, **kwargs):
     ModelPatcher.patch(model, **kwargs)
     return model
+
+def patch_model_summary():
+    return ModelPatcher.summary()
