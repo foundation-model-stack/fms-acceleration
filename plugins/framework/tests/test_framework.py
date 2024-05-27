@@ -15,19 +15,103 @@
 # SPDX-License-Identifier: Apache-2.0
 # https://spdx.dev/learn/handling-license-info/
 
+# Standard
+from contextlib import contextmanager
+from tempfile import NamedTemporaryFile
+from typing import Callable, Dict, List, Set, Tuple, Type
+
 # Third Party
-import pytest  # pylint: disable=(import-error
+import pytest
 import torch
+import yaml
 
 # First Party
-from fms_acceleration.framework_plugin import PLUGIN_REGISTRATIONS
-from fms_acceleration.utils.test_utils import (
-    build_framework_and_instantiate,
-    create_noop_model_with_archs,
-    create_plugin_cls,
-    dummy_augmentation,
-    dummy_custom_loader,
-)
+from fms_acceleration.framework import KEY_PLUGINS, AccelerationFramework
+from fms_acceleration.framework_plugin import PLUGIN_REGISTRATIONS, AccelerationPlugin
+
+# ----------------------------- HELPER -------------------------------------
+
+
+@contextmanager
+def build_framework_and_instantiate(
+    plugins_to_be_registered: List[
+        Tuple[List[str], Type[AccelerationPlugin]]  # and_paths, plugin_class
+    ],
+    configuration_contents: Dict,
+):
+    "helper function to instantiate an acceleration framework for testing"
+
+    # empty out
+    old_registrations = []
+    old_registrations.extend(PLUGIN_REGISTRATIONS)
+    PLUGIN_REGISTRATIONS.clear()
+    old_active_plugins = AccelerationFramework.active_plugins
+    old_custom_loading_plugins = AccelerationFramework.plugins_require_custom_loading
+    AccelerationFramework.active_plugins = []
+    AccelerationFramework.plugins_require_custom_loading = []
+
+    for path, plugin in plugins_to_be_registered:
+        AccelerationPlugin.register_plugin(
+            plugin,
+            configuration_and_paths=path,
+        )
+
+    with NamedTemporaryFile("w") as f:
+        yaml.dump({KEY_PLUGINS: configuration_contents}, f)
+        yield AccelerationFramework(f.name)
+
+    # put back
+    PLUGIN_REGISTRATIONS.clear()
+    PLUGIN_REGISTRATIONS.extend(old_registrations)
+    AccelerationFramework.active_plugins = old_active_plugins
+    AccelerationFramework.plugins_require_custom_loading = old_custom_loading_plugins
+
+
+def create_noop_model_with_archs(class_name: str = "ModelNoop", archs: List[str] = []):
+    "helper function to create a dummy model with mocked architectures"
+
+    config = type("Config", (object,), {"architectures": archs})
+    return type(class_name, (torch.nn.Module,), {"config": config})
+
+
+def create_plugin_cls(
+    class_name: str = "PluginNoop",
+    restricted_models: Set = {},
+    require_pkgs: Set = {},
+    requires_custom_loading: bool = False,
+    requires_agumentation: bool = False,
+    agumentation: Callable = None,
+    model_loader: Callable = None,
+):
+    "helper function to create plugin class"
+
+    attributes = {
+        "restricted_model_archs": restricted_models,
+        "require_packages": require_pkgs,
+        "requires_custom_loading": requires_custom_loading,
+        "requires_agumentation": requires_agumentation,
+    }
+
+    if agumentation is not None:
+        attributes["augmentation"] = agumentation
+
+    if model_loader is not None:
+        attributes["model_loader"] = model_loader
+
+    return type(class_name, (AccelerationPlugin,), attributes)
+
+
+def dummy_augmentation(self, model, train_args, modifiable_args):
+    "dummy augmentation implementation"
+    return model, modifiable_args
+
+
+def dummy_custom_loader(self, model_name, **kwargs):
+    "dummy custom loader returning dummy model"
+    return create_noop_model_with_archs(archs=["DummyModel"])
+
+
+# ----------------------------- TESTS -------------------------------------
 
 
 def test_config_with_empty_body_raises():
@@ -124,6 +208,7 @@ def test_single_plugin():
         plugins_to_be_registered=[(["dummy"], incomplete_plugin)],
         configuration_contents={"dummy": {"key1": 1}},
     ) as framework:
+
         # check 1.
         assert len(PLUGIN_REGISTRATIONS) == 1
         assert len(framework.active_plugins) == 1
@@ -215,6 +300,7 @@ def test_two_plugins():
         ],
         configuration_contents={"dummy": {"key1": 1}, "dummy2": {"key1": 1}},
     ) as framework:
+
         # check 1.
         assert len(PLUGIN_REGISTRATIONS) == 2
 
@@ -271,11 +357,7 @@ def test_plugin_registration_order():
     "test that plugin registration order determines their activation order"
 
     # build a set of hooks that register the activation order
-    def hook_builder(act_order=None):
-
-        if act_order is None:
-            act_order = []
-
+    def hook_builder(act_order=[]):
         def _hook(
             self,
             model,
@@ -309,6 +391,7 @@ def test_plugin_registration_order():
         plugins_to_be_registered=[([k], v) for k, v in plugins_to_be_installed],
         configuration_contents={k: {"key1": 1} for k, _ in plugins_to_be_installed},
     ) as framework:
+
         # trigger augmentation of active plugins and check order of activation
         framework.augmentation(model, None, None)
         for c, (n, _) in zip(plugin_activation_order, plugins_to_be_installed):

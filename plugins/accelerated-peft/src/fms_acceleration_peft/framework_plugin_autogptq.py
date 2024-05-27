@@ -25,10 +25,8 @@ from typing import Dict, Tuple
 from fms_acceleration import AccelerationPlugin
 from peft import LoraConfig, prepare_model_for_kbit_training
 from peft.tuners.lora.model import LoraModel
-import torch.distributed
 from transformers import AutoModelForCausalLM, TrainingArguments
 import torch
-import os
 
 
 class AutoGPTQAccelerationPlugin(AccelerationPlugin):
@@ -52,8 +50,6 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
         # guarded imports
         # Third Party
         from auto_gptq import AutoGPTQForCausalLM, BaseQuantizeConfig
-        from auto_gptq.nn_modules.qlinear.qlinear_tritonv2 import QuantLinear, QuantLinearFunction
-        from .autogptq_utils import patch_forward_to_view_attributes_before_call
 
         # Currently we allow only a quantized checkpoint to be loaded, we do not
         # implement the quantization process here.
@@ -124,43 +120,6 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
             trainable=True,  # only support trainable mode
             device_map=device_map,
         )
-
-        # https://github.com/foundation-model-stack/fms-acceleration/pull/15
-        # if FSDP distributed need to convert the AutoGPTQ model's 
-        # parameters (in tensors) to parameters. Also need to
-        # store the int32 tensors in a float type
-
-        try:
-            world_size = torch.distributed.get_world_size()
-        except ValueError:
-            world_size = 1  # pg not init
-
-        if (
-            world_size > 1
-            and os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true"
-        ):
-            # these parameters are to be patched for triton v2
-            # consider making a map if patching more kernels
-            PATCH_FOR_FSDP_TRITON_V2 = ['qweight', 'qzeros']
-
-            # patch all the QuantLinear base layers
-            for mod in model.modules():
-                if isinstance(mod, QuantLinear):
-
-                    # convert all patched attributes to Parameters of torch_dtype
-                    # so FSDP can shard them
-                    for attr_name in PATCH_FOR_FSDP_TRITON_V2:
-                        attr = getattr(mod, attr_name)
-                        attr = torch.nn.Parameter(attr.view(torch_dtype), requires_grad=False)
-                        setattr(mod, attr_name, attr)
-
-                    # this patches the forward to convert them back to original 
-                    # type (i.e. int32) before the function call into the kernels
-                    _forward = patch_forward_to_view_attributes_before_call(
-                        mod.forward, attribute_names=PATCH_FOR_FSDP_TRITON_V2,
-                        torch_dtype=torch.int32, # patch it back to 
-                    )
-                    mod.forward = MethodType(_forward, mod)
 
         # replace
         AutoModelForCausalLM.from_config = _old_from_config

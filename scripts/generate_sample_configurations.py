@@ -141,20 +141,12 @@ def read_configuration(path: str) -> Dict:
 # specified key path, with the value.
 KEY_AUTO_GPTQ = "auto_gptq"
 KEY_BNB_NF4 = "bnb-nf4"
-KEY_BNB_NF4_BASELINE = "baseline-bnb-nf4"
 
 CONFIGURATIONS = {
     KEY_AUTO_GPTQ: "plugins/accelerated-peft/configs/autogptq.yaml",
     KEY_BNB_NF4: (
         "plugins/accelerated-peft/configs/bnb.yaml",
         [("peft.quantization.bitsandbytes.quant_type", "nf4")],
-    ),
-    KEY_BNB_NF4_BASELINE: (
-        "plugins/accelerated-peft/configs/bnb.yaml",
-        [
-            ("peft.quantization.bitsandbytes.quant_type", "nf4"), 
-            ("peft.quantization.bitsandbytes.no_peft_model", True), 
-        ],
     ),
 }
 
@@ -165,8 +157,7 @@ CONFIGURATIONS = {
 #   config.
 COMBINATIONS = [
     ("accelerated-peft-autogptq", (KEY_AUTO_GPTQ,)),
-    ("accelerated-peft-bnb-nf4", (KEY_BNB_NF4,)),
-    ("baseline-peft-bnb-nf4", (KEY_BNB_NF4_BASELINE,)),
+    # ("accelerated-peft-bnb-nf4", (KEY_BNB_NF4,)),
 ]
 
 

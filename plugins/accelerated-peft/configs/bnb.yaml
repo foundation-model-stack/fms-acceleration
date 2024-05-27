@@ -14,7 +14,3 @@ peft:
     # bitsandbytes:
     bitsandbytes:
       quant_type: nf4 
-
-      # If True, then no get_peft_model and prepare_model_for_kbit_training
-      # will be called. 
-      no_peft_model: False

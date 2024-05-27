@@ -15,8 +15,3 @@ framework_configs:
       plugins:
         - accelerated-peft
       filename: accelerated-peft-bnb-nf4-sample-configuration.yaml
-
-    - shortname: baseline-peft-bnb
-      plugins:
-        - accelerated-peft
-      filename: baseline-peft-bnb-nf4-sample-configuration.yaml

@@ -96,9 +96,6 @@ class BNBAccelerationPlugin(AccelerationPlugin):
         self._quant_type = self._check_config_and_maybe_check_values(
             key="peft.quantization.bitsandbytes.quant_type", values=["fp4", "nf4"]
         )
-        self._no_peft_model = self._check_config_and_maybe_check_values(
-            key="peft.quantization.bitsandbytes.no_peft_model", values=[True, False]
-        )
 
     def model_loader(self, model_name: str, **kwargs):
 
@@ -124,16 +121,6 @@ class BNBAccelerationPlugin(AccelerationPlugin):
                 "If running in FSDP, this is probably because accelerate is not used. "
                 "This will most probably result in error."
             )
-        elif (
-            world_size == 1
-            and self._no_peft_model == True
-        ):
-            warnings.warn(
-                """Running on single device and setting plugin config `no_peft_model` as `True`
-                PEFT preparation will be managed by SFTTrainer and will cause a slowdown in training speed 
-                due to extraneous dtype casting when SFTTrainer prepares the model using
-                https://github.com/huggingface/trl/blob/e90e8d91d2265e484f229c45a5eb8982f94a2936/trl/trainer/sft_trainer.py#L210"""
-            )            
 
         bnb_config = BitsAndBytesConfig(
             load_in_4bit=True,
@@ -160,8 +147,7 @@ class BNBAccelerationPlugin(AccelerationPlugin):
 
     @property
     def requires_agumentation(self):
-        # will skip the augmentation if _no_peft_model == True
-        return not self._no_peft_model
+        return True
 
     def augmentation(
         self,

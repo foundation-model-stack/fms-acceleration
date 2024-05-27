@@ -36,7 +36,7 @@ class PluginRegistration:
     package_version: str = None
 
 
-PLUGIN_REGISTRATIONS: List[PluginRegistration] = []
+PLUGIN_REGISTRATIONS: List[PluginRegistration] = list()
 
 
 def _trace_key_path(configuration: Dict, key: str):
@@ -85,6 +85,7 @@ def get_relevant_configuration_sections(configuration: Dict) -> Dict:
 
 
 class AccelerationPlugin:
+
     # will be triggered if the configuration_paths are found in the
     # acceleration framework configuration file (under KEY_PLUGINS)
     @staticmethod
@@ -93,18 +94,13 @@ class AccelerationPlugin:
         configuration_and_paths: List[str],
         **kwargs,
     ):
-
-        # pylint: disable=trailing-whitespace
-        # removed because of src/fms_acceleration/framework_plugin.py:96:8:
-        # W0602: Using global for 'PLUGIN_REGISTRATIONS' but no assignment
-        # is done (global-variable-not-assigned)
-        # global PLUGIN_REGISTRATIONS
+        global PLUGIN_REGISTRATIONS
 
         # get the package metadata
         pkg_name = sys.modules[plugin.__module__].__package__
         try:
             package_version = importlib.metadata.version(pkg_name)
-        except importlib.metadata.PackageNotFoundError:
+        except importlib.metadata.PackageNotFoundError: 
             package_version = None
 
         PLUGIN_REGISTRATIONS.append(
@@ -120,6 +116,7 @@ class AccelerationPlugin:
     require_packages: Optional[Set] = None
 
     def __init__(self, configurations: Dict[str, Dict]):
+
         # will pass in a list of dictionaries keyed by "configuration_keys"
         # to be used for initialization
         self.configurations = configurations
@@ -156,15 +153,13 @@ class AccelerationPlugin:
                 # if the tree is a dict
                 if len(t.keys()) > 1:
                     raise AccelerationPluginConfigError(
-                        f"{self.__class__.__name__}: '{key}' found but amongst multiple "
-                        "'{t.keys()}' exist. Ambiguous check in expected set '{values}'."
+                        f"{self.__class__.__name__}: '{key}' found but amongst multiple '{t.keys()}' exist. Ambiguous check in expected set '{values}'."
                     )
                 t = list(t.keys())[0]  # otherwise take the first value
 
             if t not in values:
                 raise AccelerationPluginConfigError(
-                    f"{self.__class__.__name__}: Value at '{key}' was '{t}'. "
-                    "Not found in expected set '{values}'."
+                    f"{self.__class__.__name__}: Value at '{key}' was '{t}'. Not found in expected set '{values}'."
                 )
         else:
             # if nothing to check against, we still want to ensure its a valid

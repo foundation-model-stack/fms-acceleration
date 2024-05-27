@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # Standard
-from typing import Callable, List, Optional, Set, Tuple
+from typing import Callable, Dict, List, Optional, Set, Tuple
 
 # Third Party
 from accelerate import Accelerator
@@ -23,20 +23,19 @@ from transformers.utils.import_utils import _is_package_available
 import torch
 import yaml
 
-# Local
-from .constants import KEY_PLUGINS
+# want to use the transformers logger, but a bit of pain
+logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
+logger.setLevel(logging._get_default_logging_level())
+logger.addHandler(logging._default_handler)
+
+# First Party
 from .framework_plugin import (
     PLUGIN_REGISTRATIONS,
     AccelerationPlugin,
     PluginRegistration,
     get_relevant_configuration_sections,
 )
-
-# want to use the transformers logger, but a bit of pain
-logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-logger.setLevel(logging._get_default_logging_level())
-logger.addHandler(logging._default_handler)
-
+from .constants import KEY_PLUGINS
 
 def check_plugin_packages(plugin: AccelerationPlugin):
     if plugin.require_packages is None:
@@ -48,14 +47,13 @@ def check_plugin_packages(plugin: AccelerationPlugin):
             missing_packages.append(package_name)
     return len(missing_packages) == 0, missing_packages
 
-
 def log_initialization_message(
     active_class_names: Set[str],
     registered_plugins: List[PluginRegistration],  # list of regs
-    logging_func: Callable = None,
+    logger: Callable = None,
 ):
-    if logging_func is None:
-        logging_func = print
+    if logger is None:
+        logger = print
 
     def _registration_display(reg: PluginRegistration):
         return (
@@ -64,33 +62,36 @@ def log_initialization_message(
             f"Version: {reg.package_version}."
         )
 
-    logging_func("***** FMS AccelerationFramework *****")
+    logger("***** FMS AccelerationFramework *****")
     for reg in registered_plugins:
         if reg.plugin.__name__ in active_class_names:
-            logging_func(_registration_display(reg))
+            logger(_registration_display(reg))
 
 
 class AccelerationFramework:
-    active_plugins: List[Tuple[str, AccelerationPlugin]] = []
-    plugins_require_custom_loading: List = []
+
+    active_plugins: List[Tuple[str, AccelerationPlugin]] = list()
+    plugins_require_custom_loading: List = list()
 
     def __init__(
         self, configuration_file: Optional[str], require_packages_check: bool = True
     ):
-        with open(configuration_file, "r", encoding="utf-8") as f:
+
+        with open(configuration_file, "r") as f:
             contents = yaml.safe_load(f)
 
         if KEY_PLUGINS not in contents or contents[KEY_PLUGINS] is None:
             raise ValueError(f"Configuration file must contain a '{KEY_PLUGINS}' body")
 
         # pepare the plugin configurations
-        plugin_configs = dict(contents[KEY_PLUGINS].items())
+        plugin_configs = {k: v for k, v in contents[KEY_PLUGINS].items()}
 
         # relevant sections are returned following plugin precedence, i.e.,
         # they follow the registration order.
         for selected_configs, cls in get_relevant_configuration_sections(
             plugin_configs
         ):
+
             # then the model is to be installed
             # get the plugin
             plugin_name = str(cls.__name__)
@@ -107,7 +108,7 @@ class AccelerationFramework:
 
             # check if already activated, if so, will not reactivate again
             # maintain uniqueness of activated plugins
-            if any(x == plugin_name for x, _ in self.active_plugins):
+            if any([x == plugin_name for x, _ in self.active_plugins]):
                 continue
 
             # activate plugin
@@ -122,16 +123,15 @@ class AccelerationFramework:
                 "framework configuration file."
             )
 
-        assert len(self.plugins_require_custom_loading) <= 1, (
-            "Can load at most 1 plugin with custom model loading, "
-            f"but tried to '{self.plugins_require_custom_loading}'."
-        )
+        assert (
+            len(self.plugins_require_custom_loading) <= 1
+        ), f"Can load at most 1 plugin with custom model loading, but tried to '{self.plugins_require_custom_loading}'."
 
     def model_loader(self, model_name: str, **kwargs):
+
         if len(self.plugins_require_custom_loading) == 0:
             raise NotImplementedError(
-                "Attempted model loading, but none "
-                f"of activated plugins '{list(self.active_plugins)}' "
+                f"Attempted model loading, but none of activated plugins '{list(self.active_plugins)}' "
                 "require custom loading."
             )
 
@@ -152,9 +152,10 @@ class AccelerationFramework:
 
         # NOTE: this assumes that augmentation order does not matter
         for plugin_name, plugin in self.active_plugins:
+
             # check the model arcs at augmentation
             if plugin.restricted_model_archs and not any(
-                x in model_archs for x in plugin.restricted_model_archs
+                [x in model_archs for x in plugin.restricted_model_archs]
             ):
                 raise ValueError(
                     f"Model architectures in '{model_archs}' are supported for '{plugin_name}'."
@@ -173,16 +174,16 @@ class AccelerationFramework:
 
     @property
     def requires_agumentation(self):
-        return any(x.requires_agumentation for _, x in self.active_plugins)
+        return any([x.requires_agumentation for _, x in self.active_plugins])
 
     def get_callbacks_and_ready_for_train(
         self, model: torch.nn.Module = None, accelerator: Accelerator = None
     ):
         # show the initialized message
         log_initialization_message(
-            {x for x, _ in self.active_plugins},
+            set([x for x, _ in self.active_plugins]),
             PLUGIN_REGISTRATIONS,
-            logging_func=logger.info,
+            logger=logger.info,
         )
 
         cbks = []
