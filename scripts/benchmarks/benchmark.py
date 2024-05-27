@@ -13,6 +13,7 @@ from tqdm import tqdm
 from transformers import AutoConfig, HfArgumentParser, TrainingArguments
 import datasets
 import pandas as pd
+import torch
 import yaml
 
 """
@@ -71,6 +72,68 @@ IGNORE_ERROR_PATTERNS = [
     # dont need to surface torch distributed errors
     "torch.distributed.elastic.multiprocessing.errors.ChildFailedError"
 ]
+
+FILE_MEM = "gpu_memory_logs.csv"
+GPU_LOG_USED_MEM_COLUMN_NAME = "memory.used [MiB]"
+GPU_LOG_METRIC_SUFFIX = " MiB"
+GPU_TABLE = "timestamp,name,index,memory.used"
+RESULT_FIELD_RESERVED_GPU_MEM = "nvidia_mem_reserved"
+RESULT_FIELD_DEVICE_NAME = "gpu_device_name"
+
+HF_TRAINER_LOG_GPU_STAGE_BEFORE_INIT = "before_init_mem_gpu"
+HF_TRAINER_LOG_GPU_STAGE_INIT = "init_mem_gpu"
+HF_TRAINER_LOG_GPU_STAGE_TRAIN = "train_mem_gpu"
+KEYWORD_PEAKED_DELTA = "peaked_delta"
+KEYWORD_ALLOC_DELTA = "alloc_delta"
+HF_ARG_SKIP_MEMORY_METRIC = "--skip_memory_metrics"
+RESULT_FIELD_ALLOCATED_GPU_MEM = "torch_mem_alloc_in_bytes"
+RESULT_FIELD_PEAK_ALLOCATED_GPU_MEM = "peak_torch_mem_alloc_in_bytes"
+
+
+def extract_gpu_memory_metrics(output_metrics) -> Tuple[float]:
+    """
+    This function computes the gpu summary metrics from the output metrics of Trainer
+    when `skip_memory_metrics` is set to `False` in transformers.TrainingArguments
+
+    This function is called only when `--skip_memory_metrics` exist in the experiment arg
+    and is set to False. The memory key values are expected to be inside output_metrics. If
+    output_metrics is empty, return peak=0 and usage=0
+
+    Returns
+     - gpu_peak value in Bytes
+     - gpu_usage value in Bytes
+    """
+    # Assumes train stage is always called
+    # this is a tuple of stage names, and a bool to say if it should be included in the summarized number
+    # we exclude the model loading stages for now, due to
+    # https://github.com/foundation-model-stack/fms-acceleration/issues/18
+    # we will renable the loading stages later on once this issue is addressed
+    if len(output_metrics.keys()) < 1:
+        return 0, 0
+
+    trainer_stage_order = [
+        (HF_TRAINER_LOG_GPU_STAGE_BEFORE_INIT, False),
+        (HF_TRAINER_LOG_GPU_STAGE_INIT, False),
+        (HF_TRAINER_LOG_GPU_STAGE_TRAIN, True),
+    ]
+    alloc_running_sum = 0
+    list_of_alloc_running_sums = []
+    list_of_peak_running_sums = []
+    for STAGE_NAME, include in trainer_stage_order:
+        delta_key = f"{STAGE_NAME}_{KEYWORD_ALLOC_DELTA}"
+        alloc_running_sum += (
+            output_metrics[delta_key]
+            if delta_key in output_metrics
+            else output_metrics[STAGE_NAME]
+        )
+        peak_delta = output_metrics.get(f"{STAGE_NAME}_{KEYWORD_PEAKED_DELTA}", 0)
+        if include:
+            list_of_alloc_running_sums.append(alloc_running_sum)
+            list_of_peak_running_sums.append(alloc_running_sum + peak_delta)
+
+    max_alloc_running_sum = max(list_of_alloc_running_sums)
+    max_peak_running_sum = max(list_of_peak_running_sums)
+    return max_peak_running_sum, max_alloc_running_sum
 
 
 def get_hf_arguments_with_no_value(dataclass_types):
@@ -292,8 +355,15 @@ class Experiment:
         self.stderr_filename = os.path.join(self.save_dir, FILE_STDERR)
         self.command_filename = os.path.join(self.save_dir, FILE_SHELL_COMMAND)
         self.results_filename = os.path.join(self.save_dir, FILE_RESULTS)
+        self.gpu_log_filename = os.path.join(self.save_dir, FILE_MEM)
 
-    def run(self, run_cmd: str, environment_variables: Dict = None):
+    def run(
+        self,
+        run_cmd: str,
+        environment_variables: Dict = None,
+        log_nvidia_smi: bool = False,
+        memory_log_interval_secs: int = 1,
+    ):
 
         # form the command line
         commands = []
@@ -308,6 +378,39 @@ class Experiment:
         self.environment = environment_variables
         self.experiment_args_str = commands
         os.makedirs(self.save_dir, exist_ok=True)
+
+        if log_nvidia_smi:
+            """
+            Opens a parallel process to log the device memory of the main experiment process.
+            - Logs memory at intervals to a csv file in `self.save_dir`
+            - Terminates at the end of experiment
+            - GPU log is read and aggregated when the experiment ends & results are saved in Experiment.write_result,
+
+            NOTE: This feature assumes the following
+            1. Experiment is the only process on the gpu devices -
+            there are no other processes running on the device in parallel.
+
+            Can log more info from nvidia-smi by expanding GPU_Table argument
+            e.g. "timestamp,name,index,utilization.gpu,utilization.memory,memory.total,memory.free,memory.used"
+            Use `nvidia-smi --help-query-gpu` for more reference
+            """
+            nvidia_logging_cmd = [
+                "nvidia-smi",
+                "--query-gpu",
+                GPU_TABLE,
+                "--format",
+                "csv",
+                "--id",
+                str(environment_variables["CUDA_VISIBLE_DEVICES"]),
+                "--loop",
+                str(memory_log_interval_secs),
+            ]
+            memory_process = subprocess.Popen(
+                nvidia_logging_cmd,
+                stdout=open(self.gpu_log_filename, "w"),
+                text=True,
+            )
+
         subprocess.run(
             self.shell_command,
             capture_output=False,
@@ -316,6 +419,9 @@ class Experiment:
             text=True,
             env={**os.environ.copy(), **environment_variables},
         )
+
+        if log_nvidia_smi:
+            memory_process.terminate()
 
     def get_experiment_final_metrics(
         self, final_metrics_keys: List[str] = ["train_loss", "train_runtime"]
@@ -374,12 +480,68 @@ class Experiment:
 
         return None if len(results) == 0 else results
 
+    def get_peak_mem_usage_by_device_id(self):
+        """
+        This function retrieves the raw measurements of reserved GPU memory per device across the experiment -
+        computing the peak value for each gpu and then performing a simple calibration (subtracts peak values by the first reading).
+        Returns:
+            - pd.Series of peak memory usage per device id
+            - the device name as string - e.g. "NVIDIA A100-SXM4-80GB"
+
+        Example: For 2 devices with GPU Indices 0,1 - it will return the max measurement value (in MiB) of each device as a Series:
+
+        - pd.Series
+        index
+        0    52729.0
+        1    52783.0
+        Name: memory.used [MiB], dtype: float64
+        """
+
+        # group the gpu readings into device ids
+        gpu_logs = pd.read_csv(self.gpu_log_filename, skipinitialspace=True)
+        # assume that all the devices have the same device name
+        device_name = gpu_logs.name.iloc[-1]
+        # extract and convert the gpu memory usage as float values
+        gpu_logs[GPU_LOG_USED_MEM_COLUMN_NAME] = gpu_logs[
+            GPU_LOG_USED_MEM_COLUMN_NAME
+        ].apply(lambda x: float(x.replace(GPU_LOG_METRIC_SUFFIX, "")))
+        mem_usage_by_device_id = gpu_logs.groupby("index")[GPU_LOG_USED_MEM_COLUMN_NAME]
+        # Calibrate values by subtracting out the initial values of the GPU readings
+        # to ensure no existing memory is counted in addition with the experiment
+        initial_values = mem_usage_by_device_id.first()
+        peak_values = mem_usage_by_device_id.max()
+        return peak_values.sub(initial_values), device_name
+
     def write_result(self):
         "Function to write a json result file"
 
         # save some basic args
         save_result = ConfigUtils.convert_args_to_dict(self.experiment_args_str)
         save_result["num_gpus"] = self.num_gpus
+
+        # if a gpu log file exist, process the raw nvidia logs and write to result
+        if os.path.isfile(self.gpu_log_filename):
+            # Add GPU info and measurements into the result saving
+            peak_mem_usage_by_device_id, device_name = (
+                self.get_peak_mem_usage_by_device_id()
+            )
+            save_result[RESULT_FIELD_DEVICE_NAME] = device_name
+            # Memory usage is averaged across all devices in the final result
+            save_result[RESULT_FIELD_RESERVED_GPU_MEM] = (
+                peak_mem_usage_by_device_id.mean()
+            )
+
+        # process gpu mem from output metrics and write to result
+        # check if HF_ARG_SKIP_MEMORY_METRIC is set to False in experiment arg
+        # this arg is specified explicitly inside `def generate_list_of_experiments``
+        argument_idx = self.experiment_arg.index(HF_ARG_SKIP_MEMORY_METRIC)
+        write_memory_metric = not self.experiment_arg[argument_idx + 1]
+        if write_memory_metric:
+            peak_gpu_mem, gpu_allocated_mem = extract_gpu_memory_metrics(
+                self.get_experiment_final_metrics()
+            )
+            save_result[RESULT_FIELD_PEAK_ALLOCATED_GPU_MEM] = peak_gpu_mem
+            save_result[RESULT_FIELD_ALLOCATED_GPU_MEM] = gpu_allocated_mem
 
         # if there is an error we save the error message else we save the final result
         maybe_error_messages = self.maybe_get_experiment_error_traceback()
@@ -493,6 +655,7 @@ def generate_list_of_experiments(
     output_dir: str = "results",
     hf_products_dir: str = "hf",
     dry_run: bool = False,
+    log_memory_in_trainer: bool = False,
 ) -> List[Experiment]:
     """Construct list of experiments to be run. Takes in default_config and
     any matrices in scenario and experiment_config
@@ -504,6 +667,8 @@ def generate_list_of_experiments(
         expr_arg_w_outputdir = exp_arg + [
             "--output_dir",
             os.path.join(experiment_output_dir, hf_products_dir),
+            HF_ARG_SKIP_MEMORY_METRIC,
+            not log_memory_in_trainer,
         ]
         expr_cls = Experiment if not dry_run else DryRunExperiment
         _expr = expr_cls(
@@ -578,6 +743,19 @@ def compress(df):
 
 def main(args):
 
+    # Gathers available gpu device ids that will be used for benchmarking.
+    # If "CUDA_VISIBLE_DEVICES" is specified, it will return the specified device ids
+    # if no gpu ids are specified, it will default to the enumeration of available ids
+    assert torch.cuda.device_count() > 0, "No device detected for memory logging!"
+    available_gpus_indices = os.environ.get("CUDA_VISIBLE_DEVICES")
+    if available_gpus_indices:
+        available_gpus_indices = available_gpus_indices.split(",")
+    else:
+        available_gpus_indices = [str(i) for i in range(torch.cuda.device_count())]
+
+    if args.dry_run and args.log_nvidia_smi:
+        args.log_nvidia_smi = False
+
     # 1. Prepares a standard BenchmarkDataset
     # TODO: consider caching the json file
     if not args.no_data_processing:
@@ -600,6 +778,7 @@ def main(args):
             experiment_args,
             output_dir=args.results_output_path,
             dry_run=args.dry_run,
+            log_memory_in_trainer=args.log_memory_hf,
         )
     ):
         if experiment.num_gpus > 1:
@@ -611,10 +790,20 @@ def main(args):
         else:
             prefix = COMMAND_PYTHON
 
-        device_ids = ",".join([str(i) for i in range(experiment.num_gpus)])
+        assert experiment.num_gpus <= len(
+            available_gpus_indices
+        ), "Experiment requires more gpus than is available on the platform."
+        """
+        Experiment will take only the ids from the available gpu indices, 
+        this ensures that whatever GPUs are exposed to benchmark.py are the only 
+        devices that each experiment can have access to.
+        """
+        device_ids = ",".join(available_gpus_indices[: experiment.num_gpus])
+
         experiment.run(
             f"{prefix} {FMS_TRAINER}",
             environment_variables={"CUDA_VISIBLE_DEVICES": device_ids},
+            log_nvidia_smi=args.log_nvidia_smi,
         )
 
         # write results and store pointers to files
@@ -746,5 +935,17 @@ if __name__ == "__main__":
         help="ensures 'model_name_or_paths 'specified in scenarios.yaml work. "
         "Useful to check model paths specified correctly before lengthly benchmark runs.",
     )
+    parser.add_argument(
+        "--log_nvidia_smi",
+        action="store_true",
+        help="Use `nvidia-smi` API to log reserved memory of benchmarks",
+    )
+
+    parser.add_argument(
+        "--log_memory_hf",
+        action="store_true",
+        help="Uses memory logging from HF Trainer Arguments API to log gpu memory, for distributed runs only rank 0 is measured",
+    )
+
     args = parser.parse_args()
     main(args)
