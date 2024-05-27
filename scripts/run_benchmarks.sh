@@ -33,6 +33,20 @@ BENCH_RESULT_FILE=benchmarks.csv
 # freeze the pip requirements here
 PIP_REQUIREMENTS_FILE=requirements.txt
 
+# ------------- DROP COLUMNS FRO RESULTS -----------------
+RESULTS_FILTER_DEFAULTS=(
+       'before_init_mem_cpu'
+       'before_init_mem_gpu' 
+       'init_mem_cpu_alloc_delta' 
+       'init_mem_cpu_peaked_delta'
+       'init_mem_gpu_alloc_delta' 
+       'init_mem_gpu_peaked_delta' 
+       'train_mem_cpu_alloc_delta'
+       'train_mem_cpu_peaked_delta' 
+       'train_mem_gpu_alloc_delta'
+       'train_mem_gpu_peaked_delta'
+       )
+
 # env inputs
 DRY_RUN=${DRY_RUN:-"false"}
 NO_DATA_PROCESSING=${NO_DATA_PROCESSING:-"false"}
@@ -44,12 +58,14 @@ NUM_GPUS_MATRIX=${1-"1 2"}
 RESULT_DIR=${2:-"benchmark_outputs"}
 SCENARIOS_CONFIG=${3:-$SCENARIOS_CONFIG}
 SCENARIOS_FILTER=${4-$SCNTAG_PEFT_AUTOGPTQ}
+RESULTS_FILTER=${5-"${RESULTS_FILTER_DEFAULTS[*]}"}
 
 echo "NUM_GPUS_MATRIX: $NUM_GPUS_MATRIX"
 echo "RESULT_DIR: $RESULT_DIR"
 echo "SCENARIOS_CONFIG: $SCENARIOS_CONFIG"
 echo "SCENARIOS_FILTER: $SCENARIOS_FILTER"
 echo "MEMORY_LOGGING: $MEMORY_LOGGING"
+echo "Removing Columns from Report - ${RESULTS_FILTER}"
 
 if [ -n "$RESULT_DIR" ]; then
     echo "The results directory is not empty. "
@@ -113,4 +129,5 @@ python $WORKING_DIR/benchmark.py \
 # this will write to the BENCH_RESULT_FILE
 PYTHONPATH=. \
     python $WORKING_DIR/display_bench_results.py benchmark_outputs \
-    --result_file $BENCH_RESULT_FILE
+    --result_file $BENCH_RESULT_FILE \
+    --remove_columns $RESULTS_FILTER

@@ -3,13 +3,17 @@ import argparse
 
 # First Party
 # import this because of alot of internal contants
-from scripts.benchmarks.benchmark import gather_report
+from scripts.benchmarks.benchmark import gather_report, DIR_SAMP_CONFIGS
+from typing import List
 
-
-def main(*directories: str, output_filename: str = "results.csv"):
+def main(*directories: str, output_filename: str = "results.csv", remove_columns: List[str]):
     "gather outputs from a list of directories and output to a csv"
 
     df, constant = gather_report(*directories, raw=False)
+    # filter result columns to keep by the inverse of remove_columns
+    df = df[df.columns[~df.columns.isin(remove_columns)]]
+    # remove root dir from config filename
+    df["acceleration_framework_config_file"] = df["acceleration_framework_config_file"].str.replace(f"{DIR_SAMP_CONFIGS}", "sample-configurations")
     errors = []
     try:
         # remove error messages if any
@@ -44,5 +48,11 @@ if __name__ == "__main__":
         default="results.csv",
         help="name of final csv report file.",
     )
+    parser.add_argument(
+        "--remove_columns",
+        nargs="+",
+        help="list of columns to ignore from results.csv",
+    )
+
     args = parser.parse_args()
-    main(args.bench_outputs, output_filename=args.result_file)
+    main(args.bench_outputs, output_filename=args.result_file, remove_columns=args.remove_columns)
