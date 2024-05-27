@@ -1,17 +1,20 @@
+# Standard
+from itertools import product
+from typing import Any, Callable, Dict, List, Tuple, Union
 import argparse
 import json
 import os
 import re
 import subprocess
 import warnings
-from itertools import product
-from typing import Callable, Dict, List, Tuple, Any, Union
 
+# Third Party
+from tqdm import tqdm
+from transformers import AutoConfig, HfArgumentParser, TrainingArguments
 import datasets
 import pandas as pd
+import torch
 import yaml
-from tqdm import tqdm
-from transformers import HfArgumentParser, TrainingArguments, AutoConfig
 
 """
 This benchmarking script 
@@ -45,22 +48,20 @@ FILE_STDERR = "stderr"
 FILE_RESULTS = "results.json"
 FILE_SHELL_COMMAND = "command.sh"
 FILE_SCRIPT_ARGS = "script.json"
-FILE_SUMMARY_CSV = 'summary.csv'
+FILE_SUMMARY_CSV = "raw_summary.csv"
 
 DIR_BENCHMARKS = os.path.dirname(os.path.realpath(__file__))
-DIR_PREFIX_EXPERIMENT = 'exp'
-DIR_NAME_RESULTS_DEFAULT = 'benchmark_results'
-DIR_SAMP_CONFIGS = os.path.join(DIR_BENCHMARKS, '../../sample-configurations')
+DIR_PREFIX_EXPERIMENT = "exp"
+DIR_NAME_RESULTS_DEFAULT = "benchmark_results"
+DIR_SAMP_CONFIGS = os.path.join(DIR_BENCHMARKS, "../../sample-configurations")
 
 # read list of sample configurations from contents file
 FRAMEWORK_CONFIG_KEYPAIRS = []
-with open(os.path.join(DIR_SAMP_CONFIGS, 'CONTENTS.yaml')) as f:
-    configs = yaml.safe_load(f)['framework_configs']
+with open(os.path.join(DIR_SAMP_CONFIGS, "CONTENTS.yaml")) as f:
+    configs = yaml.safe_load(f)["framework_configs"]
     for d in configs:
-        FRAMEWORK_CONFIG_KEYPAIRS.append(d['shortname'])
-        FRAMEWORK_CONFIG_KEYPAIRS.append(
-            os.path.join(DIR_SAMP_CONFIGS, d['filename'])
-        )
+        FRAMEWORK_CONFIG_KEYPAIRS.append(d["shortname"])
+        FRAMEWORK_CONFIG_KEYPAIRS.append(os.path.join(DIR_SAMP_CONFIGS, d["filename"]))
 
 # regex to capture the start and end of tracebacks
 REGEX_START_OF_TRACEBACK = "Traceback\s\(most\srecent\scall\slast\)"
@@ -71,6 +72,68 @@ IGNORE_ERROR_PATTERNS = [
     # dont need to surface torch distributed errors
     "torch.distributed.elastic.multiprocessing.errors.ChildFailedError"
 ]
+
+FILE_MEM = "gpu_memory_logs.csv"
+GPU_LOG_USED_MEM_COLUMN_NAME = "memory.used [MiB]"
+GPU_LOG_METRIC_SUFFIX = " MiB"
+GPU_TABLE = "timestamp,name,index,memory.used"
+RESULT_FIELD_RESERVED_GPU_MEM = "nvidia_mem_reserved"
+RESULT_FIELD_DEVICE_NAME = "gpu_device_name"
+
+HF_TRAINER_LOG_GPU_STAGE_BEFORE_INIT = "before_init_mem_gpu"
+HF_TRAINER_LOG_GPU_STAGE_INIT = "init_mem_gpu"
+HF_TRAINER_LOG_GPU_STAGE_TRAIN = "train_mem_gpu"
+KEYWORD_PEAKED_DELTA = "peaked_delta"
+KEYWORD_ALLOC_DELTA = "alloc_delta"
+HF_ARG_SKIP_MEMORY_METRIC = "--skip_memory_metrics"
+RESULT_FIELD_ALLOCATED_GPU_MEM = "torch_mem_alloc_in_bytes"
+RESULT_FIELD_PEAK_ALLOCATED_GPU_MEM = "peak_torch_mem_alloc_in_bytes"
+
+
+def extract_gpu_memory_metrics(output_metrics) -> Tuple[float]:
+    """
+    This function computes the gpu summary metrics from the output metrics of Trainer
+    when `skip_memory_metrics` is set to `False` in transformers.TrainingArguments
+
+    This function is called only when `--skip_memory_metrics` exist in the experiment arg
+    and is set to False. The memory key values are expected to be inside output_metrics. If
+    output_metrics is empty, return peak=0 and usage=0
+
+    Returns
+     - gpu_peak value in Bytes
+     - gpu_usage value in Bytes
+    """
+    # Assumes train stage is always called
+    # this is a tuple of stage names, and a bool to say if it should be included in the summarized number
+    # we exclude the model loading stages for now, due to
+    # https://github.com/foundation-model-stack/fms-acceleration/issues/18
+    # we will renable the loading stages later on once this issue is addressed
+    if len(output_metrics.keys()) < 1:
+        return 0, 0
+
+    trainer_stage_order = [
+        (HF_TRAINER_LOG_GPU_STAGE_BEFORE_INIT, False),
+        (HF_TRAINER_LOG_GPU_STAGE_INIT, False),
+        (HF_TRAINER_LOG_GPU_STAGE_TRAIN, True),
+    ]
+    alloc_running_sum = 0
+    list_of_alloc_running_sums = []
+    list_of_peak_running_sums = []
+    for STAGE_NAME, include in trainer_stage_order:
+        delta_key = f"{STAGE_NAME}_{KEYWORD_ALLOC_DELTA}"
+        alloc_running_sum += (
+            output_metrics[delta_key]
+            if delta_key in output_metrics
+            else output_metrics[STAGE_NAME]
+        )
+        peak_delta = output_metrics.get(f"{STAGE_NAME}_{KEYWORD_PEAKED_DELTA}", 0)
+        if include:
+            list_of_alloc_running_sums.append(alloc_running_sum)
+            list_of_peak_running_sums.append(alloc_running_sum + peak_delta)
+
+    max_alloc_running_sum = max(list_of_alloc_running_sums)
+    max_peak_running_sum = max(list_of_peak_running_sums)
+    return max_peak_running_sum, max_alloc_running_sum
 
 
 def get_hf_arguments_with_no_value(dataclass_types):
@@ -203,7 +266,7 @@ class ConfigUtils:
             list_of_products.append(
                 {
                     name: arg
-                for name, arg in zip(variable_matrices.keys(), arg_combinations)
+                    for name, arg in zip(variable_matrices.keys(), arg_combinations)
                 }
             )
         return list_of_products
@@ -223,14 +286,14 @@ class ConfigUtils:
                     argument_dict[current_key] = item
                 else:
                     # otherwise it was from a list, so make into sequence
-                    argument_dict[current_key] = v + ' ' + item
+                    argument_dict[current_key] = v + " " + item
 
         return argument_dict
 
 
 class ScenarioMatrix:
 
-    matrix_args = ['model_name_or_path']
+    matrix_args = ["model_name_or_path"]
 
     def __init__(self, scenario: Dict, acceleration_config_map: Dict = None) -> None:
         assert "arguments" in scenario.keys(), "Missing `arguments` key in `scenario`"
@@ -246,7 +309,7 @@ class ScenarioMatrix:
             setattr(self, key, val)
 
     def preload_models(self):
-        for model_name in self.arguments['model_name_or_path']:
+        for model_name in self.arguments["model_name_or_path"]:
             print(f"Scenario '{self.name}' preloading model '{model_name}'")
             # just preload the config
             AutoConfig.from_pretrained(model_name)
@@ -292,8 +355,15 @@ class Experiment:
         self.stderr_filename = os.path.join(self.save_dir, FILE_STDERR)
         self.command_filename = os.path.join(self.save_dir, FILE_SHELL_COMMAND)
         self.results_filename = os.path.join(self.save_dir, FILE_RESULTS)
+        self.gpu_log_filename = os.path.join(self.save_dir, FILE_MEM)
 
-    def run(self, run_cmd: str, environment_variables: Dict = None):
+    def run(
+        self,
+        run_cmd: str,
+        environment_variables: Dict = None,
+        log_nvidia_smi: bool = False,
+        memory_log_interval_secs: int = 1,
+    ):
 
         # form the command line
         commands = []
@@ -302,20 +372,56 @@ class Experiment:
                 commands.extend([str(x) for x in c])
             else:
                 commands.append(str(c))
-            
+
         # will save the command line in str
         self.shell_command = run_cmd.split() + commands
         self.environment = environment_variables
         self.experiment_args_str = commands
         os.makedirs(self.save_dir, exist_ok=True)
+
+        if log_nvidia_smi:
+            """
+            Opens a parallel process to log the device memory of the main experiment process.
+            - Logs memory at intervals to a csv file in `self.save_dir`
+            - Terminates at the end of experiment
+            - GPU log is read and aggregated when the experiment ends & results are saved in Experiment.write_result,
+
+            NOTE: This feature assumes the following
+            1. Experiment is the only process on the gpu devices -
+            there are no other processes running on the device in parallel.
+
+            Can log more info from nvidia-smi by expanding GPU_Table argument
+            e.g. "timestamp,name,index,utilization.gpu,utilization.memory,memory.total,memory.free,memory.used"
+            Use `nvidia-smi --help-query-gpu` for more reference
+            """
+            nvidia_logging_cmd = [
+                "nvidia-smi",
+                "--query-gpu",
+                GPU_TABLE,
+                "--format",
+                "csv",
+                "--id",
+                str(environment_variables["CUDA_VISIBLE_DEVICES"]),
+                "--loop",
+                str(memory_log_interval_secs),
+            ]
+            memory_process = subprocess.Popen(
+                nvidia_logging_cmd,
+                stdout=open(self.gpu_log_filename, "w"),
+                text=True,
+            )
+
         subprocess.run(
-            self.shell_command, 
+            self.shell_command,
             capture_output=False,
             stdout=open(self.stdout_filename, "w"),
             stderr=open(self.stderr_filename, "w"),
             text=True,
             env={**os.environ.copy(), **environment_variables},
         )
+
+        if log_nvidia_smi:
+            memory_process.terminate()
 
     def get_experiment_final_metrics(
         self, final_metrics_keys: List[str] = ["train_loss", "train_runtime"]
@@ -374,19 +480,76 @@ class Experiment:
 
         return None if len(results) == 0 else results
 
+    def get_peak_mem_usage_by_device_id(self):
+        """
+        This function retrieves the raw measurements of reserved GPU memory per device across the experiment -
+        computing the peak value for each gpu and then performing a simple calibration (subtracts peak values by the first reading).
+        Returns:
+            - pd.Series of peak memory usage per device id
+            - the device name as string - e.g. "NVIDIA A100-SXM4-80GB"
+
+        Example: For 2 devices with GPU Indices 0,1 - it will return the max measurement value (in MiB) of each device as a Series:
+
+        - pd.Series
+        index
+        0    52729.0
+        1    52783.0
+        Name: memory.used [MiB], dtype: float64
+        """
+
+        # group the gpu readings into device ids
+        gpu_logs = pd.read_csv(self.gpu_log_filename, skipinitialspace=True)
+        # assume that all the devices have the same device name
+        device_name = gpu_logs.name.iloc[-1]
+        # extract and convert the gpu memory usage as float values
+        gpu_logs[GPU_LOG_USED_MEM_COLUMN_NAME] = gpu_logs[
+            GPU_LOG_USED_MEM_COLUMN_NAME
+        ].apply(lambda x: float(x.replace(GPU_LOG_METRIC_SUFFIX, "")))
+        mem_usage_by_device_id = gpu_logs.groupby("index")[GPU_LOG_USED_MEM_COLUMN_NAME]
+        # Calibrate values by subtracting out the initial values of the GPU readings
+        # to ensure no existing memory is counted in addition with the experiment
+        initial_values = mem_usage_by_device_id.first()
+        peak_values = mem_usage_by_device_id.max()
+        return peak_values.sub(initial_values), device_name
+
     def write_result(self):
         "Function to write a json result file"
 
         # save some basic args
         save_result = ConfigUtils.convert_args_to_dict(self.experiment_args_str)
-        save_result['num_gpus'] = self.num_gpus
+        save_result["num_gpus"] = self.num_gpus
+
+        # if a gpu log file exist, process the raw nvidia logs and write to result
+        if os.path.isfile(self.gpu_log_filename):
+            # Add GPU info and measurements into the result saving
+            peak_mem_usage_by_device_id, device_name = (
+                self.get_peak_mem_usage_by_device_id()
+            )
+            save_result[RESULT_FIELD_DEVICE_NAME] = device_name
+            # Memory usage is averaged across all devices in the final result
+            save_result[RESULT_FIELD_RESERVED_GPU_MEM] = (
+                peak_mem_usage_by_device_id.mean()
+            )
+
+        # process gpu mem from output metrics and write to result
+        # check if HF_ARG_SKIP_MEMORY_METRIC is set to False in experiment arg
+        # this arg is specified explicitly inside `def generate_list_of_experiments``
+        argument_idx = self.experiment_arg.index(HF_ARG_SKIP_MEMORY_METRIC)
+        write_memory_metric = not self.experiment_arg[argument_idx + 1]
+        if write_memory_metric:
+            peak_gpu_mem, gpu_allocated_mem = extract_gpu_memory_metrics(
+                self.get_experiment_final_metrics()
+            )
+            save_result[RESULT_FIELD_PEAK_ALLOCATED_GPU_MEM] = peak_gpu_mem
+            save_result[RESULT_FIELD_ALLOCATED_GPU_MEM] = gpu_allocated_mem
 
         # if there is an error we save the error message else we save the final result
         maybe_error_messages = self.maybe_get_experiment_error_traceback()
         if maybe_error_messages is None:
             other_results = self.get_experiment_final_metrics()
             save_result = {
-                **save_result, **self.get_experiment_final_metrics(),
+                **save_result,
+                **self.get_experiment_final_metrics(),
             }
         else:
             other_results = {"error_messages": maybe_error_messages}
@@ -394,26 +557,25 @@ class Experiment:
         # combine the final thing
         save_result = {**save_result, **other_results}
 
-        with open(self.results_filename, 'w') as f:
+        with open(self.results_filename, "w") as f:
             json.dump(save_result, f, indent=4, sort_keys=True)
 
-    # NOTE: can be improved. Not sure if this really gets parity with 
+    # NOTE: can be improved. Not sure if this really gets parity with
     # subprocess.run
     def write_shell_command(self):
 
         def _escape(x: str):
             # if there is is whitespace we just escape with single quotes
             # not sure if this is the best thing to do
-            return x if not re.search(r"\s", x) else f"\'{x}\'"
+            return x if not re.search(r"\s", x) else f"'{x}'"
 
         "Write a shell script to repro the run"
-        with open(self.command_filename, 'w') as f:
+        with open(self.command_filename, "w") as f:
             f.write("#!/bin/bash\n\n")
             for key, val in self.environment.items():
-                f.write(f"{key}={val}\n")
-            f.write(" ".join([
-                _escape(x) for x in self.shell_command
-            ]))
+                f.write(f"export {key}={val}\n")
+            f.write(" ".join([_escape(x) for x in self.shell_command]))
+
 
 class DryRunExperiment(Experiment):
 
@@ -423,6 +585,7 @@ class DryRunExperiment(Experiment):
     def run(self, run_cmd: str, environment_variables: Dict = None):
         def _dummy(*args, **kwargs):
             pass
+
         _old = subprocess.run
         subprocess.run = _dummy
         super().run(run_cmd, environment_variables)
@@ -435,6 +598,7 @@ class DryRunExperiment(Experiment):
 
     def maybe_get_experiment_error_traceback(self):
         return None
+
 
 def prepare_arguments(args):
     defaults = ConfigUtils.read_yaml(args.defaults_config_path)
@@ -451,18 +615,15 @@ def prepare_arguments(args):
     }
     experiment_factor = 1
     for k, v in experiment_matrices.items():
-        print (f"Experiment has matrix '{k}' of len {len(v)}")
+        print(f"Experiment has matrix '{k}' of len {len(v)}")
         experiment_factor *= len(v)
-    print (f"Experiment matrices will product by factor of '{experiment_factor}'")
+    print(f"Experiment matrices will product by factor of '{experiment_factor}'")
 
     for scenario_config in scenarios:
         _scn_name = scenario_config["name"]
         # if a `run_only_scenarios` list exist, filter out any scenario not in the list
-        if (
-            args.run_only_scenarios
-            and _scn_name not in args.run_only_scenarios
-        ):
-            print (f"Skipping scenario '{_scn_name}'")
+        if args.run_only_scenarios and _scn_name not in args.run_only_scenarios:
+            print(f"Skipping scenario '{_scn_name}'")
             continue
         scenario = ScenarioMatrix(scenario_config, acceleration_config_map)
         scenario_matrices, scenario_constants = (
@@ -470,7 +631,7 @@ def prepare_arguments(args):
         )
         scn_factor = 1
         for k, v in scenario_matrices.items():
-            print (f"Scenario '{_scn_name}' has matrix '{k}' of len {len(v)}")
+            print(f"Scenario '{_scn_name}' has matrix '{k}' of len {len(v)}")
             scn_factor *= len(v)
 
         # update defaults with scenario constants
@@ -478,7 +639,9 @@ def prepare_arguments(args):
         # Remove any empty variables and combine matrices to dictionary to cartesian product on
         combined_matrices = {**scenario_matrices, **experiment_matrices}
         products = ConfigUtils.cartesian_product_on_dict(combined_matrices)
-        print (f"Scenario '{_scn_name}' will add to the total products by: ----> '{experiment_factor} x {scn_factor}' = '{len(products)}'\n")
+        print(
+            f"Scenario '{_scn_name}' will add to the total products by: ----> '{experiment_factor} x {scn_factor}' = '{len(products)}'\n"
+        )
         if args.preload_models and len(products) > 0:
             scenario.preload_models()
         for num_gpus, experiment_arg in ConfigUtils.build_args_from_products(
@@ -492,6 +655,7 @@ def generate_list_of_experiments(
     output_dir: str = "results",
     hf_products_dir: str = "hf",
     dry_run: bool = False,
+    log_memory_in_trainer: bool = False,
 ) -> List[Experiment]:
     """Construct list of experiments to be run. Takes in default_config and
     any matrices in scenario and experiment_config
@@ -503,6 +667,8 @@ def generate_list_of_experiments(
         expr_arg_w_outputdir = exp_arg + [
             "--output_dir",
             os.path.join(experiment_output_dir, hf_products_dir),
+            HF_ARG_SKIP_MEMORY_METRIC,
+            not log_memory_in_trainer,
         ]
         expr_cls = Experiment if not dry_run else DryRunExperiment
         _expr = expr_cls(
@@ -515,7 +681,7 @@ def generate_list_of_experiments(
     return experiments
 
 
-def gather_report(result_dir: Union[str, List[str]], raw: bool=True):
+def gather_report(result_dir: Union[str, List[str]], raw: bool = True):
 
     def _gather(rdir):
 
@@ -524,26 +690,28 @@ def gather_report(result_dir: Union[str, List[str]], raw: bool=True):
 
         # map from config file to tag
         fcm = convert_keypairs_to_map(
-            script_args['acceleration_framework_config_keypairs']
+            script_args["acceleration_framework_config_keypairs"]
         )
-        fcm = {v:k for k,v in fcm.items()}
+        fcm = {v: k for k, v in fcm.items()}
 
         experiment_stats = {}
-        exper_dirs = [x for x in os.listdir(rdir) if x.startswith(DIR_PREFIX_EXPERIMENT)]
+        exper_dirs = [
+            x for x in os.listdir(rdir) if x.startswith(DIR_PREFIX_EXPERIMENT)
+        ]
         for tag in exper_dirs:
             try:
                 with open(os.path.join(rdir, tag, FILE_RESULTS)) as f:
-                    tag = tag.replace(DIR_PREFIX_EXPERIMENT + '_', '')
+                    tag = tag.replace(DIR_PREFIX_EXPERIMENT + "_", "")
                     tag = int(tag)
                     experiment_stats[tag] = json.load(f)
             except FileNotFoundError:
                 pass
         df = pd.DataFrame.from_dict(experiment_stats, orient="index").sort_index()
         try:
-            df['framework_config'] = df['acceleration_framework_config_file'].map(
-                lambda x : fcm.get(x, 'none')
+            df["framework_config"] = df["acceleration_framework_config_file"].map(
+                lambda x: fcm.get(x, "none")
             )
-        except KeyError: 
+        except KeyError:
             pass
 
         return df
@@ -564,13 +732,29 @@ def gather_report(result_dir: Union[str, List[str]], raw: bool=True):
             # if unique does not work, then return number of non-na
             # elements
             return len(series) - series.isna().sum()
-    u = df.apply(_nunique) # columns that are unique
-    return df.loc[:,u != 1], df.iloc[0][u == 1].to_dict()
+
+    u = df.apply(_nunique)  # columns that are unique
+    return df.loc[:, u != 1], df.iloc[0][u == 1].to_dict()
+
 
 def compress(df):
-    return df.loc[:,df.apply(pd.Series.nunique) != 1]
+    return df.loc[:, df.apply(pd.Series.nunique) != 1]
+
 
 def main(args):
+
+    # Gathers available gpu device ids that will be used for benchmarking.
+    # If "CUDA_VISIBLE_DEVICES" is specified, it will return the specified device ids
+    # if no gpu ids are specified, it will default to the enumeration of available ids
+    assert torch.cuda.device_count() > 0, "No device detected for memory logging!"
+    available_gpus_indices = os.environ.get("CUDA_VISIBLE_DEVICES")
+    if available_gpus_indices:
+        available_gpus_indices = available_gpus_indices.split(",")
+    else:
+        available_gpus_indices = [str(i) for i in range(torch.cuda.device_count())]
+
+    if args.dry_run and args.log_nvidia_smi:
+        args.log_nvidia_smi = False
 
     # 1. Prepares a standard BenchmarkDataset
     # TODO: consider caching the json file
@@ -578,9 +762,9 @@ def main(args):
         benchmark_dataset = BenchmarkDataset(args.dataset_name, format_fn)
         benchmark_dataset.save_to_path(args.dataset_save_path)
 
-    # dump out the script arguments 
+    # dump out the script arguments
     os.makedirs(args.results_output_path, exist_ok=True)
-    with open(os.path.join(args.results_output_path, FILE_SCRIPT_ARGS), 'w') as f:
+    with open(os.path.join(args.results_output_path, FILE_SCRIPT_ARGS), "w") as f:
         json.dump(vars(args), f, indent=4, sort_keys=True)
 
     # 2. Prepares a list of experiment arguments from a set of configs
@@ -589,10 +773,14 @@ def main(args):
     # 3. Builds a list of experiment objects to run based on the set of experiment arguments
     experiment_stats = {}
     experiment: Experiment
-    for experiment in tqdm(generate_list_of_experiments(
-        experiment_args, output_dir=args.results_output_path,
-        dry_run=args.dry_run,
-    )):
+    for experiment in tqdm(
+        generate_list_of_experiments(
+            experiment_args,
+            output_dir=args.results_output_path,
+            dry_run=args.dry_run,
+            log_memory_in_trainer=args.log_memory_hf,
+        )
+    ):
         if experiment.num_gpus > 1:
             prefix = COMMAND_ACCELERATE.format(
                 accelerate_config_path=args.accelerate_config,
@@ -602,10 +790,20 @@ def main(args):
         else:
             prefix = COMMAND_PYTHON
 
-        device_ids = ",".join([str(i) for i in range(experiment.num_gpus)])
+        assert experiment.num_gpus <= len(
+            available_gpus_indices
+        ), "Experiment requires more gpus than is available on the platform."
+        """
+        Experiment will take only the ids from the available gpu indices, 
+        this ensures that whatever GPUs are exposed to benchmark.py are the only 
+        devices that each experiment can have access to.
+        """
+        device_ids = ",".join(available_gpus_indices[: experiment.num_gpus])
+
         experiment.run(
             f"{prefix} {FMS_TRAINER}",
             environment_variables={"CUDA_VISIBLE_DEVICES": device_ids},
+            log_nvidia_smi=args.log_nvidia_smi,
         )
 
         # write results and store pointers to files
@@ -618,9 +816,7 @@ def main(args):
         with open(path) as f:
             experiment_stats[tag] = json.load(f)
     df = pd.DataFrame.from_dict(experiment_stats, orient="index")
-    df.to_csv(
-        os.path.join(args.results_output_path, FILE_SUMMARY_CSV), index=None
-    )
+    df.to_csv(os.path.join(args.results_output_path, FILE_SUMMARY_CSV), index=None)
 
     # TO CREATE THE checked in CSV FILE DO
     # df, constant = gather_report(..., raw=False)
@@ -634,6 +830,7 @@ def main(args):
     #     'results.csv',
     #     index=False
     # )
+
 
 if __name__ == "__main__":
 
@@ -723,17 +920,32 @@ if __name__ == "__main__":
         "--process_port", type=int, default=29500, help="accelerate process port"
     )
     parser.add_argument(
-        "--no_data_processing", action='store_true', 
-        help="skip the json data prep (useful for re-runs)"
+        "--no_data_processing",
+        action="store_true",
+        help="skip the json data prep (useful for re-runs)",
     )
     parser.add_argument(
-        "--dry_run", action='store_true', 
-        help="perform a dry run only. Useful for debuging benchmark scenarios."
+        "--dry_run",
+        action="store_true",
+        help="perform a dry run only. Useful for debuging benchmark scenarios.",
     )
     parser.add_argument(
-        "--preload_models", action='store_true', 
+        "--preload_models",
+        action="store_true",
         help="ensures 'model_name_or_paths 'specified in scenarios.yaml work. "
-        "Useful to check model paths specified correctly before lengthly benchmark runs."
+        "Useful to check model paths specified correctly before lengthly benchmark runs.",
     )
+    parser.add_argument(
+        "--log_nvidia_smi",
+        action="store_true",
+        help="Use `nvidia-smi` API to log reserved memory of benchmarks",
+    )
+
+    parser.add_argument(
+        "--log_memory_hf",
+        action="store_true",
+        help="Uses memory logging from HF Trainer Arguments API to log gpu memory, for distributed runs only rank 0 is measured",
+    )
+
     args = parser.parse_args()
     main(args)
