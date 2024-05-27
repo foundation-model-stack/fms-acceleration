@@ -12,18 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Standard
+# use importlib to load the packages, if they are installed
+import importlib
+
 # Local
-from .framework import AccelerationFramework
 from .constants import PLUGIN_PREFIX, PLUGINS
+from .framework import AccelerationFramework
 from .framework_plugin import (
     AccelerationPlugin,
     AccelerationPluginConfigError,
     get_relevant_configuration_sections,
 )
-
-# Standard
-# use importlib to load the packages, if they are installed
-import importlib
 
 for postfix in PLUGINS:
     plugin_name = f"{PLUGIN_PREFIX}{postfix}"
