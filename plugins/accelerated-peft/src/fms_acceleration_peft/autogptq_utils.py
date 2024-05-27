@@ -15,10 +15,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # https://spdx.dev/learn/handling-license-info/
 
+# Standard
+from typing import Callable, List
+
 # Third Party
 from peft import LoraConfig
 from peft.tuners.lora.gptq import QuantLinear as LoraLinearGPTQ
-from typing import List, Callable
 import torch
 
 
@@ -55,10 +57,12 @@ def create_new_module_peft(
     # if module cannot be found, return None which results in a raise in the call-stack
     return new_module
 
+
 # consider to move this somewhere more general
 def patch_forward_to_view_attributes_before_call(
     old_forward: Callable,
-    attribute_names: List[str], torch_dtype,
+    attribute_names: List[str],
+    torch_dtype,
 ):
     # patch old_forward to view attribtues to torch_dype
     # before call
@@ -67,7 +71,7 @@ def patch_forward_to_view_attributes_before_call(
         # perform a view on all these attributes
         for attr_name in attribute_names:
 
-            # the view should be a passthrough 
+            # the view should be a passthrough
             # if attr.dtype == torch_dtype
             attr = getattr(self, attr_name)
 
@@ -80,6 +84,7 @@ def patch_forward_to_view_attributes_before_call(
                 # this means already have attr_name as a parameter, then
                 # just assign this way
                 self.__dict__[attr_name] = attr
-        
+
         return old_forward(*args, **kwargs)
+
     return _forward

@@ -23,7 +23,7 @@ import warnings
 
 # Third Party
 from fms_acceleration import AccelerationPlugin
-from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+from peft import LoraConfig, get_peft_model
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig, TrainingArguments
 import torch
 
@@ -41,7 +41,7 @@ def _prepare_model_for_kbit_training(
     if gradient_checkpointing_kwargs is None:
         gradient_checkpointing_kwargs = {}
 
-    for name, param in model.named_parameters():
+    for _, param in model.named_parameters():
         # freeze base model's layers
         param.requires_grad = False
 
@@ -56,22 +56,24 @@ def _prepare_model_for_kbit_training(
                 model.enable_input_require_grads()
             else:
 
-                def make_inputs_require_grad(module, input, output):
+                def make_inputs_require_grad(_module, _input, output):
                     output.requires_grad_(True)
 
                 model.get_input_embeddings().register_forward_hook(
                     make_inputs_require_grad
                 )
 
-        # To support older transformers versions, check if the model supports gradient_checkpointing_kwargs
+        # To support older transformers versions,
+        # check if the model supports gradient_checkpointing_kwargs
         _supports_gc_kwargs = "gradient_checkpointing_kwargs" in list(
             inspect.signature(model.gradient_checkpointing_enable).parameters
         )
 
         if not _supports_gc_kwargs and len(gradient_checkpointing_kwargs) > 0:
             warnings.warn(
-                "gradient_checkpointing_kwargs is not supported in this version of transformers. The passed kwargs will be ignored."
-                " if you want to use that feature, please upgrade to the latest version of transformers.",
+                "gradient_checkpointing_kwargs is not supported in this version of transformers.",
+                "The passed kwargs will be ignored. if you want to use that feature,",
+                "please upgrade to the latest version of transformers.",
                 FutureWarning,
             )
 
@@ -124,16 +126,14 @@ class BNBAccelerationPlugin(AccelerationPlugin):
                 "If running in FSDP, this is probably because accelerate is not used. "
                 "This will most probably result in error."
             )
-        elif (
-            world_size == 1
-            and self._no_peft_model == True
-        ):
+        elif world_size == 1 and self._no_peft_model is True:
             warnings.warn(
                 """Running on single device and setting plugin config `no_peft_model` as `True`
-                PEFT preparation will be managed by SFTTrainer and will cause a slowdown in training speed 
-                due to extraneous dtype casting when SFTTrainer prepares the model using
+                PEFT preparation will be managed by SFTTrainer and
+                will cause a slowdown in training speed due to
+                extraneous dtype casting when SFTTrainer prepares the model using
                 https://github.com/huggingface/trl/blob/e90e8d91d2265e484f229c45a5eb8982f94a2936/trl/trainer/sft_trainer.py#L210"""
-            )            
+            )
 
         bnb_config = BitsAndBytesConfig(
             load_in_4bit=True,
