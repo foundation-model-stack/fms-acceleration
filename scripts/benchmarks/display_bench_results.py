@@ -6,14 +6,14 @@ import argparse
 from scripts.benchmarks.benchmark import gather_report, DIR_SAMP_CONFIGS
 from typing import List
 
-def main(*directories: str, output_filename: str = "results.csv", remove_columns: List[str]):
+def main(*directories: str, output_filename: str = "results.csv", remove_columns: List[str] = None):
     "gather outputs from a list of directories and output to a csv"
 
     df, constant = gather_report(*directories, raw=False)
     # filter result columns to keep by the inverse of remove_columns
-    df = df[df.columns[~df.columns.isin(remove_columns)]]
-    # remove root dir from config filename
-    df["acceleration_framework_config_file"] = df["acceleration_framework_config_file"].str.replace(f"{DIR_SAMP_CONFIGS}", "sample-configurations")
+    if remove_columns:
+        df = df[df.columns[~df.columns.isin(remove_columns)]]
+
     errors = []
     try:
         # remove error messages if any
@@ -50,7 +50,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--remove_columns",
-        nargs="+",
+        nargs="*",
         help="list of columns to ignore from results.csv",
     )
 
