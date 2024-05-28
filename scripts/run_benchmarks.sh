@@ -98,6 +98,8 @@ elif [ "$MEMORY_LOGGING" = "all" ]; then
 fi
 
 # dump out the environment
+echo "Creating $RESULT_DIR"
+mkdir -p $RESULT_DIR
 pip freeze > $PIP_REQUIREMENTS_FILE
 
 # run the bench
