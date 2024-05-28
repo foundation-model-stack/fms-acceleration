@@ -139,9 +139,10 @@ def read_configuration(path: str) -> Dict:
 #
 # NOTE: an augmentation (path, value) will augment a config at the
 # specified key path, with the value.
-KEY_AUTO_GPTQ = "auto_gptq"
+KEY_AUTO_GPTQ = "auto-gptq"
 KEY_BNB_NF4 = "bnb-nf4"
 KEY_BNB_NF4_BASELINE = "baseline-bnb-nf4"
+KEY_AUTO_GPTQ_FOAK = "auto-gptq-foak"
 
 CONFIGURATIONS = {
     KEY_AUTO_GPTQ: "plugins/accelerated-peft/configs/autogptq.yaml",
@@ -156,6 +157,10 @@ CONFIGURATIONS = {
             ("peft.quantization.bitsandbytes.no_peft_model", True), 
         ],
     ),
+    KEY_AUTO_GPTQ_FOAK: (
+        "plugins/fused-ops-and-kernels/configs/fast_quantized_peft.yaml",
+        [("peft.quantization.fused_ops_and_kernels.base_layer", "auto_gptq")],
+    ),
 }
 
 # list of (tag, combi) tuples
@@ -167,8 +172,8 @@ COMBINATIONS = [
     ("accelerated-peft-autogptq", (KEY_AUTO_GPTQ,)),
     ("accelerated-peft-bnb-nf4", (KEY_BNB_NF4,)),
     ("baseline-peft-bnb-nf4", (KEY_BNB_NF4_BASELINE,)),
+    ("accelerated-peft-autogptq-foak", (KEY_AUTO_GPTQ, KEY_AUTO_GPTQ_FOAK)),
 ]
-
 
 # TODO: throw error if merge conflicts
 def merge_configs(config_contents: List[Dict]):
@@ -176,10 +181,15 @@ def merge_configs(config_contents: List[Dict]):
 
     # merge in place
     def _merge(result: Dict, new_contents: Dict):
-        for k in new_contents:
+        for k, v in new_contents.items():
             if k not in result:
-                result[k] = {}
-            _merge(result[k], new_contents)
+                # if k is not in result, it means v does not 
+                # exist as a subtree under result, so we just do
+                # an assingment
+                result[k] = v 
+            else:
+                # otherwise we call the merge
+                _merge(result[k], v)
 
     if len(config_contents) == 0:
         return {}
