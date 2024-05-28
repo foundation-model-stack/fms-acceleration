@@ -12,16 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from transformers import TrainingArguments
-from peft import LoraConfig
-from typing import Tuple, Dict, Callable
+# Standard
+from typing import Callable, Dict, Tuple
 
+# Third Party
 from fms_acceleration import AccelerationPlugin
-import torch
-
-import torch.distributed as dist    
+from peft import LoraConfig
 from peft.tuners.lora.layer import LoraLayer
+from transformers import TrainingArguments
 from transformers.utils import logging
+import torch
+import torch.distributed as dist
 
 # want to use the transformers logger, but a bit of pain
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -35,6 +36,7 @@ def log_patch_summary(
         logging_func = print
 
     # guarded imports
+    # Local
     from .models.model_patcher import patch_model_summary
     for line in patch_model_summary().split("\n"):
         logging_func(line)
@@ -95,6 +97,7 @@ class FastQuantizedPeftAccelerationPlugin(AccelerationPlugin):
              "need to run in fp16 mixed precision or load model in fp16"
 
         # guarded imports
+        # Local
         from .models.model_patcher import patch_model
         model = patch_model(model, base_type=self._base_layer)
         return model, modifiable_args

@@ -12,21 +12,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass, asdict
-from typing import Type, Callable, Union, List, Dict, Tuple, Set, Optional, Any
-import torch
+# Standard
+from dataclasses import asdict, dataclass
 from types import MethodType
-import importlib, inspect
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union
+import importlib
+import inspect
+
+# Third Party
 import pandas as pd
+import torch
 
 # ------------------------ helpers -----------------------
+
 
 def _patch_target_module(
     to_patch: str,
     replace_with: Any,
     target_module: str = None,
 ):
-    to_patch = to_patch.split('.')
+    to_patch = to_patch.split(".")
     assert len(to_patch) > 1, "must have an object to patch"
 
     to_patch, obj_name_to_patch = to_patch[:-1], to_patch[-1]
@@ -43,6 +48,7 @@ def _patch_target_module(
         # replace it
         setattr(source, obj_name_to_patch, original_obj)
 
+
 # ------------------------ classes -----------------------
 
 # Rules will trigger on either
@@ -55,10 +61,14 @@ def _patch_target_module(
 # ]
 # NOTE: triggering on instance checks will not be robust to reloading
 
+# Standard
 from enum import Enum
+
+
 class ModelPatcherTriggerType(Enum):
     module = 1
     callable = 2
+
 
 @dataclass
 class ModelPatcherTrigger:
@@ -66,8 +76,8 @@ class ModelPatcherTrigger:
 
     # the trigger operation
     check: Union[
-        torch.nn.Module, # trigger on isinstance
-        Callable[[torch.nn.Module], bool] # trigger on callable
+        torch.nn.Module,  # trigger on isinstance
+        Callable[[torch.nn.Module], bool],  # trigger on callable
     ]
 
     # holds the type of the trigger
@@ -78,30 +88,23 @@ class ModelPatcherTrigger:
     module_name: str = None
 
     def is_triggered(
-        self, module: torch.nn.Module,
+        self,
+        module: torch.nn.Module,
         module_name: str,
     ):
         "Check if trigger returns truthful."
 
-        if (
-            self.module_name is not None and
-            module_name != self.module_name
-        ):
+        if self.module_name is not None and module_name != self.module_name:
             return False
 
-
-        if (
-            self.type == ModelPatcherTriggerType.module 
-            and isinstance(module, self.check)
+        if self.type == ModelPatcherTriggerType.module and isinstance(
+            module, self.check
         ):
             return True
 
         try:
             # the function call may raise
-            if (
-                self.type == ModelPatcherTriggerType.callable
-                and self.check(module)
-            ):
+            if self.type == ModelPatcherTriggerType.callable and self.check(module):
                 return True
         except:
             # NOTE: not sure if its good idea to let the exception pass through
@@ -112,21 +115,20 @@ class ModelPatcherTrigger:
     def __post_init__(self):
 
         if self.type is None:
-            if (
-                inspect.isclass(self.check) and 
-                issubclass(self.check, torch.nn.Module)
-            ):
+            if inspect.isclass(self.check) and issubclass(self.check, torch.nn.Module):
                 self.type = ModelPatcherTriggerType.module
             else:
                 self.type = ModelPatcherTriggerType.callable
 
+
 # type for model forward
 ModelForward = Callable
+
 
 @dataclass
 class ModelPatcherRule:
     # id, must be unique
-    rule_id: str 
+    rule_id: str
 
     # trigger
     # - if trigger is none, then it will be a model file patching
@@ -138,16 +140,13 @@ class ModelPatcherRule:
 
     # this is mutually exclusive from forward_builder
     forward: ModelForward = None
-    
+
     # returns either
     # - a callable, which will be patched on the triggered module
     # - a list of trigger-forward tuples
     forward_builder: Callable[
-        [torch.nn.Module], 
-        Union[
-            ModelForward, 
-            List[Tuple[ModelPatcherTrigger, ModelForward]]
-        ]
+        [torch.nn.Module],
+        Union[ModelForward, List[Tuple[ModelPatcherTrigger, ModelForward]]],
     ] = None
 
     # if specified, these will be passed on frrom ModelPatcher.patch
@@ -156,16 +155,18 @@ class ModelPatcherRule:
 
     # this is mutually exclusive from forward and forward builder
     import_and_maybe_reload: Tuple[
-        str, # path to the object to be patched (e.g., 'torch.nn.CrossEntropyLoss')
-        Type, # replacement object (e.g., FastCrossEntropyLoss)
-        Optional[str], # path to module to be reloaded (e.g., transformers.models.llama.modeling_llama)
+        str,  # path to the object to be patched (e.g., 'torch.nn.CrossEntropyLoss')
+        Type,  # replacement object (e.g., FastCrossEntropyLoss)
+        Optional[
+            str
+        ],  # path to module to be reloaded (e.g., transformers.models.llama.modeling_llama)
     ] = None
 
     def __post_init__(self):
         if (
-            self.forward is not None and 
-            self.forward_builder is not None and
-            self.import_and_maybe_reload is not None
+            self.forward is not None
+            and self.forward_builder is not None
+            and self.import_and_maybe_reload is not None
         ):
             raise ValueError(
                 f"Rule '{self.rule_id}' must only have only one of forward, "
@@ -215,7 +216,7 @@ class ModelPatcher:
 
     # singleton list of rules that have been registered
     rules: Dict[str, ModelPatcherRule] = {}
-    
+
     @staticmethod
     def load_patches(module_names: List[str], reload: bool = False):
         # each patch should be in a module that calls
@@ -228,7 +229,7 @@ class ModelPatcher:
                 m = importlib.import_module(plugin_name)
 
                 # attempt a reload of imported patch modules if requested
-                # NOTE: but this is brittle as triggering on instance types is 
+                # NOTE: but this is brittle as triggering on instance types is
                 # not robust to reloading
                 if reload:
                     try:
@@ -240,8 +241,9 @@ class ModelPatcher:
     @staticmethod
     def register(rule: ModelPatcherRule):
         # raise if added rule in duplicity
-        assert rule.rule_id not in ModelPatcher.rules, \
-            f"patch rule '{rule.rule_id}' already exists" 
+        assert (
+            rule.rule_id not in ModelPatcher.rules
+        ), f"patch rule '{rule.rule_id}' already exists"
 
         ModelPatcher.rules[rule.rule_id] = rule
 
@@ -249,7 +251,7 @@ class ModelPatcher:
     def did_rule_trigger(module: torch.nn.Module, module_name: str):
         for name, rule in ModelPatcher.rules.items():
 
-            # if there is no trigger 
+            # if there is no trigger
             if rule.trigger is None:
                 continue
 
@@ -268,16 +270,16 @@ class ModelPatcher:
         # USE CASE 1:
         # from a import A # <- want to replace A by A_patched
         # def func():
-        #   obj = A() 
+        #   obj = A()
 
-        # USE CASE 2: 
+        # USE CASE 2:
         # from a import
         # def A(): # <- want to replace A by A_patched
         #   ...
 
-        # for 1: requires a reload of the func def. 
+        # for 1: requires a reload of the func def.
         # - the patch of A does not need to be perm
-        # for 2: just requires a patch of a.A. 
+        # for 2: just requires a patch of a.A.
         # - the patch of a.A needs to be perm
         # - once a.A has been patched, 'a' cannot be reloaded
 
@@ -305,10 +307,9 @@ class ModelPatcher:
                 elif _target.startswith(module_path):
                     _no_reload.append(rule)
 
-        assert len(_with_reload) <= 1, \
-            "cannot have have at most one rule with reload"
+        assert len(_with_reload) <= 1, "cannot have have at most one rule with reload"
 
-        # handle those with reload first 
+        # handle those with reload first
         for rule in _with_reload + _no_reload:
             _target, _object, _reload = rule.import_and_maybe_reload
             _patch_target_module(_target, _object, _reload)
@@ -316,20 +317,20 @@ class ModelPatcher:
                 ModelPatcherHistory(
                     instance=id(model),
                     cls=model.__class__.__name__,
-                    parent_cls='',
-                    module_name='',
-                    parent_module_name='',
-                    rule_id=rule.rule_id
+                    parent_cls="",
+                    module_name="",
+                    parent_module_name="",
+                    rule_id=rule.rule_id,
                 )
             )
 
     @staticmethod
     def _patch_forwards(
-        model: torch.nn.Module, 
+        model: torch.nn.Module,
         patch_kwargs: Dict = {},
         visited: Set = None,
         parent_prefix: str = None,
-        parent_mcn: str  = None,
+        parent_mcn: str = None,
     ):
         # NOTE: should we avoid repatching of the forwards
 
@@ -341,17 +342,17 @@ class ModelPatcher:
             # some stats
             mod_id = id(mod)
             mod_class_name = mod.__class__.__name__
-            name = name.split('.')
+            name = name.split(".")
             if len(name) > 2:
-                parent_module_name, module_name = '.'.join(name[:-1]), name[-1]
+                parent_module_name, module_name = ".".join(name[:-1]), name[-1]
                 parent_mod = model.get_submodule(parent_module_name)
                 parent_mod_class_name = parent_mod.__class__.__name__
             else:
                 # patching on model itself
                 module_name = name[0]
-                parent_mod_class_name = parent_module_name = ''
+                parent_mod_class_name = parent_module_name = ""
                 if parent_prefix is not None:
-                    parent_module_name = parent_prefix + '.' + parent_module_name
+                    parent_module_name = parent_prefix + "." + parent_module_name
                 if parent_mcn is not None:
                     parent_mod_class_name = parent_mcn
 
@@ -366,7 +367,8 @@ class ModelPatcher:
                 fba = {}
                 if rule.forward_builder_args is not None:
                     fba = {
-                        k:w for k,w in patch_kwargs.items()
+                        k: w
+                        for k, w in patch_kwargs.items()
                         if rule.forward_builder_args
                     }
                 forward = rule.forward_builder(mod, **fba)
@@ -380,15 +382,17 @@ class ModelPatcher:
                 old_rules = ModelPatcher.rules
                 ModelPatcher.rules = {}
                 for i, (trig, forw) in enumerate(forward):
-                    ModelPatcher.register(ModelPatcherRule(
-                        rule_id=f'{rule_id}-{i+1}',
-                        trigger=trig, 
-                        forward=forw,
-                    ))
+                    ModelPatcher.register(
+                        ModelPatcherRule(
+                            rule_id=f"{rule_id}-{i+1}",
+                            trigger=trig,
+                            forward=forw,
+                        )
+                    )
 
                 # this is an isolated patch
                 ModelPatcher.patch(
-                    mod, 
+                    mod,
                     patch_kwargs=patch_kwargs,
                     visited=visited,
                     parent_prefix=parent_module_name,
@@ -400,24 +404,22 @@ class ModelPatcher:
 
                 # done
                 continue
-            
+
             # otherwise
             mod.forward = MethodType(forward, mod)
             ModelPatcher.history.append(
                 ModelPatcherHistory(
-                    instance=mod_id, cls=mod_class_name, 
+                    instance=mod_id,
+                    cls=mod_class_name,
                     parent_cls=parent_mod_class_name,
                     module_name=module_name,
                     parent_module_name=parent_module_name,
-                    rule_id=rule_id
+                    rule_id=rule_id,
                 )
-            ) 
+            )
 
     @staticmethod
-    def patch(
-        model: torch.nn.Module, 
-        **kwargs
-    ):
+    def patch(model: torch.nn.Module, **kwargs):
         # NOTE: for a set of rules, this patch function should be called
         # only once. We do not have any checks for this at the moment
         try:
@@ -425,16 +427,12 @@ class ModelPatcher:
         except AttributeError:
             ModelPatcher._import_and_reload(model)
 
-        # this will patch the forwards 
-        ModelPatcher._patch_forwards(
-            model, patch_kwargs=kwargs
-        )
-        
+        # this will patch the forwards
+        ModelPatcher._patch_forwards(model, patch_kwargs=kwargs)
+
     @staticmethod
     def summary(raw: bool = False):
-        df = pd.DataFrame([
-            asdict(entry) for entry in ModelPatcher.history
-        ])
+        df = pd.DataFrame([asdict(entry) for entry in ModelPatcher.history])
         if raw:
             return df
 
@@ -442,21 +440,30 @@ class ModelPatcher:
             return ""
 
         # summarize and return string
-        df = df.groupby(['rule_id', 'module_name', 'cls'])['instance'].count().reset_index()
+        df = (
+            df.groupby(["rule_id", "module_name", "cls"])["instance"]
+            .count()
+            .reset_index()
+        )
         result = []
-        result.append('***************** Module Forwards Patching *************')
-        for x in df.to_dict('records'):
-            result.append("Rule: {0:15s} Module: {1:25s} Class: {2:15s} Num: {3:2d}".format(
-                x['rule_id'], x['module_name'], x['cls'], x['instance']
-            ))
+        result.append("***************** Module Forwards Patching *************")
+        for x in df.to_dict("records"):
+            result.append(
+                "Rule: {0:15s} Module: {1:25s} Class: {2:15s} Num: {3:2d}".format(
+                    x["rule_id"], x["module_name"], x["cls"], x["instance"]
+                )
+            )
 
         return "\n".join(result)
 
+
 # ------------------------ function -----------------------
+
 
 def patch_model(model: torch.nn.Module, **kwargs):
     ModelPatcher.patch(model, **kwargs)
     return model
+
 
 def patch_model_summary():
     return ModelPatcher.summary()

@@ -12,25 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from transformers.models.llama.modeling_llama import LlamaAttention
-from transformers.models.llama.modeling_llama import LlamaRMSNorm
+# Standard
+from functools import partial
 
-from .model_patcher import ModelPatcher, ModelPatcherRule, ModelPatcherTrigger
+# Third Party
+from transformers.models.llama.modeling_llama import LlamaAttention, LlamaRMSNorm
+
+# Local
+from ..kernels.unsloth.cross_entropy_loss import FastCrossEntropyLoss
 from ..kernels.unsloth.rms_layernorm import fast_rms_layernorm
 from ..kernels.unsloth.rope_embedding import fast_rope_embedding
-from ..kernels.unsloth.cross_entropy_loss import FastCrossEntropyLoss
-
-from .utils import trigger_fused_ops, build_lora_fused_ops
-from functools import partial
+from .model_patcher import ModelPatcher, ModelPatcherRule, ModelPatcherTrigger
+from .utils import build_lora_fused_ops, trigger_fused_ops
 
 # TODO: have a generic version of this rule
 # - do regex on RMSNorm class name
 # - check on the tensors required for fast_rms_layernorm
 ModelPatcher.register(
     ModelPatcherRule(
-        rule_id='llama-rms', 
+        rule_id="llama-rms",
         trigger=ModelPatcherTrigger(check=LlamaRMSNorm),
-        forward=fast_rms_layernorm
+        forward=fast_rms_layernorm,
     ),
 )
 
@@ -39,20 +41,21 @@ ModelPatcher.register(
 # - have a set of qkv / o module names and check on that
 ModelPatcher.register(
     ModelPatcherRule(
-        rule_id='llama-qkvo', 
+        rule_id="llama-qkvo",
         trigger=ModelPatcherTrigger(
             check=partial(
-                trigger_fused_ops, attn_cls=LlamaAttention,
-                qkv_module_names=['q_proj', 'k_proj', 'v_proj'],
-                o_module_name='o_proj',
+                trigger_fused_ops,
+                attn_cls=LlamaAttention,
+                qkv_module_names=["q_proj", "k_proj", "v_proj"],
+                o_module_name="o_proj",
             )
         ),
         forward_builder=partial(
-            build_lora_fused_ops, 
-            qkv_module_names=['q_proj', 'k_proj', 'v_proj'],
-            o_module_name='o_proj',
+            build_lora_fused_ops,
+            qkv_module_names=["q_proj", "k_proj", "v_proj"],
+            o_module_name="o_proj",
         ),
-        forward_builder_args=['base_type'],
+        forward_builder_args=["base_type"],
     )
 )
 
@@ -60,11 +63,12 @@ ModelPatcher.register(
 # - get the module_name and reload on that
 ModelPatcher.register(
     ModelPatcherRule(
-        rule_id='llama-cross-ent',
+        rule_id="llama-cross-ent",
         import_and_maybe_reload=(
-            'torch.nn.CrossEntropyLoss', FastCrossEntropyLoss,
-            'transformers.models.llama.modeling_llama'
-        )
+            "torch.nn.CrossEntropyLoss",
+            FastCrossEntropyLoss,
+            "transformers.models.llama.modeling_llama",
+        ),
     )
 )
 
@@ -74,11 +78,11 @@ ModelPatcher.register(
 # - patch
 ModelPatcher.register(
     ModelPatcherRule(
-        rule_id='llama-rope',
+        rule_id="llama-rope",
         import_and_maybe_reload=(
-            'transformers.models.llama.modeling_llama.apply_rotary_pos_emb',
+            "transformers.models.llama.modeling_llama.apply_rotary_pos_emb",
             fast_rope_embedding,
-            None
-        )
+            None,
+        ),
     )
 )

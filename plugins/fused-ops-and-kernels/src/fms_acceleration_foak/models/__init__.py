@@ -12,13 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Local
 from .model_patcher import ModelPatcher
 
-PATCHES = [
-    '.models.llama',
-    '.models.mistral'
-]
-PLUGIN_PREFIX = 'fms_acceleration_foak'
+PATCHES = [".models.llama", ".models.mistral"]
+PLUGIN_PREFIX = "fms_acceleration_foak"
 
 # TODO: remove the need for the prefix
 ModelPatcher.load_patches(
