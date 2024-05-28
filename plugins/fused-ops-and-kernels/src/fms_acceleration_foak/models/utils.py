@@ -30,8 +30,10 @@ from .model_patcher import ModelPatcherTrigger
 
 
 # simple utility function to guess if its lora layer
-def _is_loralayer(module: torch.nn.Module, names=["lora_A", "lora_B", "base_layer"]):
-    return all([hasattr(module, x) for x in names])
+def _is_loralayer(module: torch.nn.Module, names: List[str] = None):
+    if names is None:
+        names = ["lora_A", "lora_B", "base_layer"]
+    return all(hasattr(module, x) for x in names)
 
 
 # builds a triple of forward functions, that each can be attached
@@ -45,8 +47,10 @@ def _is_loralayer(module: torch.nn.Module, names=["lora_A", "lora_B", "base_laye
 def _build_qkv_forwards(
     attn: torch.nn.Module,
     fused_operation: Callable = fused_op_qkv_gptq,
-    module_names: List[str] = ["q_proj", "k_proj", "v_proj"],
+    module_names: List[str] = None,
 ):
+    if module_names is None:
+        module_names = ["q_proj", "k_proj", "v_proj"]
 
     Q = K = V = None
 
@@ -101,9 +105,11 @@ def fused_op_o_gptq(self, X):
 def build_lora_fused_ops(
     attn: torch.nn.Module,
     base_type: str = "auto_gptq",
-    qkv_module_names: List[str] = ["q_proj", "k_proj", "v_proj"],
+    qkv_module_names: List[str] = None,
     o_module_name: str = "o_proj",
 ):
+    if qkv_module_names is None:
+        qkv_module_names = ["q_proj", "k_proj", "v_proj"]
 
     # handle the QKVs
     if base_type == "auto_gptq":
@@ -143,13 +149,16 @@ def build_lora_fused_ops(
 def trigger_fused_ops(
     module: torch.nn.Module,
     attn_cls: Type,
-    qkv_module_names: List[str] = ["q_proj", "k_proj", "v_proj"],
+    qkv_module_names: List[str] = None,
     o_module_name: str = "o_proj",
 ):
+    if qkv_module_names is None:
+        qkv_module_names = ["q_proj", "k_proj", "v_proj"]
+
     _o = getattr(module, o_module_name)
     _qkv = [getattr(module, x) for x in qkv_module_names]
 
     # trigger on the attention layer
     return isinstance(module, attn_cls) and (
-        all([_is_loralayer(x) for x in _qkv]) or _is_loralayer(_o)
+        all(_is_loralayer(x) for x in _qkv) or _is_loralayer(_o)
     )

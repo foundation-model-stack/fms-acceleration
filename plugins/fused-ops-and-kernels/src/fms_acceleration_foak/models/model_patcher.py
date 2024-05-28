@@ -23,6 +23,9 @@ import inspect
 import pandas as pd
 import torch
 
+# Standard
+from enum import Enum
+
 # ------------------------ helpers -----------------------
 
 
@@ -60,9 +63,6 @@ def _patch_target_module(
 #     Callable[[torch.nn.Module], bool] # trigger on callable
 # ]
 # NOTE: triggering on instance checks will not be robust to reloading
-
-# Standard
-from enum import Enum
 
 
 class ModelPatcherTriggerType(Enum):
@@ -106,7 +106,7 @@ class ModelPatcherTrigger:
             # the function call may raise
             if self.type == ModelPatcherTriggerType.callable and self.check(module):
                 return True
-        except:
+        except Exception: # pylint: disable=broad-exception-caught
             # NOTE: not sure if its good idea to let the exception pass through
             pass
 
@@ -234,7 +234,7 @@ class ModelPatcher:
                 if reload:
                     try:
                         importlib.reload(m)
-                    except AssertionError as e:
+                    except AssertionError:
                         # this is if it was loaded already
                         pass
 
@@ -327,12 +327,15 @@ class ModelPatcher:
     @staticmethod
     def _patch_forwards(
         model: torch.nn.Module,
-        patch_kwargs: Dict = {},
+        patch_kwargs: Dict = None,
         visited: Set = None,
         parent_prefix: str = None,
         parent_mcn: str = None,
     ):
         # NOTE: should we avoid repatching of the forwards
+
+        if patch_kwargs is None:
+            patch_kwargs = {}
 
         if visited is None:
             visited = set()

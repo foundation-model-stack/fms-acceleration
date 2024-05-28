@@ -35,7 +35,6 @@ def fast_rope_embedding(Q, K, cos, sin, position_ids=None):
     return _fast_rope_embedding(Q, K, cos, sin)
 
 
-# TODO: have a generic version of this rule
 # - do regex on RMSNorm class name
 # - check on the tensors required for fast_rms_layernorm
 ModelPatcher.register(
@@ -46,7 +45,6 @@ ModelPatcher.register(
     ),
 )
 
-# TODO: have a generic version of this rule
 # - do regex on Attention class name
 # - have a set of qkv / o module names and check on that
 ModelPatcher.register(
@@ -69,7 +67,6 @@ ModelPatcher.register(
     )
 )
 
-# TODO: have a generic version of this rule
 # - get the module_name and reload on that
 ModelPatcher.register(
     ModelPatcherRule(
@@ -82,7 +79,6 @@ ModelPatcher.register(
     )
 )
 
-# TODO: have a generic version of this rule
 # - get the module name
 # - check if "apply_rotary_pos_emb" exists
 # - patch
