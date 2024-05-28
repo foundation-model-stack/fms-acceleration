@@ -51,8 +51,8 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
 
         # guarded imports
         # Third Party
-        from auto_gptq import AutoGPTQForCausalLM, BaseQuantizeConfig #pylint: disable=import-outside-toplevel
-        from auto_gptq.nn_modules.qlinear.qlinear_tritonv2 import QuantLinear #pylint: disable=import-outside-toplevel
+        from auto_gptq import AutoGPTQForCausalLM, BaseQuantizeConfig #pylint: disable=import-outside-toplevel,import-error
+        from auto_gptq.nn_modules.qlinear.qlinear_tritonv2 import QuantLinear #pylint: disable=import-outside-toplevel,import-error
 
         # Local
         from .autogptq_utils import patch_forward_to_view_attributes_before_call #pylint: disable=import-outside-toplevel
@@ -202,8 +202,8 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
     ):
         # guarded imports
         # Third Party
-        from auto_gptq.nn_modules.qlinear.qlinear_tritonv2 import QuantLinear #pylint: disable=import-outside-toplevel
-        from auto_gptq.utils.peft_utils import GPTQLoraModel, get_gptq_peft_model #pylint: disable=import-outside-toplevel
+        from auto_gptq.nn_modules.qlinear.qlinear_tritonv2 import QuantLinear #pylint: disable=import-outside-toplevel,import-error
+        from auto_gptq.utils.peft_utils import GPTQLoraModel, get_gptq_peft_model #pylint: disable=import-outside-toplevel,import-error
 
         # Local
         from .autogptq_utils import create_new_module_peft, replace_module_peft #pylint: disable=import-outside-toplevel
