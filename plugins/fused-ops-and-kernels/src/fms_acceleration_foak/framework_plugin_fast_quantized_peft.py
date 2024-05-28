@@ -39,7 +39,9 @@ def log_patch_summary(
     # this is a guarded import, because the model rule registration
     # does not need to be loaded unless patch_model is required
     # Local
-    from .models.model_patcher import patch_model_summary #pylint: disable=import-outside-toplevel
+    from .models.model_patcher import (  # pylint: disable=import-outside-toplevel
+        patch_model_summary,
+    )
 
     for line in patch_model_summary().split("\n"):
         logging_func(line)
@@ -120,12 +122,16 @@ class FastQuantizedPeftAccelerationPlugin(AccelerationPlugin):
         # this is a guarded import, because the model rule registration
         # does not need to be loaded unless patch_model is required
         # Local
-        from .models.model_patcher import patch_model #pylint: disable=import-outside-toplevel
+        from .models.model_patcher import (  # pylint: disable=import-outside-toplevel
+            patch_model,
+        )
 
         model = patch_model(model, base_type=self._base_layer)
         return model, modifiable_args
 
-    def get_callbacks_and_ready_for_train(self, model: torch.nn.Module = None, accelerator = None):
+    def get_callbacks_and_ready_for_train(
+        self, model: torch.nn.Module = None, accelerator=None
+    ):
 
         # if this is moved to framework, it can be handled as the same way as
         # log_initialization_message

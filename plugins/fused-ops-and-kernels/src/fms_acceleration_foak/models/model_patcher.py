@@ -14,6 +14,7 @@
 
 # Standard
 from dataclasses import asdict, dataclass
+from enum import Enum
 from types import MethodType
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union
 import importlib
@@ -22,9 +23,6 @@ import inspect
 # Third Party
 import pandas as pd
 import torch
-
-# Standard
-from enum import Enum
 
 # ------------------------ helpers -----------------------
 
@@ -106,7 +104,7 @@ class ModelPatcherTrigger:
             # the function call may raise
             if self.type == ModelPatcherTriggerType.callable and self.check(module):
                 return True
-        except Exception: # pylint: disable=broad-exception-caught
+        except Exception:  # pylint: disable=broad-exception-caught
             # NOTE: not sure if its good idea to let the exception pass through
             pass
 
