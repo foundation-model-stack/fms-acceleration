@@ -85,7 +85,7 @@ class FastQuantizedPeftAccelerationPlugin(AccelerationPlugin):
         model = patch_model(model, base_type=self._base_layer)
         return model, modifiable_args
 
-    def callbacks_and_ready_for_train(self, model, accelerator):
+    def get_callbacks_and_ready_for_train(self, model, accelerator):
 
         # if this is moved to framework, it can be handled as the same way as
         # log_initialization_message
