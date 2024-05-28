@@ -134,7 +134,7 @@ def test_configure_bnb_plugin():
             require_packages_check=False,
         ):
             # check flags and callbacks
-            assert (not correct_value)==framework.requires_agumentation
+            assert (not correct_value) == framework.requires_agumentation
 
     # attempt to activate plugin with configuration pointing to wrong path
     # - raise with message that no plugins can be configured
