@@ -100,6 +100,8 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
         )
         AutoModelForCausalLM.from_config = _from_config  # patch
 
+        # this is a HF method that checks if the low_cpu_mem mode is enabled
+        # via HF accelerate
         if is_fsdp_enabled():
             # Local
             from .autogptq_utils import (  # pylint: disable=import-outside-toplevel

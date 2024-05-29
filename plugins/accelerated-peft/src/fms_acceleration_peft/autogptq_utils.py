@@ -25,7 +25,7 @@ from peft.tuners.lora.gptq import QuantLinear as LoraLinearGPTQ
 import torch
 
 
-# This function will be replaced after merging
+# This function may be moved after merging
 # https://github.com/foundation-model-stack/fms-acceleration/pull/25
 def _patch_target_module(
     to_patch: str,
@@ -62,6 +62,7 @@ def make_sure_no_tensor_in_meta_device(
     use_tritonv2: bool = False,
 ):
     # Third Party
+    # guarded import
     from auto_gptq.utils.import_utils import (  # pylint: disable=import-outside-toplevel,import-error
         dynamically_import_QuantLinear,
     )
