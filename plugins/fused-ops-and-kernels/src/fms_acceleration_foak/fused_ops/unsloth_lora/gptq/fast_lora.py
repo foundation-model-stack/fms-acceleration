@@ -735,3 +735,10 @@ def apply_lora_o(self, X):
     Oqstate, OA, OB, OS = get_lora_parameters(self.o_proj)
     O = LoRA_W.apply(X, *unpack_gptqstate(Oqstate), OA, OB, OS)
     return O
+
+# added by flim@sg.ibm.com
+# this version can be directly patched on the output linear
+def apply_lora_o_v2(self, X):
+    Oqstate, OA, OB, OS = get_lora_parameters(self)
+    O = LoRA_W.apply(X, *unpack_gptqstate(Oqstate), OA, OB, OS)
+    return O

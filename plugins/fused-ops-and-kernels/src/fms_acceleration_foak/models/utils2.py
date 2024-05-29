@@ -7,7 +7,7 @@ import os
 
 from ..fused_ops.unsloth_lora.gptq.fast_lora import (
     apply_lora_qkv as fused_op_qkv_gptq,
-    apply_lora_o as fused_op_o_gptq,
+    apply_lora_o_v2 as fused_op_o_gptq,
     apply_lora_mlp as fused_op_mlp_gptq,
 )
 from .model_patcher import ModelPatcherTrigger
@@ -97,13 +97,7 @@ def build_lora_fused_ops(
         submodule_names = ["q_proj", "k_proj", "v_proj"]
 
     # get the fused op
-    fused_op = FUSED_OPS[base_type][fused_op]
-
-    # NOTE, although we will know based on the fused_op key if
-    # it is going to be a grouped op or not, doing it this way shouldnt
-    # be too bad
-    # if it involves more than one submodule 
-    is_grouped_op = len(submodule_names) > 0
+    fused_operation = FUSED_OPS[base_type][fused_op]
 
     # handle the QKVs
     if base_type == "auto_gptq":
@@ -128,9 +122,9 @@ def build_lora_fused_ops(
 
             # patch each of the fused ops to view the attributes
             # back into torch.int32
-            # - check if its a group fused op, if so then the patching
+            # - check if its a group fused op, if so then the triggering
             #   needs to happen one level higher
-            if is_grouped_op:
+            if len(submodule_names) > 0:
                 patched_submodule_names = [
                     n + '.base_layer' for n in submodule_names
                 ]
@@ -138,8 +132,8 @@ def build_lora_fused_ops(
                 # otherwise its just the base layer
                 patched_submodule_names = 'base_layer'
 
-            fused_op = patch_forward_to_view_attributes_before_call(
-                fused_op, 
+            fused_operation = patch_forward_to_view_attributes_before_call(
+                fused_operation, 
                 PATCH_FOR_FSDP_TRITON_V2, torch.int32,
                 submodule_names=patched_submodule_names,
                 is_method_forward=False,
@@ -150,24 +144,30 @@ def build_lora_fused_ops(
             f"Cannot build fused ops for base type '{base_type}'."
         )
 
-    if is_grouped_op:
+    if fused_op == KEY_QKV:
         return [
             (ModelPatcherTrigger(check=_is_loralayer, module_name=name), forward)
             for name, forward in _build_fused_forwards(
                 attn,
-                fused_operation=fused_op,
+                fused_operation=fused_operation,
                 submodule_names=submodule_names,
             )
         ]
-
-    # otherwise its just a single op
-    submodule_names = submodule_names[0]
-    return [
-        (
-            ModelPatcherTrigger(check=_is_loralayer, module_name=submodule_names),
-            fused_op,
-        )
-    ]
+    elif fused_op == KEY_O:
+        # otherwise its just a single op
+        submodule_names = submodule_names[0]
+        return [
+            (
+                ModelPatcherTrigger(check=_is_loralayer, module_name=submodule_names),
+                fused_operation,
+            )
+        ]
+    elif fused_op == KEY_MLP:
+        # otherwise just return the fused_op that should be attached at the
+        # top MLP level
+        return fused_operation
+    else:
+        raise NotImplementedError(f"Unknown fused op '{fused_op}'")
 
 # trigger if either of the conditions are met
 # 1. qkv all have LoRA adapters for a fused op

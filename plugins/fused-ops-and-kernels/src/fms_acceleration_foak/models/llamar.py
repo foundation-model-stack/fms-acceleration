@@ -83,7 +83,7 @@ ModelPatcher.register(
         trigger=ModelPatcherTrigger(
             check=partial(
                 trigger_fused_ops, attn_cls=LlamaMLP,
-                submodule_names=["q_proj", "k_proj", "v_proj"],
+                submodule_names=["up_proj", "down_proj", "gate_proj"],
             )
         ),
         forward_builder= partial(
