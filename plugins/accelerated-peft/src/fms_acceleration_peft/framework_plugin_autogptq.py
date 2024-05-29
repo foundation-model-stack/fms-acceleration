@@ -21,15 +21,16 @@ from functools import partial
 from types import MethodType
 from typing import Dict, Tuple
 import os
+import importlib
 
 # Third Party
 from fms_acceleration import AccelerationPlugin
 from peft import LoraConfig, prepare_model_for_kbit_training
 from peft.tuners.lora.model import LoraModel
 from transformers import AutoModelForCausalLM, TrainingArguments
+from transformers.modeling_utils import is_fsdp_enabled
 import torch
 import torch.distributed
-
 
 class AutoGPTQAccelerationPlugin(AccelerationPlugin):
 
@@ -48,7 +49,6 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
         )
 
     def model_loader(self, model_name: str, **kwargs):
-
         # guarded imports
         # Third Party
         from auto_gptq import AutoGPTQForCausalLM, BaseQuantizeConfig #pylint: disable=import-outside-toplevel,import-error
@@ -84,20 +84,6 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
         low_cpu_mem_usage = kwargs.get("low_cpu_mem_usage")
         attn_implementation = kwargs.get("attn_implementation")
 
-        if low_cpu_mem_usage:
-            # Note that low_cpu_mem_usage is typically set to
-            # transformers.modeling_utils.is_fsdp_enabled.
-            # e.g.,
-            # https://github.com/huggingface/transformers/blob/a98c41798cf6ed99e1ff17e3792d6e06a2ff2ff3/src/transformers/modeling_utils.py#L2989-L2990
-            # but not doing that now as AutoGPTQ will call make_sure_no_tensor_in_meta_device
-            # https://github.com/AutoGPTQ/AutoGPTQ/blob/ea829c7bbe83561c2b1de26795b6592992373ef7/auto_gptq/modeling/_base.py#L982C17-L982C51
-            # which does not properly check if a QuantLayer has a bias set or not,
-            # https://github.com/AutoGPTQ/AutoGPTQ/blob/ea829c7bbe83561c2b1de26795b6592992373ef7/auto_gptq/modeling/_utils.py#L514
-            raise ValueError(
-                "low_cpu_mem_usage set to True. This may raise error if model has no bias, "
-                "due to AutoGPTQ bug. Not supporting at the moment."
-            )
-
         # there are some kwargs that we wont be passed to AutoModel, so we need
         # to patch them in
         _old_from_config = AutoModelForCausalLM.from_config
@@ -107,14 +93,25 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
         )
         AutoModelForCausalLM.from_config = _from_config  # patch
 
-        # NOTE: need to set the device map as below as we want to
-        # use AutoGPTQ for training.
-        # device_map is for inference only
-        # ref: https://huggingface.co/docs/accelerate/en/concept_guides/big_model_inference
+        if is_fsdp_enabled():
+            from .autogptq_utils import make_sure_no_tensor_in_meta_device
+            source = importlib.import_module("auto_gptq.modeling._utils")
+            original_obj = getattr(source, "make_sure_no_tensor_in_meta_device")
+            setattr(source, "make_sure_no_tensor_in_meta_device", make_sure_no_tensor_in_meta_device)
+            # reload and this should get the patched object
+            target_module = importlib.import_module("auto_gptq.modeling._base")
+            importlib.reload(target_module)
+            low_cpu_mem_usage = True
+
+        # NOTE: need to set the device map as below as we want to use AutoGPTQ for training.
+        # device_map is for inference only https://huggingface.co/docs/accelerate/en/concept_guides/big_model_inference
         # Thus we set it as below to effectively disable it.
-        device_map = (
-            {"": torch.cuda.current_device()} if torch.cuda.is_available() else None
-        )
+        device_map = {
+            "": (
+                torch.cuda.current_device() if not low_cpu_mem_usage
+                else "cpu"
+            ) if torch.cuda.is_available() else None
+        }
 
         # currently only enable triton_v2, because the triton kernels are the only ones
         # that have backwards
