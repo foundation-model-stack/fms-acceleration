@@ -70,6 +70,7 @@ def lora_adapters_switch_ddp_from_fsdp(modules, fsdp_plugin):
 
 class FastQuantizedPeftAccelerationPlugin(AccelerationPlugin):
 
+    # NOTE: may remove this when we have generic model rules
     restricted_model_archs = [
         "MixtralForCausalLM",
         "LlamaForCausalLM",
@@ -81,7 +82,10 @@ class FastQuantizedPeftAccelerationPlugin(AccelerationPlugin):
 
         self._base_layer = self._check_config_and_maybe_check_values(
             key="peft.quantization.fused_ops_and_kernels.base_layer",
-            values=["auto_gptq", "bitsandbytes"],
+            values=[
+                "auto_gptq",
+                # "bitsandbytes" # enable later when we have BNB implemented
+            ],
         )
 
         # only support these at the moment
@@ -136,10 +140,14 @@ class FastQuantizedPeftAccelerationPlugin(AccelerationPlugin):
         # if this is moved to framework, it can be handled as the same way as
         # log_initialization_message
         # log the patch summary
-        log_patch_summary(logging_func=logger.info)
+        if accelerator is not None and accelerator.is_main_process:
+            log_patch_summary(logging_func=logger.info)
 
         callbacks = []
-        if getattr(accelerator.state, "fsdp_plugin", None) is not None:
+        if (
+            accelerator is not None
+            and getattr(accelerator.state, "fsdp_plugin", None) is not None
+        ):
             # This function installs grad reduction hooks on adapters if
             # FSDP is detected. Because of incompatibility between FSDP and
             # fused modules, adapters are not sharded - instead
