@@ -21,7 +21,6 @@ from functools import partial
 from types import MethodType
 from typing import Dict, Tuple
 import os
-import importlib
 
 # Third Party
 from fms_acceleration import AccelerationPlugin
@@ -94,18 +93,22 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
         AutoModelForCausalLM.from_config = _from_config  # patch
 
         if is_fsdp_enabled():
-            from .autogptq_utils import make_sure_no_tensor_in_meta_device
-            source = importlib.import_module("auto_gptq.modeling._utils")
-            original_obj = getattr(source, "make_sure_no_tensor_in_meta_device")
-            setattr(source, "make_sure_no_tensor_in_meta_device", make_sure_no_tensor_in_meta_device)
-            # reload and this should get the patched object
-            target_module = importlib.import_module("auto_gptq.modeling._base")
-            importlib.reload(target_module)
+            from .autogptq_utils import patch_target_module, make_sure_no_tensor_in_meta_device #pylint: disable=import-outside-toplevel
+            # We patch `make_sure_no_tensor_in_meta_device` from autogptq to avoid errors on models without bias
+            patch_target_module(
+                to_patch = "auto_gptq.modeling._utils.make_sure_no_tensor_in_meta_device",
+                replace_with = make_sure_no_tensor_in_meta_device,
+                target_module = "auto_gptq.modeling._base",
+            )
             low_cpu_mem_usage = True
 
         # NOTE: need to set the device map as below as we want to use AutoGPTQ for training.
         # device_map is for inference only https://huggingface.co/docs/accelerate/en/concept_guides/big_model_inference
-        # Thus we set it as below to effectively disable it.
+        # For low_cpu_mem_usage = True, we have to set the device map to load checkpoints to "cpu"
+        # to avoid gpu consumption before train
+        # This approach will divert consumption to cpu memory, a better approach would be to load the checkpoints to meta device
+        # QLoRA is currently implemented by the former approach and will encounter the same issue.
+        # see https://github.com/huggingface/transformers/pull/25107#issuecomment-2134833262
         device_map = {
             "": (
                 torch.cuda.current_device() if not low_cpu_mem_usage
