@@ -221,14 +221,8 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
     ):
         # guarded imports
         # Third Party
-        from auto_gptq.nn_modules.qlinear.qlinear_tritonv2 import (  # pylint: disable=import-outside-toplevel,import-error
-            QuantLinear,
-        )
-        from auto_gptq.utils.peft_utils import (  # pylint: disable=import-outside-toplevel,import-error
-            GPTQLoraModel,
-            get_gptq_peft_model,
-        )
-
+        from auto_gptq.nn_modules.qlinear.qlinear_tritonv2 import QuantLinear #pylint: disable=import-outside-toplevel,import-error
+        from auto_gptq.utils.peft_utils import GPTQLoraModel, get_gptq_peft_model #pylint: disable=import-outside-toplevel,import-error
         # Local
         from .autogptq_utils import (  # pylint: disable=import-outside-toplevel
             create_new_module_peft,
