@@ -51,13 +51,8 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
     def model_loader(self, model_name: str, **kwargs):
         # guarded imports
         # Third Party
-        from auto_gptq import (  # pylint: disable=import-outside-toplevel,import-error
-            AutoGPTQForCausalLM,
-            BaseQuantizeConfig,
-        )
-        from auto_gptq.nn_modules.qlinear.qlinear_tritonv2 import (  # pylint: disable=import-outside-toplevel,import-error
-            QuantLinear,
-        )
+        from auto_gptq import AutoGPTQForCausalLM, BaseQuantizeConfig #pylint: disable=import-outside-toplevel,import-error
+        from auto_gptq.nn_modules.qlinear.qlinear_tritonv2 import QuantLinear #pylint: disable=import-outside-toplevel,import-error
 
         # Local
         from .autogptq_utils import (  # pylint: disable=import-outside-toplevel
