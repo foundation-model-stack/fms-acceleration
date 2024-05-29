@@ -21,12 +21,11 @@ import os
 
 # Local
 # GPTQ imports
-from ..fused_ops.unsloth_lora.gptq.fast_lora import LoRA_W as LoRA_W_gptq
-from ..fused_ops.unsloth_lora.gptq.fast_lora import apply_lora_qkv as fused_op_qkv_gptq
 from ..fused_ops.unsloth_lora.gptq.fast_lora import (
-    get_lora_parameters as get_lora_parameters_gptq,
+    apply_lora_qkv as fused_op_qkv_gptq,
+    apply_lora_o as fused_op_o_gptq,
+    apply_lora_mlp as fused_op_mlp_gptq,
 )
-from ..fused_ops.unsloth_lora.gptq.fast_lora import unpack_gptqstate
 from .model_patcher import ModelPatcherTrigger
 
 
@@ -94,14 +93,6 @@ def _build_qkv_forwards(
         return out
 
     return zip(module_names, [_forward_q, _forward_k, _forward_v])
-
-
-# fused ops for outputs for GPTQ
-def fused_op_o_gptq(self, X):
-    Oqstate, OA, OB, OS = get_lora_parameters_gptq(self)
-    O = LoRA_W_gptq.apply(X, *unpack_gptqstate(Oqstate), OA, OB, OS)
-    return O
-
 
 # TODO: add the MLP
 def build_lora_fused_ops(
