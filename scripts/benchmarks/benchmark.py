@@ -112,8 +112,8 @@ def extract_gpu_memory_metrics(output_metrics) -> Tuple[float]:
         return 0, 0
 
     trainer_stage_order = [
-        (HF_TRAINER_LOG_GPU_STAGE_BEFORE_INIT, False),
-        (HF_TRAINER_LOG_GPU_STAGE_INIT, False),
+        (HF_TRAINER_LOG_GPU_STAGE_BEFORE_INIT, True),
+        (HF_TRAINER_LOG_GPU_STAGE_INIT, True),
         (HF_TRAINER_LOG_GPU_STAGE_TRAIN, True),
     ]
     alloc_running_sum = 0
