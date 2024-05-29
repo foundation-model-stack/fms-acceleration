@@ -16,7 +16,7 @@
 # https://spdx.dev/learn/handling-license-info/
 
 # Standard
-from typing import Callable, List, Any
+from typing import Any, Callable, List
 import importlib
 
 # Third Party
@@ -24,12 +24,15 @@ from peft import LoraConfig
 from peft.tuners.lora.gptq import QuantLinear as LoraLinearGPTQ
 import torch
 
-def patch_target_module(
+
+# This function will be replaced after merging
+# https://github.com/foundation-model-stack/fms-acceleration/pull/25
+def _patch_target_module(
     to_patch: str,
     replace_with: Any,
     target_module: str = None,
 ):
-    to_patch = to_patch.split('.')
+    to_patch = to_patch.split(".")
     assert len(to_patch) > 1, "must have an object to patch"
 
     to_patch, obj_name_to_patch = to_patch[:-1], to_patch[-1]
@@ -46,6 +49,7 @@ def patch_target_module(
         # replace it
         setattr(source, obj_name_to_patch, original_obj)
 
+
 def make_sure_no_tensor_in_meta_device(
     model,
     use_triton: bool,
@@ -57,7 +61,11 @@ def make_sure_no_tensor_in_meta_device(
     use_marlin: bool = False,
     use_tritonv2: bool = False,
 ):
-    from auto_gptq.utils.import_utils import dynamically_import_QuantLinear  #pylint: disable=import-outside-toplevel,import-error
+    # Third Party
+    from auto_gptq.utils.import_utils import (  # pylint: disable=import-outside-toplevel,import-error
+        dynamically_import_QuantLinear,
+    )
+
     QuantLinear = dynamically_import_QuantLinear(
         use_triton,
         desc_act,
@@ -66,15 +74,17 @@ def make_sure_no_tensor_in_meta_device(
         disable_exllama=disable_exllama,
         disable_exllamav2=disable_exllamav2,
         use_marlin=use_marlin,
-        use_tritonv2=use_tritonv2
-        )
-    for n, m in model.named_modules():
+        use_tritonv2=use_tritonv2,
+    )
+    for _, m in model.named_modules():
         bias = getattr(m, "bias", None)
         if bias:
             if isinstance(m, QuantLinear) and bias.device == torch.device("meta"):
                 m.register_buffer(
-                    "bias", torch.zeros((m.outfeatures), dtype=torch.float16, device="cpu")
-                    )
+                    "bias",
+                    torch.zeros((m.outfeatures), dtype=torch.float16, device="cpu"),
+                )
+
 
 def replace_module_peft(self, parent_module, child_name, new_module, old_module):
 

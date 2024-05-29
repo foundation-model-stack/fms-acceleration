@@ -31,6 +31,7 @@ from transformers.modeling_utils import is_fsdp_enabled
 import torch
 import torch.distributed
 
+
 class AutoGPTQAccelerationPlugin(AccelerationPlugin):
 
     require_packages = ["auto_gptq"]
@@ -50,11 +51,18 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
     def model_loader(self, model_name: str, **kwargs):
         # guarded imports
         # Third Party
-        from auto_gptq import AutoGPTQForCausalLM, BaseQuantizeConfig #pylint: disable=import-outside-toplevel,import-error
-        from auto_gptq.nn_modules.qlinear.qlinear_tritonv2 import QuantLinear #pylint: disable=import-outside-toplevel,import-error
+        from auto_gptq import (  # pylint: disable=import-outside-toplevel,import-error
+            AutoGPTQForCausalLM,
+            BaseQuantizeConfig,
+        )
+        from auto_gptq.nn_modules.qlinear.qlinear_tritonv2 import (  # pylint: disable=import-outside-toplevel,import-error
+            QuantLinear,
+        )
 
         # Local
-        from .autogptq_utils import patch_forward_to_view_attributes_before_call #pylint: disable=import-outside-toplevel
+        from .autogptq_utils import (  # pylint: disable=import-outside-toplevel
+            patch_forward_to_view_attributes_before_call,
+        )
 
         # Currently we allow only a quantized checkpoint to be loaded, we do not
         # implement the quantization process here.
@@ -93,27 +101,36 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
         AutoModelForCausalLM.from_config = _from_config  # patch
 
         if is_fsdp_enabled():
-            from .autogptq_utils import patch_target_module, make_sure_no_tensor_in_meta_device #pylint: disable=import-outside-toplevel
-            # We patch `make_sure_no_tensor_in_meta_device` from autogptq to avoid errors on models without bias
-            patch_target_module(
-                to_patch = "auto_gptq.modeling._utils.make_sure_no_tensor_in_meta_device",
-                replace_with = make_sure_no_tensor_in_meta_device,
-                target_module = "auto_gptq.modeling._base",
+            # Local
+            from .autogptq_utils import (  # pylint: disable=import-outside-toplevel
+                _patch_target_module,
+                make_sure_no_tensor_in_meta_device,
+            )
+
+            # We patch `make_sure_no_tensor_in_meta_device`
+            # from autogptq to avoid errors on models without bias
+            _patch_target_module(
+                to_patch="auto_gptq.modeling._utils.make_sure_no_tensor_in_meta_device",
+                replace_with=make_sure_no_tensor_in_meta_device,
+                target_module="auto_gptq.modeling._base",
             )
             low_cpu_mem_usage = True
 
         # NOTE: need to set the device map as below as we want to use AutoGPTQ for training.
-        # device_map is for inference only https://huggingface.co/docs/accelerate/en/concept_guides/big_model_inference
+        # device_map is for inference only
+        # https://huggingface.co/docs/accelerate/en/concept_guides/big_model_inference
         # For low_cpu_mem_usage = True, we have to set the device map to load checkpoints to "cpu"
         # to avoid gpu consumption before train
-        # This approach will divert consumption to cpu memory, a better approach would be to load the checkpoints to meta device
+        # This approach will divert consumption to cpu memory,
+        # a better approach would be to load the checkpoints to meta device
         # QLoRA is currently implemented by the former approach and will encounter the same issue.
         # see https://github.com/huggingface/transformers/pull/25107#issuecomment-2134833262
         device_map = {
             "": (
-                torch.cuda.current_device() if not low_cpu_mem_usage
-                else "cpu"
-            ) if torch.cuda.is_available() else None
+                (torch.cuda.current_device() if not low_cpu_mem_usage else "cpu")
+                if torch.cuda.is_available()
+                else None
+            )
         }
 
         # currently only enable triton_v2, because the triton kernels are the only ones
@@ -202,11 +219,19 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
     ):
         # guarded imports
         # Third Party
-        from auto_gptq.nn_modules.qlinear.qlinear_tritonv2 import QuantLinear #pylint: disable=import-outside-toplevel,import-error
-        from auto_gptq.utils.peft_utils import GPTQLoraModel, get_gptq_peft_model #pylint: disable=import-outside-toplevel,import-error
+        from auto_gptq.nn_modules.qlinear.qlinear_tritonv2 import (  # pylint: disable=import-outside-toplevel,import-error
+            QuantLinear,
+        )
+        from auto_gptq.utils.peft_utils import (  # pylint: disable=import-outside-toplevel,import-error
+            GPTQLoraModel,
+            get_gptq_peft_model,
+        )
 
         # Local
-        from .autogptq_utils import create_new_module_peft, replace_module_peft #pylint: disable=import-outside-toplevel
+        from .autogptq_utils import (  # pylint: disable=import-outside-toplevel
+            create_new_module_peft,
+            replace_module_peft,
+        )
 
         (peft_config,) = modifiable_args  # unpack modifiable args
 
