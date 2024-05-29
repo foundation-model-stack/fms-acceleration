@@ -77,7 +77,7 @@ FILE_MEM = "gpu_memory_logs.csv"
 GPU_LOG_USED_MEM_COLUMN_NAME = "memory.used [MiB]"
 GPU_LOG_METRIC_SUFFIX = " MiB"
 GPU_TABLE = "timestamp,name,index,memory.used"
-RESULT_FIELD_RESERVED_GPU_MEM = "nvidia_mem_reserved"
+RESULT_FIELD_RESERVED_GPU_MEM = "mem_nvidia_mem_reserved"
 RESULT_FIELD_DEVICE_NAME = "gpu_device_name"
 
 HF_TRAINER_LOG_GPU_STAGE_BEFORE_INIT = "before_init_mem_gpu"
@@ -86,8 +86,8 @@ HF_TRAINER_LOG_GPU_STAGE_TRAIN = "train_mem_gpu"
 KEYWORD_PEAKED_DELTA = "peaked_delta"
 KEYWORD_ALLOC_DELTA = "alloc_delta"
 HF_ARG_SKIP_MEMORY_METRIC = "--skip_memory_metrics"
-RESULT_FIELD_ALLOCATED_GPU_MEM = "torch_mem_alloc_in_bytes"
-RESULT_FIELD_PEAK_ALLOCATED_GPU_MEM = "peak_torch_mem_alloc_in_bytes"
+RESULT_FIELD_ALLOCATED_GPU_MEM = "mem_torch_mem_alloc_in_bytes"
+RESULT_FIELD_PEAK_ALLOCATED_GPU_MEM = "mem_peak_torch_mem_alloc_in_bytes"
 
 
 def extract_gpu_memory_metrics(output_metrics) -> Tuple[float]:

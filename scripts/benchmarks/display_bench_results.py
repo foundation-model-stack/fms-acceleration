@@ -22,7 +22,7 @@ def main(*directories: str, output_filename: str = "results.csv", remove_columns
         df = df.loc[df.error_messages.isna()]
     except:
         pass
-    df = df.reset_index().drop("output_dir", axis=1)
+    df = df.reset_index().drop(["index", "output_dir"], axis=1)
     df.reindex(sorted(df.columns), axis=1).to_csv(output_filename, index=False)
     print("***************** Report Created ******************")
     print(f"Total lines: '{len(df)}'")
@@ -55,4 +55,8 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    main(args.bench_outputs, output_filename=args.result_file, remove_columns=args.remove_columns)
+    main(
+        args.bench_outputs,
+        output_filename=args.result_file,
+        remove_columns=args.remove_columns,
+    )
