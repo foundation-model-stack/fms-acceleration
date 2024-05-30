@@ -5,20 +5,19 @@ from typing import Callable, List, Type
 import torch
 import os
 
+# NOTE: the default activation is swiglu in both cases 
+from ..fused_ops.unsloth_lora.bnb.fast_lora import (
+    apply_lora_qkv as fused_op_qkv_bnb,
+    apply_lora_o_v2 as fused_op_o_bnb,
+    apply_lora_mlp_swiglu as fused_op_mlp_bnb,
+)
+
 from ..fused_ops.unsloth_lora.gptq.fast_lora import (
     apply_lora_qkv as fused_op_qkv_gptq,
     apply_lora_o_v2 as fused_op_o_gptq,
     apply_lora_mlp as fused_op_mlp_gptq,
 )
 from .model_patcher import ModelPatcherTrigger
-from functools import partial
-
-
-# simple utility function to guess if its lora layer
-def _is_loralayer(module: torch.nn.Module, names: List[str] = None):
-    if names is None:
-        names = ["lora_A", "lora_B", "base_layer"]
-    return all(hasattr(module, x) for x in names)
 
 KEY_QKV = 'qkv'
 KEY_O = 'o'
@@ -29,8 +28,21 @@ FUSED_OPS = {
         KEY_QKV: fused_op_qkv_gptq,
         KEY_O: fused_op_o_gptq,
         KEY_MLP: fused_op_mlp_gptq
+    },
+    'bitsandbytes': {
+        KEY_QKV: fused_op_qkv_bnb,
+        KEY_O: fused_op_o_bnb,
+        KEY_MLP: fused_op_mlp_bnb
     }
 }
+
+from functools import partial
+
+# simple utility function to guess if its lora layer
+def _is_loralayer(module: torch.nn.Module, names: List[str] = None):
+    if names is None:
+        names = ["lora_A", "lora_B", "base_layer"]
+    return all(hasattr(module, x) for x in names)
 
 # builds a triple of forward functions, that each can be attached
 # on a series of QKV's, where if the first one is called, will call the
@@ -99,7 +111,7 @@ def build_lora_fused_ops(
     # get the fused op
     fused_operation = FUSED_OPS[base_type][fused_op]
 
-    # handle the QKVs
+    # handle casting issues 
     if base_type == "auto_gptq":
 
         # this is required due to this FSDP fix
@@ -143,11 +155,6 @@ def build_lora_fused_ops(
                 submodule_names=patched_submodule_names,
                 is_method_forward=False,
             )
-
-    else:
-        raise NotImplementedError(
-            f"Cannot build fused ops for base type '{base_type}'."
-        )
 
     if fused_op == KEY_QKV:
         return [

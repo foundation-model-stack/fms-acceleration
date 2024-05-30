@@ -394,3 +394,10 @@ def apply_lora_o(self, X):
     O = LoRA_W.apply(X, OW, OW_quant, OA, OB, OS)
     return O
 pass
+
+# added by flim@sg.ibm.com
+# this will be patchable on the actual module
+def apply_lora_o_v2(self, X):
+    OW, OW_quant, OA, OB, OS = get_lora_parameters(self)
+    O = LoRA_W.apply(X, OW, OW_quant, OA, OB, OS)
+    return O
