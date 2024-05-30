@@ -17,6 +17,7 @@ from typing import Callable, List, Type
 
 # Third Party
 import torch
+import os
 
 # Local
 # GPTQ imports
@@ -59,6 +60,7 @@ def _build_qkv_forwards(
     # - populates the triple Q, K, V
     # - subsequent calls will be a no-op until ALL Q, K, V get reset to None
     def _fused_op(X):
+
         nonlocal Q, K, V
         if Q is None and K is None and V is None:
             Q, K, V = fused_operation(attn, X)
@@ -115,6 +117,43 @@ def build_lora_fused_ops(
     if base_type == "auto_gptq":
         _qkv_fused_op = fused_op_qkv_gptq
         _o_fused_op = fused_op_o_gptq
+
+        # this is required due to this FSDP fix
+        # https://github.com/foundation-model-stack/fms-acceleration/pull/15
+        try:
+            world_size = torch.distributed.get_world_size()
+        except ValueError:
+            world_size = 1  # pg not init
+
+        if (
+            world_size > 1
+            and os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true"
+        ):
+
+            # guarded import
+            from fms_acceleration_peft.autogptq_utils import ( #pylint: disable=import-outside-toplevel
+                patch_forward_to_view_attributes_before_call, 
+                PATCH_FOR_FSDP_TRITON_V2
+            )
+
+            # patch each of the fused ops to view the attributes
+            # back into torch.int32
+            # TODO: add the MLP fused op also
+            _qkv_fused_op = patch_forward_to_view_attributes_before_call(
+                _qkv_fused_op, 
+                PATCH_FOR_FSDP_TRITON_V2, torch.int32,
+                submodule_names=[
+                    n + '.base_layer' for n in qkv_module_names
+                ],
+                is_method_forward=False,
+            )
+            _o_fused_op = patch_forward_to_view_attributes_before_call(
+                _o_fused_op,
+                PATCH_FOR_FSDP_TRITON_V2, torch.int32,
+                submodule_names='base_layer',
+                is_method_forward=False,
+            )
+
     else:
         raise NotImplementedError(
             f"Cannot build fused ops for base type '{base_type}'."

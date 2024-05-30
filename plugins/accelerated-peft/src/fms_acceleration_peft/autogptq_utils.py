@@ -24,6 +24,9 @@ from peft import LoraConfig
 from peft.tuners.lora.gptq import QuantLinear as LoraLinearGPTQ
 import torch
 
+# these parameters are to be patched for triton v2
+# consider making a map if patching more kernels
+PATCH_FOR_FSDP_TRITON_V2 = ["qweight", "qzeros"]
 
 # This function may be moved after merging
 # https://github.com/foundation-model-stack/fms-acceleration/pull/25
@@ -120,34 +123,47 @@ def create_new_module_peft(
     # if module cannot be found, return None which results in a raise in the call-stack
     return new_module
 
-
 # consider to move this somewhere more general
 def patch_forward_to_view_attributes_before_call(
     old_forward: Callable,
     attribute_names: List[str],
-    torch_dtype,
+    torch_dtype: torch.dtype,
+    submodule_names: str = None,
+    is_method_forward: bool = True,
 ):
     # patch old_forward to view attribtues to torch_dype
     # before call
+        
+    if submodule_names is None:
+        submodule_names = ''
+    if isinstance(submodule_names, str):
+        submodule_names = [submodule_names]
 
     def _forward(self, *args, **kwargs):
-        # perform a view on all these attributes
-        for attr_name in attribute_names:
 
-            # the view should be a passthrough
-            # if attr.dtype == torch_dtype
-            attr = getattr(self, attr_name)
+        for sub_name in submodule_names:
+            mod = self.get_submodule(sub_name)
 
-            # perform view
-            attr = attr.view(torch_dtype)
+            # perform a view on all these attributes
+            for attr_name in attribute_names:
 
-            try:
-                setattr(self, attr_name, attr)
-            except TypeError:
-                # this means already have attr_name as a parameter, then
-                # just assign this way
-                self.__dict__[attr_name] = attr
+                # the view should be a passthrough
+                # if attr.dtype == torch_dtype
+                attr = getattr(mod, attr_name)
 
-        return old_forward(*args, **kwargs)
+                # perform view
+                attr = attr.view(torch_dtype)
+
+                try:
+                    setattr(mod, attr_name, attr)
+                except TypeError:
+                    # this means already have attr_name as a parameter, then
+                    # just assign this way
+                    mod.__dict__[attr_name] = attr
+
+        if is_method_forward:
+            # in this case, the self is already bound
+            return old_forward(*args, **kwargs)
+        return old_forward(self, *args, **kwargs)
 
     return _forward
