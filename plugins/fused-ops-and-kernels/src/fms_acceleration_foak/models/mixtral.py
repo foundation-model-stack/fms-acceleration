@@ -27,8 +27,8 @@ from ..kernels.unsloth.rms_layernorm import fast_rms_layernorm
 from ..kernels.unsloth.rope_embedding import fast_rope_embedding
 from .model_patcher import ModelPatcher, ModelPatcherRule, ModelPatcherTrigger
 from .model_patcher import combine_triggers, combine_functions
-from .utils2 import build_lora_fused_ops, trigger_fused_ops
-from .utils2 import KEY_QKV, KEY_O
+from .utils import build_lora_fused_ops, trigger_fused_ops
+from .utils import KEY_QKV, KEY_O
 
 # - do regex on RMSNorm class name
 # - check on the tensors required for fast_rms_layernorm

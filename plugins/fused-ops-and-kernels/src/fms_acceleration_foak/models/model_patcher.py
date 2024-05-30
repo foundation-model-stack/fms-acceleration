@@ -465,7 +465,6 @@ def patch_model(model: torch.nn.Module, **kwargs):
     ModelPatcher.patch(model, **kwargs)
     return model
 
-
 def patch_model_summary():
     return ModelPatcher.summary()
 
