@@ -582,7 +582,7 @@ class DryRunExperiment(Experiment):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def run(self, run_cmd: str, environment_variables: Dict = None):
+    def run(self, run_cmd: str, environment_variables: Dict = None, **kwargs):
         def _dummy(*args, **kwargs):
             pass
 

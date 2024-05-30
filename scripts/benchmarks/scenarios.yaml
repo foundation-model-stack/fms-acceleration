@@ -68,7 +68,7 @@ scenarios:
 
     -   name: accelerated-peft-gptq
         framework_config: 
-            - accelerated-peft-autogptq
+            - accelerated-peft-autogptq-foak
         arguments:
             learning_rate: 2e-4
             fp16: True

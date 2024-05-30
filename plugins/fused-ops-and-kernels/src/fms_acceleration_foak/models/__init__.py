@@ -12,14 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-KEY_PLUGINS = "plugins"
-PLUGIN_PREFIX = "fms_acceleration_"
+# Local
+from .model_patcher import ModelPatcher
 
-# the order below is a linear precedence in which the plugins will be registered
-# and activated.
-# - hence the plugins that have model loaders should be on top of this list
+PATCHES = [".models.llama", ".models.mistral"]
+PLUGIN_PREFIX = "fms_acceleration_foak"
 
-PLUGINS = [
-    "peft",
-    "foak"
-]
+# TODO: remove the need for the prefix
+ModelPatcher.load_patches(
+    [f"{PLUGIN_PREFIX}{postfix}" for postfix in PATCHES],
+)
