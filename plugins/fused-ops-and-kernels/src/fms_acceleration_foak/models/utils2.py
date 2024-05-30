@@ -122,14 +122,19 @@ def build_lora_fused_ops(
 
             # patch each of the fused ops to view the attributes
             # back into torch.int32
-            # - check if its a group fused op, if so then the triggering
-            #   needs to happen one level higher
-            if len(submodule_names) > 0:
+            # - if there are multiple submodules, then we assume that
+            #   'fused_operation' will be called on module that has
+            #   submodules specified in 'submodule_names'.
+            # - otherwise if there is only a single 'submodule_name', then 
+            #   assume that 'fused_operation' called on the submodule specified
+            #   by 'submodule_name' itself
+            if len(submodule_names) > 1:
                 patched_submodule_names = [
                     n + '.base_layer' for n in submodule_names
                 ]
             else:
-                # otherwise its just the base layer
+                # otherwise assume calling on the 'submodule_name' itself
+                # so its just the base layer.
                 patched_submodule_names = 'base_layer'
 
             fused_operation = patch_forward_to_view_attributes_before_call(

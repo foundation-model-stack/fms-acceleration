@@ -16,7 +16,7 @@
 from .model_patcher import ModelPatcher
 
 PATCHES = [
-    ".models.llamar", ".models.mistral",
+    ".models.llamar", ".models.mistralr",
 ]
 PLUGIN_PREFIX = "fms_acceleration_foak"
 
