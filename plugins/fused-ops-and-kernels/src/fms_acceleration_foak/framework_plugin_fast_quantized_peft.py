@@ -82,9 +82,7 @@ class FastQuantizedPeftAccelerationPlugin(AccelerationPlugin):
 
         self._base_layer = self._check_config_and_maybe_check_values(
             key="peft.quantization.fused_ops_and_kernels.base_layer",
-            values=[
-                "auto_gptq", "bitsandbytes" 
-            ],
+            values=["auto_gptq", "bitsandbytes"],
         )
 
         # only support these at the moment

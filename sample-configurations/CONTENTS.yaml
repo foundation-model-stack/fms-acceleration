@@ -31,4 +31,4 @@ framework_configs:
       plugins:
         - accelerated-peft
         - fused-ops-and-kernels
-      filenabnb-nf4me: accelerated-peft-bnb-nf4-foak-sample-configuration.yaml
+      filename: accelerated-peft-bnb-nf4-foak-sample-configuration.yaml

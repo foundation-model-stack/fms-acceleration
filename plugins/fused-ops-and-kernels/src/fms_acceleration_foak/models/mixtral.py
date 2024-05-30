@@ -25,10 +25,14 @@ from transformers.models.mixtral.modeling_mixtral import (
 from ..kernels.unsloth.cross_entropy_loss import FastCrossEntropyLoss
 from ..kernels.unsloth.rms_layernorm import fast_rms_layernorm
 from ..kernels.unsloth.rope_embedding import fast_rope_embedding
-from .model_patcher import ModelPatcher, ModelPatcherRule, ModelPatcherTrigger
-from .model_patcher import combine_triggers, combine_functions
-from .utils import build_lora_fused_ops, trigger_fused_ops
-from .utils import KEY_QKV, KEY_O
+from .model_patcher import (
+    ModelPatcher,
+    ModelPatcherRule,
+    ModelPatcherTrigger,
+    combine_functions,
+    combine_triggers,
+)
+from .utils import KEY_O, KEY_QKV, build_lora_fused_ops, trigger_fused_ops
 
 # - do regex on RMSNorm class name
 # - check on the tensors required for fast_rms_layernorm
@@ -46,17 +50,19 @@ ModelPatcher.register(
         trigger=combine_triggers(
             ModelPatcherTrigger(
                 check=partial(
-                    trigger_fused_ops, attn_cls=MixtralAttention,
+                    trigger_fused_ops,
+                    attn_cls=MixtralAttention,
                     submodule_names=["q_proj", "k_proj", "v_proj"],
                 )
             ),
             ModelPatcherTrigger(
                 check=partial(
-                    trigger_fused_ops, attn_cls=MixtralAttention,
+                    trigger_fused_ops,
+                    attn_cls=MixtralAttention,
                     submodule_names=["o_proj"],
                 )
             ),
-            logic='OR',
+            logic="OR",
         ),
         forward_builder=combine_functions(
             partial(
@@ -69,7 +75,7 @@ ModelPatcher.register(
                 submodule_names=["o_proj"],
                 fused_op=KEY_O,
             ),
-            logic='APPEND',
+            logic="APPEND",
         ),
         forward_builder_args=["base_type"],
     )

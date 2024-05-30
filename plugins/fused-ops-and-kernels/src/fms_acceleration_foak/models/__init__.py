@@ -15,10 +15,7 @@
 # Local
 from .model_patcher import ModelPatcher
 
-PATCHES = [
-    ".models.llama", ".models.mistral",
-    ".models.mixtral"
-]
+PATCHES = [".models.llama", ".models.mistral", ".models.mixtral"]
 PLUGIN_PREFIX = "fms_acceleration_foak"
 
 # TODO: remove the need for the prefix

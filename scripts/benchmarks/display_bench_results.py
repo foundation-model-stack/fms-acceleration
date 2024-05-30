@@ -1,12 +1,17 @@
 # Standard
+from typing import List
 import argparse
 
 # First Party
 # import this because of alot of internal contants
-from scripts.benchmarks.benchmark import gather_report, DIR_SAMP_CONFIGS
-from typing import List
+from scripts.benchmarks.benchmark import DIR_SAMP_CONFIGS, gather_report
 
-def main(*directories: str, output_filename: str = "results.csv", remove_columns: List[str] = None):
+
+def main(
+    *directories: str,
+    output_filename: str = "results.csv",
+    remove_columns: List[str] = None,
+):
     "gather outputs from a list of directories and output to a csv"
 
     df, constant = gather_report(*directories, raw=False)

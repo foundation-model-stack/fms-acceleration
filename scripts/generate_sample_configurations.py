@@ -154,8 +154,8 @@ CONFIGURATIONS = {
     KEY_BNB_NF4_BASELINE: (
         "plugins/accelerated-peft/configs/bnb.yaml",
         [
-            ("peft.quantization.bitsandbytes.quant_type", "nf4"), 
-            ("peft.quantization.bitsandbytes.no_peft_model", True), 
+            ("peft.quantization.bitsandbytes.quant_type", "nf4"),
+            ("peft.quantization.bitsandbytes.no_peft_model", True),
         ],
     ),
     KEY_AUTO_GPTQ_FOAK: (
@@ -181,6 +181,7 @@ COMBINATIONS = [
     ("accelerated-peft-bnb-nf4-foak", (KEY_BNB_NF4, KEY_BNB_NF4_FOAK)),
 ]
 
+
 # TODO: throw error if merge conflicts
 def merge_configs(config_contents: List[Dict]):
     "helper function to merge configuration contents."
@@ -189,10 +190,10 @@ def merge_configs(config_contents: List[Dict]):
     def _merge(result: Dict, new_contents: Dict):
         for k, v in new_contents.items():
             if k not in result:
-                # if k is not in result, it means v does not 
+                # if k is not in result, it means v does not
                 # exist as a subtree under result, so we just do
                 # an assingment
-                result[k] = v 
+                result[k] = v
             else:
                 # otherwise we call the merge
                 _merge(result[k], v)

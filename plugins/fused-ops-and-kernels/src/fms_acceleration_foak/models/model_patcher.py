@@ -465,15 +465,13 @@ def patch_model(model: torch.nn.Module, **kwargs):
     ModelPatcher.patch(model, **kwargs)
     return model
 
+
 def patch_model_summary():
     return ModelPatcher.summary()
 
-def combine_triggers(
-    *triggers: ModelPatcherTrigger,
-    logic: str = 'OR'
-):
-    assert logic == 'OR', \
-        "only OR logic implemented for combining triggers"
+
+def combine_triggers(*triggers: ModelPatcherTrigger, logic: str = "OR"):
+    assert logic == "OR", "only OR logic implemented for combining triggers"
 
     # NOTE: this can be probably simplified
     def _or_logic(*args, **kwargs):
@@ -484,13 +482,14 @@ def combine_triggers(
 
     return ModelPatcherTrigger(check=_or_logic)
 
-def combine_functions(*funcs: Callable, logic: str = 'APPEND'):
-    assert logic == 'APPEND', \
-        "only APPEND logic implemented for combining functions"
+
+def combine_functions(*funcs: Callable, logic: str = "APPEND"):
+    assert logic == "APPEND", "only APPEND logic implemented for combining functions"
 
     def _append(*args, **kwargs):
         results = []
         for f in funcs:
             results += f(*args, **kwargs)
         return results
+
     return _append

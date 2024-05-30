@@ -51,13 +51,18 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
     def model_loader(self, model_name: str, **kwargs):
         # guarded imports
         # Third Party
-        from auto_gptq import AutoGPTQForCausalLM, BaseQuantizeConfig #pylint: disable=import-outside-toplevel,import-error
-        from auto_gptq.nn_modules.qlinear.qlinear_tritonv2 import QuantLinear #pylint: disable=import-outside-toplevel,import-error
+        from auto_gptq import (  # pylint: disable=import-outside-toplevel,import-error
+            AutoGPTQForCausalLM,
+            BaseQuantizeConfig,
+        )
+        from auto_gptq.nn_modules.qlinear.qlinear_tritonv2 import (  # pylint: disable=import-outside-toplevel,import-error
+            QuantLinear,
+        )
 
         # Local
-        from .autogptq_utils import ( #pylint: disable=import-outside-toplevel
-            patch_forward_to_view_attributes_before_call, 
-            PATCH_FOR_FSDP_TRITON_V2
+        from .autogptq_utils import (  # pylint: disable=import-outside-toplevel
+            PATCH_FOR_FSDP_TRITON_V2,
+            patch_forward_to_view_attributes_before_call,
         )
 
         # Currently we allow only a quantized checkpoint to be loaded, we do not
@@ -214,8 +219,14 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
     ):
         # guarded imports
         # Third Party
-        from auto_gptq.nn_modules.qlinear.qlinear_tritonv2 import QuantLinear #pylint: disable=import-outside-toplevel,import-error
-        from auto_gptq.utils.peft_utils import GPTQLoraModel, get_gptq_peft_model #pylint: disable=import-outside-toplevel,import-error
+        from auto_gptq.nn_modules.qlinear.qlinear_tritonv2 import (  # pylint: disable=import-outside-toplevel,import-error
+            QuantLinear,
+        )
+        from auto_gptq.utils.peft_utils import (  # pylint: disable=import-outside-toplevel,import-error
+            GPTQLoraModel,
+            get_gptq_peft_model,
+        )
+
         # Local
         from .autogptq_utils import (  # pylint: disable=import-outside-toplevel
             create_new_module_peft,
