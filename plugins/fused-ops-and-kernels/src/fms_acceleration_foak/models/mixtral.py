@@ -24,18 +24,11 @@ from transformers.models.mixtral.modeling_mixtral import (
 # Local
 from ..kernels.unsloth.cross_entropy_loss import FastCrossEntropyLoss
 from ..kernels.unsloth.rms_layernorm import fast_rms_layernorm
-from ..kernels.unsloth.rope_embedding import fast_rope_embedding as _fast_rope_embedding
+from ..kernels.unsloth.rope_embedding import fast_rope_embedding
 from .model_patcher import ModelPatcher, ModelPatcherRule, ModelPatcherTrigger
 from .model_patcher import combine_triggers, combine_functions
 from .utils2 import build_lora_fused_ops, trigger_fused_ops
 from .utils2 import KEY_QKV, KEY_O
-
-
-# NOTE: fast_rope_embedding does not work with position_ids
-# currently they are ignored
-def fast_rope_embedding(Q, K, cos, sin, position_ids=None):
-    return _fast_rope_embedding(Q, K, cos, sin)
-
 
 # - do regex on RMSNorm class name
 # - check on the tensors required for fast_rms_layernorm

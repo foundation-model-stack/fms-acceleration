@@ -130,8 +130,9 @@ class Fast_RoPE_Embedding(torch.autograd.Function):
     pass
 pass
 
-
-def fast_rope_embedding(Q, K, cos, sin):
+# modified by flim@sg.ibm.com
+# NOTE: fast_rope embeddings currently does not account for position ids
+def fast_rope_embedding(Q, K, cos, sin, position_ids=None):
     Q = Fast_RoPE_Embedding.apply(Q.transpose(1, 2), cos, sin).transpose(1, 2)
     K = Fast_RoPE_Embedding.apply(K.transpose(1, 2), cos, sin).transpose(1, 2)
     return Q, K
