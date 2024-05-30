@@ -21,7 +21,6 @@ For example:
 - GPTQ-LoRA: 22-44 % token throughput increase on 1 GPU as compared to using Hugging Face BNB QLoRA 
 - GPTQ-LoRA: Straightforward integration with multiple GPU as compared to using Hugging Face BNB QLoRA
 
-*Huggingface BNB QLoRA numbers taken with legacy approaches, but we are aware of [this issue](https://github.com/foundation-model-stack/fms-acceleration/issues/10) and will update our benches*.
 *The above includes numbers using fusedOps-and-kernels and actual impl coming soon, see below*.
 
 **This package is in BETA and is under development. Expect breaking changes!**
