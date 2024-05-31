@@ -52,7 +52,7 @@ scenarios:
     -   name: accelerated-peft-bnb
         framework_config: 
             - accelerated-peft-bnb
-            - accelerated-peft-autogptq-foak
+            - accelerated-peft-bnb-foak
         arguments:
             fp16: True
             learning_rate: 2e-4

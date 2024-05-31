@@ -61,7 +61,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     main(
-        args.bench_outputs,
+        *args.bench_outputs,
         output_filename=args.result_file,
         remove_columns=args.remove_columns,
     )

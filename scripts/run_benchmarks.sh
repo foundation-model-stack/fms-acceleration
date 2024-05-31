@@ -116,7 +116,7 @@ python $WORKING_DIR/benchmark.py \
 # this will write to the BENCH_RESULT_FILE
 # Remove the columns with values already represented by other metrics in the summary report
 PYTHONPATH=. \
-    python $WORKING_DIR/display_bench_results.py benchmark_outputs \
+    python $WORKING_DIR/display_bench_results.py $RESULT_DIR \
     --result_file $BENCH_RESULT_FILE \
     --remove_columns \
         'before_init_mem_cpu' \
