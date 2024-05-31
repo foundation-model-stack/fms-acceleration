@@ -16,6 +16,7 @@
 from typing import Callable, Dict, Tuple
 
 # Third Party
+from accelerate.utils import set_module_tensor_to_device
 from fms_acceleration import AccelerationPlugin
 from peft import LoraConfig
 from peft.tuners.lora.layer import LoraLayer
@@ -63,9 +64,20 @@ def lora_adapters_switch_ddp_from_fsdp(modules, fsdp_plugin):
         return grad
 
     for mod in modules:
+        # NOTE: assuming lora has no bias
+        A = mod.lora_A.default
+        B = mod.lora_B.default
+
         # install hooks on the adapters
-        mod.lora_A.default.weight.register_hook(_all_reduce_hook)
-        mod.lora_B.default.weight.register_hook(_all_reduce_hook)
+        A.weight.register_hook(_all_reduce_hook)
+        B.weight.register_hook(_all_reduce_hook)
+
+        # because we will ignore these from FSDP, we need to manually
+        # move them to gpu if they are already not on them
+        if not A.weight.is_cuda:
+            set_module_tensor_to_device(A, "weight", "cuda")
+        if not B.weight.is_cuda:
+            set_module_tensor_to_device(B, "weight", "cuda")
 
 
 class FastQuantizedPeftAccelerationPlugin(AccelerationPlugin):
