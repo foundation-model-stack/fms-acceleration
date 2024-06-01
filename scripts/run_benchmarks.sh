@@ -58,10 +58,10 @@ if [ -n "$RESULT_DIR" ]; then
         echo "Results dir $RESULT_DIR is not empty, but NO_OVERWRITE=true"
         echo "If intending to overwrite please delete the folder manually"
         echo "or do not set NO_OVERWRITE"
-        exit 1
+    else
+        echo "Deleting $RESULT_DIR"
+        rm -rf $RESULT_DIR
     fi
-    echo "Deleting $RESULT_DIR"
-    rm -rf $RESULT_DIR
 fi
 
 # tag on the directories
@@ -98,9 +98,11 @@ elif [ "$MEMORY_LOGGING" = "all" ]; then
 fi
 
 # dump out the environment
-echo "Creating $RESULT_DIR"
-mkdir -p $RESULT_DIR
-pip freeze > $PIP_REQUIREMENTS_FILE
+if [ ! "$NO_OVERWRITE" = "true" ]; then 
+    echo "Creating $RESULT_DIR"
+    mkdir -p $RESULT_DIR
+    pip freeze > $PIP_REQUIREMENTS_FILE
+fi
 
 # run the bench
 python $WORKING_DIR/benchmark.py \
