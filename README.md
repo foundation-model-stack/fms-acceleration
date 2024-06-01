@@ -174,7 +174,6 @@ The benchmarks can be reproduced [with the provided scripts](./scripts/benchmark
 
 See below CSV files for various results:
 - [A100-80GB](./scripts/benchmarks/refs/a100_80gb.csv).
-- [L40-40GB](./scripts/benchmarks/refs/l40_40gb.csv).
 
 ### Code Architecture
 

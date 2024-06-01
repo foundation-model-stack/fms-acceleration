@@ -120,6 +120,8 @@ python $WORKING_DIR/benchmark.py \
 PYTHONPATH=. \
     python $WORKING_DIR/display_bench_results.py $RESULT_DIR \
     --result_file $BENCH_RESULT_FILE \
+    --keep_columns \
+        'torch_dtype' \
     --remove_columns \
         'before_init_mem_cpu' \
         'before_init_mem_gpu' \
@@ -131,5 +133,7 @@ PYTHONPATH=. \
         'train_mem_cpu_peaked_delta' \
         'train_mem_gpu_alloc_delta' \
         'train_mem_gpu_peaked_delta' \
+        'training_data_path' \
+        'error_messages' \
         'acceleration_framework_config_file'
 
