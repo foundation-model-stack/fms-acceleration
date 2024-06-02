@@ -28,6 +28,7 @@ import torch
 # consider making a map if patching more kernels
 PATCH_FOR_FSDP_TRITON_V2 = ["qweight", "qzeros"]
 
+
 # This function may be moved after merging
 # https://github.com/foundation-model-stack/fms-acceleration/pull/25
 def _patch_target_module(
@@ -123,6 +124,7 @@ def create_new_module_peft(
     # if module cannot be found, return None which results in a raise in the call-stack
     return new_module
 
+
 # consider to move this somewhere more general
 def patch_forward_to_view_attributes_before_call(
     old_forward: Callable,
@@ -133,9 +135,9 @@ def patch_forward_to_view_attributes_before_call(
 ):
     # patch old_forward to view attribtues to torch_dype
     # before call
-        
+
     if submodule_names is None:
-        submodule_names = ''
+        submodule_names = ""
     if isinstance(submodule_names, str):
         submodule_names = [submodule_names]
 

@@ -1,5 +1,6 @@
 # Standard
 from itertools import product
+from time import sleep
 from typing import Any, Callable, Dict, List, Tuple, Union
 import argparse
 import json
@@ -88,6 +89,7 @@ KEYWORD_ALLOC_DELTA = "alloc_delta"
 HF_ARG_SKIP_MEMORY_METRIC = "--skip_memory_metrics"
 RESULT_FIELD_ALLOCATED_GPU_MEM = "mem_torch_mem_alloc_in_bytes"
 RESULT_FIELD_PEAK_ALLOCATED_GPU_MEM = "mem_peak_torch_mem_alloc_in_bytes"
+ERROR_MESSAGES = "error_messages"
 
 
 def extract_gpu_memory_metrics(output_metrics) -> Tuple[float]:
@@ -357,6 +359,17 @@ class Experiment:
         self.results_filename = os.path.join(self.save_dir, FILE_RESULTS)
         self.gpu_log_filename = os.path.join(self.save_dir, FILE_MEM)
 
+    @property
+    def is_completed(self):
+        if not os.path.exists(self.results_filename):
+            return False
+        # otherwise open it and check for errors
+        with open(self.results_filename) as f:
+            results = json.load(f)
+
+        # return complete only if no errors
+        return not ERROR_MESSAGES in results
+
     def run(
         self,
         run_cmd: str,
@@ -552,7 +565,7 @@ class Experiment:
                 **self.get_experiment_final_metrics(),
             }
         else:
-            other_results = {"error_messages": maybe_error_messages}
+            other_results = {ERROR_MESSAGES: maybe_error_messages}
 
         # combine the final thing
         save_result = {**save_result, **other_results}
@@ -781,6 +794,14 @@ def main(args):
             log_memory_in_trainer=args.log_memory_hf,
         )
     ):
+        # store pointer to file for future result retrival
+        experiment_stats[experiment.tag] = experiment.results_filename
+
+        if experiment.is_completed:
+            # if completed, dont proceed
+            sleep(0.1)  # sleep a bit to allow the tqdm to update
+            continue
+
         if experiment.num_gpus > 1:
             prefix = COMMAND_ACCELERATE.format(
                 accelerate_config_path=args.accelerate_config,
@@ -806,10 +827,9 @@ def main(args):
             log_nvidia_smi=args.log_nvidia_smi,
         )
 
-        # write results and store pointers to files
+        # write results
         experiment.write_result()
         experiment.write_shell_command()
-        experiment_stats[experiment.tag] = experiment.results_filename
 
     # 4. Consolidates the experiment results into a summary
     for tag, path in experiment_stats.items():

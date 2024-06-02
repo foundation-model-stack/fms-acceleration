@@ -26,3 +26,9 @@ framework_configs:
         - accelerated-peft
         - fused-ops-and-kernels
       filename: accelerated-peft-autogptq-foak-sample-configuration.yaml
+
+    - shortname: accelerated-peft-bnb-foak
+      plugins:
+        - accelerated-peft
+        - fused-ops-and-kernels
+      filename: accelerated-peft-bnb-nf4-foak-sample-configuration.yaml

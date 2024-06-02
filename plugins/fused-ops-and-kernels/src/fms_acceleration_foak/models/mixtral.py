@@ -16,10 +16,9 @@
 from functools import partial
 
 # Third Party
-from transformers.models.llama.modeling_llama import (
-    LlamaAttention,
-    LlamaMLP,
-    LlamaRMSNorm,
+from transformers.models.mixtral.modeling_mixtral import (
+    MixtralAttention,
+    MixtralRMSNorm,
 )
 
 # Local
@@ -33,37 +32,33 @@ from .model_patcher import (
     combine_functions,
     combine_triggers,
 )
-from .utils import KEY_MLP, KEY_O, KEY_QKV, build_lora_fused_ops, trigger_fused_ops
+from .utils import KEY_O, KEY_QKV, build_lora_fused_ops, trigger_fused_ops
 
-# TODO: have a generic version of this rule
 # - do regex on RMSNorm class name
 # - check on the tensors required for fast_rms_layernorm
 ModelPatcher.register(
     ModelPatcherRule(
-        rule_id="llama-rms",
-        trigger=ModelPatcherTrigger(check=LlamaRMSNorm),
+        rule_id="mixtral-rms",
+        trigger=ModelPatcherTrigger(check=MixtralRMSNorm),
         forward=fast_rms_layernorm,
     ),
 )
 
-# TODO: have a generic version of this rule
-# - do regex on Attention class name
-# - have a set of qkv / o module names and check on that
 ModelPatcher.register(
     ModelPatcherRule(
-        rule_id="llama-qkvo",
+        rule_id="mixtral-qkvo",
         trigger=combine_triggers(
             ModelPatcherTrigger(
                 check=partial(
                     trigger_fused_ops,
-                    attn_cls=LlamaAttention,
+                    attn_cls=MixtralAttention,
                     submodule_names=["q_proj", "k_proj", "v_proj"],
                 )
             ),
             ModelPatcherTrigger(
                 check=partial(
                     trigger_fused_ops,
-                    attn_cls=LlamaAttention,
+                    attn_cls=MixtralAttention,
                     submodule_names=["o_proj"],
                 )
             ),
@@ -88,45 +83,20 @@ ModelPatcher.register(
 
 ModelPatcher.register(
     ModelPatcherRule(
-        rule_id="llama-mlp",
-        trigger=ModelPatcherTrigger(
-            check=partial(
-                trigger_fused_ops,
-                attn_cls=LlamaMLP,
-                submodule_names=["up_proj", "down_proj", "gate_proj"],
-            )
-        ),
-        forward_builder=partial(
-            build_lora_fused_ops,
-            submodule_names=["up_proj", "down_proj", "gate_proj"],
-            fused_op=KEY_MLP,
-        ),
-        forward_builder_args=["base_type"],
-    )
-)
-
-# TODO: have a generic version of this rule
-# - get the module_name and reload on that
-ModelPatcher.register(
-    ModelPatcherRule(
-        rule_id="llama-cross-ent",
+        rule_id="mixtral-cross-ent",
         import_and_maybe_reload=(
             "torch.nn.CrossEntropyLoss",
             FastCrossEntropyLoss,
-            "transformers.models.llama.modeling_llama",
+            "transformers.models.mixtral.modeling_mixtral",
         ),
     )
 )
 
-# TODO: have a generic version of this rule
-# - get the module name
-# - check if "apply_rotary_pos_emb" exists
-# - patch
 ModelPatcher.register(
     ModelPatcherRule(
-        rule_id="llama-rope",
+        rule_id="mixtral-rope",
         import_and_maybe_reload=(
-            "transformers.models.llama.modeling_llama.apply_rotary_pos_emb",
+            "transformers.models.mixtral.modeling_mixtral.apply_rotary_pos_emb",
             fast_rope_embedding,
             None,
         ),
