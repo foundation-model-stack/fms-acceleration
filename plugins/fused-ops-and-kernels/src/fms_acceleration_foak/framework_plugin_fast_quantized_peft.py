@@ -24,6 +24,7 @@ from transformers import TrainingArguments
 from transformers.utils import logging
 import torch
 import torch.distributed as dist
+from .fused_ops.unsloth_lora.utils import register_quant_state
 
 # want to use the transformers logger, but a bit of pain
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -60,6 +61,7 @@ def lora_adapters_switch_ddp_from_fsdp(modules, fsdp_plugin):
     for mod in modules:
         fsdp_plugin.ignored_modules.append(mod.lora_A)
         fsdp_plugin.ignored_modules.append(mod.lora_B)
+        register_quant_state(mod)
 
     def _all_reduce_hook(grad):
         if grad is not None:

@@ -41,19 +41,43 @@ if _bitsandbytes_available:
     cgemm_4bit_inference_naive_fp16 = bnb.functional.lib.cgemm_4bit_inference_naive_fp16
     cgemm_4bit_inference_naive_bf16 = bnb.functional.lib.cgemm_4bit_inference_naive_bf16
 
+# added by flim@sg.ibm.com
+# this is needed because when FSDP shards the parameters
+# we will lose the quant state on the desharded param.
+_REGISTERED_QUANT_STATES = {}
+def register_quant_state(proj):
 
-def QUANT_STATE(W):
-    return getattr(W, "quant_state", None)
+    if not hasattr(proj, 'base_layer'):
+        # nothing to do if no quantized base layers
+        return
+
+    # in the BNB case, check if there is quant satte
+    quant_state = None
+    if hasattr(proj.base_layer, 'quant_state'):
+        quant_state = proj.base_layer.quant_state
+
+    # nothing to do
+    if quant_state is None:
+        return
+    
+    _id = id(proj)
+    if _id in _REGISTERED_QUANT_STATES:
+        raise ValueError(f"quant_state already registered to '{_id}'")
+    _REGISTERED_QUANT_STATES[_id] = quant_state
+
+# modified by flim@sg.ibm.com
+def QUANT_STATE(proj):
+    return _REGISTERED_QUANT_STATES.get(id(proj))
 pass
 
-
+# modified by flim@sg.ibm.com
 def get_lora_parameters(proj):
     # For DPO or disabled adapters
     base_layer = (proj.base_layer if hasattr(proj, "base_layer") else proj)
     W = base_layer.weight
 
     if not hasattr(proj, "disable_adapters") or proj.disable_adapters or proj.merged:
-        return W, QUANT_STATE(W), None, None, None
+        return W, QUANT_STATE(proj), None, None, None
     pass
 
     active_adapter = proj.active_adapters[0] if \
@@ -61,7 +85,7 @@ def get_lora_parameters(proj):
     A = proj.lora_A [active_adapter].weight
     B = proj.lora_B [active_adapter].weight
     s = proj.scaling[active_adapter]
-    return W, QUANT_STATE(W), A, B, s
+    return W, QUANT_STATE(proj), A, B, s
 pass
 
 
