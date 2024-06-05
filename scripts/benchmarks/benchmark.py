@@ -556,7 +556,8 @@ class DryRunExperiment(Experiment):
     def maybe_get_experiment_error_traceback(self):
         return None
 
-def get_peak_mem_usage_by_device_id(gpu_logs:pd.DataFrame):
+
+def get_peak_mem_usage_by_device_id(gpu_logs: pd.DataFrame):
     """
     This function retrieves the raw measurements of reserved GPU memory per device across the experiment -
     computing the peak value for each gpu and then performing a simple calibration (subtracts peak values by the first reading).
@@ -585,6 +586,7 @@ def get_peak_mem_usage_by_device_id(gpu_logs:pd.DataFrame):
     initial_values = mem_usage_by_device_id.first()
     peak_values = mem_usage_by_device_id.max()
     return peak_values.sub(initial_values), device_name
+
 
 def prepare_arguments(args):
     defaults = ConfigUtils.read_yaml(args.defaults_config_path)
@@ -695,30 +697,40 @@ def gather_report(result_dir: Union[str, List[str]], raw: bool = True):
             except FileNotFoundError:
                 pass
 
-            if script_args['log_nvidia_smi'] is True:
+            if script_args["log_nvidia_smi"]:
                 gpu_logs = pd.read_csv(gpu_log_filename, skipinitialspace=True)
-                peak_nvidia_mem_by_device_id, device_name = get_peak_mem_usage_by_device_id(gpu_logs)
-                experiment_stats[tag].update({
-                    RESULT_FIELD_RESERVED_GPU_MEM: peak_nvidia_mem_by_device_id.mean(),
-                    RESULT_FIELD_DEVICE_NAME: device_name,
-                })
+                peak_nvidia_mem_by_device_id, device_name = (
+                    get_peak_mem_usage_by_device_id(gpu_logs)
+                )
+                experiment_stats[tag].update(
+                    {
+                        # Report the mean peak memory across all gpu device ids
+                        RESULT_FIELD_RESERVED_GPU_MEM: peak_nvidia_mem_by_device_id.mean(),
+                        RESULT_FIELD_DEVICE_NAME: device_name,
+                    }
+                )
 
-            if script_args['log_memory_hf'] is True and tag in experiment_stats.keys():
+            if script_args["log_memory_hf"] and tag in experiment_stats.keys():
                 memory_metrics_prefixes = [
                     HF_TRAINER_LOG_GPU_STAGE_BEFORE_INIT,
                     HF_TRAINER_LOG_GPU_STAGE_INIT,
                     HF_TRAINER_LOG_GPU_STAGE_TRAIN,
                 ]
                 memory_metrics = {
-                    k: v for k, v in experiment_stats[tag].items() 
+                    k: v
+                    for k, v in experiment_stats[tag].items()
                     if any([prefix in k for prefix in memory_metrics_prefixes])
                 }
-                if len(memory_metrics.keys())>0:
-                    peak_torch_gpu_mem, torch_gpu_mem = extract_gpu_memory_metrics(memory_metrics)
-                    experiment_stats[tag].update({
-                        RESULT_FIELD_PEAK_ALLOCATED_GPU_MEM: peak_torch_gpu_mem,
-                        RESULT_FIELD_ALLOCATED_GPU_MEM: torch_gpu_mem,
-                    })
+                if len(memory_metrics.keys()) > 0:
+                    peak_torch_gpu_mem, torch_gpu_mem = extract_gpu_memory_metrics(
+                        memory_metrics
+                    )
+                    experiment_stats[tag].update(
+                        {
+                            RESULT_FIELD_PEAK_ALLOCATED_GPU_MEM: peak_torch_gpu_mem,
+                            RESULT_FIELD_ALLOCATED_GPU_MEM: torch_gpu_mem,
+                        }
+                    )
 
         df = pd.DataFrame.from_dict(experiment_stats, orient="index").sort_index()
         try:
