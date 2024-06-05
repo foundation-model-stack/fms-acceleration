@@ -61,7 +61,7 @@ def lora_adapters_switch_ddp_from_fsdp(modules, fsdp_plugin):
     for mod in modules:
         fsdp_plugin.ignored_modules.append(mod.lora_A)
         fsdp_plugin.ignored_modules.append(mod.lora_B)
-        register_quant_state(mod)
+        register_quant_state(mod.base_layer)
 
     def _all_reduce_hook(grad):
         if grad is not None:

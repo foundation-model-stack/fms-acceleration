@@ -42,32 +42,37 @@ if _bitsandbytes_available:
     cgemm_4bit_inference_naive_bf16 = bnb.functional.lib.cgemm_4bit_inference_naive_bf16
 
 # added by flim@sg.ibm.com
-# this is needed because when FSDP shards the parameters
-# we will lose the quant state on the desharded param.
+# API to register the quant state to the base_layer's id so it can be
+# retrieved when eneded.
+# This is needed when FSDP shards the parameters, and destroys the original
+# weight matrix, so we can get the quant state back
 _REGISTERED_QUANT_STATES = {}
-def register_quant_state(proj):
+def register_quant_state(base_layer):
 
-    if not hasattr(proj, 'base_layer'):
-        # nothing to do if no quantized base layers
-        return
-
-    # in the BNB case, check if there is quant satte
+    # in the BNB case, there will be a quant state object on 
+    # the base layer
     quant_state = None
-    if hasattr(proj.base_layer, 'quant_state'):
-        quant_state = proj.base_layer.quant_state
+    if hasattr(base_layer, 'quant_state'):
+        quant_state = base_layer.quant_state
 
-    # nothing to do
+    # if no quant state then nothing to do
     if quant_state is None:
         return
     
-    _id = id(proj)
+    _id = id(base_layer)
     if _id in _REGISTERED_QUANT_STATES:
         raise ValueError(f"quant_state already registered to '{_id}'")
     _REGISTERED_QUANT_STATES[_id] = quant_state
 
 # modified by flim@sg.ibm.com
-def QUANT_STATE(proj):
-    return _REGISTERED_QUANT_STATES.get(id(proj))
+def QUANT_STATE(W, base_layer):
+
+    # if the weights has quant_state just take it from there
+    if hasattr(W, 'quant_state'):
+        return W.quant_state
+
+    # otherwise fall back to checking if it has been registered
+    return _REGISTERED_QUANT_STATES.get(id(base_layer))
 pass
 
 # modified by flim@sg.ibm.com
@@ -77,7 +82,7 @@ def get_lora_parameters(proj):
     W = base_layer.weight
 
     if not hasattr(proj, "disable_adapters") or proj.disable_adapters or proj.merged:
-        return W, QUANT_STATE(proj), None, None, None
+        return W, QUANT_STATE(W, base_layer), None, None, None
     pass
 
     active_adapter = proj.active_adapters[0] if \
@@ -85,7 +90,7 @@ def get_lora_parameters(proj):
     A = proj.lora_A [active_adapter].weight
     B = proj.lora_B [active_adapter].weight
     s = proj.scaling[active_adapter]
-    return W, QUANT_STATE(proj), A, B, s
+    return W, QUANT_STATE(W, base_layer), A, B, s
 pass
 
 
