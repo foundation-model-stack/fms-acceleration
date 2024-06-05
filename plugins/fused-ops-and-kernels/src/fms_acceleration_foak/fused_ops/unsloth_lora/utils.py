@@ -41,29 +41,6 @@ if _bitsandbytes_available:
     cgemm_4bit_inference_naive_fp16 = bnb.functional.lib.cgemm_4bit_inference_naive_fp16
     cgemm_4bit_inference_naive_bf16 = bnb.functional.lib.cgemm_4bit_inference_naive_bf16
 
-# added by flim@sg.ibm.com
-# API to register the quant state to the base_layer's id so it can be
-# retrieved when eneded.
-# This is needed when FSDP shards the parameters, and destroys the original
-# weight matrix, so we can get the quant state back
-_REGISTERED_QUANT_STATES = {}
-def register_quant_state(base_layer):
-
-    # in the BNB case, there will be a quant state object on 
-    # the base layer
-    quant_state = None
-    if hasattr(base_layer, 'quant_state'):
-        quant_state = base_layer.quant_state
-
-    # if no quant state then nothing to do
-    if quant_state is None:
-        return
-    
-    _id = id(base_layer)
-    if _id in _REGISTERED_QUANT_STATES:
-        raise ValueError(f"quant_state already registered to '{_id}'")
-    _REGISTERED_QUANT_STATES[_id] = quant_state
-
 # modified by flim@sg.ibm.com
 def QUANT_STATE(W, base_layer):
 
@@ -71,8 +48,10 @@ def QUANT_STATE(W, base_layer):
     if hasattr(W, 'quant_state'):
         return W.quant_state
 
-    # otherwise fall back to checking if it has been registered
-    return _REGISTERED_QUANT_STATES.get(id(base_layer))
+    # otherwise fall back to checking if it is on the base layer
+    # This is needed when FSDP shards the parameters, and destroys the original
+    # weight matrix, so we can get the quant state back
+    return getattr(base_layer, 'quant_state', None)
 pass
 
 # modified by flim@sg.ibm.com
