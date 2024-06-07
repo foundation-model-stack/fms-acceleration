@@ -55,7 +55,11 @@ def lora_adapters_switch_ddp_from_fsdp(modules, fsdp_plugin):
     reduces the accumulated gradients across devices
     """
 
-    fsdp_plugin.ignored_modules = modules
+    # NOTE: assuming lora has no bias
+    fsdp_plugin.ignored_modules = []
+    for mod in modules:
+        fsdp_plugin.ignored_modules.append(mod.lora_A)
+        fsdp_plugin.ignored_modules.append(mod.lora_B)
 
     def _all_reduce_hook(grad):
         if grad is not None:
@@ -64,7 +68,6 @@ def lora_adapters_switch_ddp_from_fsdp(modules, fsdp_plugin):
         return grad
 
     for mod in modules:
-        # NOTE: assuming lora has no bias
         A = mod.lora_A.default
         B = mod.lora_B.default
 
