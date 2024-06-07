@@ -164,6 +164,7 @@ We currently compute the memory values in the report by taking the largest of su
 For allocated memory value
 ```
 max([
+  stage0_mem,
   stage0_mem + stage1_allocated_delta, 
   stage0_mem + stage1_allocated_delta + stage2_allocated_delta,
   ...
@@ -173,13 +174,13 @@ max([
 For peak memory value
 ```
 max([
+  stage0_mem,
   stage0_mem + stage1_allocated_delta + stage1_peaked_delta, 
   stage0_mem + stage1_allocated_delta + stage2_allocated_delta + stage2_peaked_delta,
   ...
 ])
 ```
 
-Notice that we do not include `stage0_mem` alone when computing the max value. This is to avoid misleading comparisons between GPTQ-LoRA and others. GPTQ-LoRA + FSDP currently does not support low-memory mode as mentioned [here](https://github.com/foundation-model-stack/fms-acceleration/issues/18). The `stage0_mem` value of GPTQ-LoRA + FSDP will reflect a larger than expected value as it is loaded fully before the trainer is initialized and then subsequently will be sharded internally in `trainer.prepare`. This might cause some misleading comparisons when other variants are loaded in low-memory mode and have smaller `stage0_mem` memory consumption than GPTQ-LoRA + FSDP. Once low-memory mode is supported for GPTQ-LoRA, we will include `stage0_mem` back inside the max computation
 
 We compare memory values between Nvidia-SMI and Torch in this PR - [Memory Benchmarking](https://github.com/foundation-model-stack/fms-acceleration/pull/14).
 

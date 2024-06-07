@@ -21,7 +21,6 @@ For example:
 - GPTQ-LoRA: 22-44 % token throughput increase on 1 GPU as compared to using Hugging Face BNB QLoRA 
 - GPTQ-LoRA: Straightforward integration with multiple GPU as compared to using Hugging Face BNB QLoRA
 
-*Huggingface BNB QLoRA numbers taken with legacy approaches, but we are aware of [this issue](https://github.com/foundation-model-stack/fms-acceleration/issues/10) and will update our benches*.
 *The above includes numbers using fusedOps-and-kernels and actual impl coming soon, see below*.
 
 **This package is in BETA and is under development. Expect breaking changes!**
@@ -32,7 +31,7 @@ Plugin | Description | Depends | License | Status
 --|--|--|--|--
 [framework](./plugins/framework/README.md) | This acceleration framework for integration with huggingface trainers | | | Beta
 [accelerated-peft](./plugins/accelerated-peft/README.md) | For PEFT-training, e.g., 4bit QLoRA. | Huggingface<br>AutoGPTQ | Apache 2.0<br>MIT | Beta
- fusedOps-and-kernels | Fused LoRA and triton kernels (e.g., fast cross-entropy, rms, rope) | -- | Apache 2.0 with exclusions. | Coming Soon
+[fused-op-and-kernels](./plugins/fused-ops-and-kernels/README.md)  | Fused LoRA and triton kernels (e.g., fast cross-entropy, rms, rope) | -- | Apache 2.0 [(contains extracted code)](./plugins/fused-ops-and-kernels/README.md#code-extracted-from-unsloth)| Beta
  MOE-training-acceleration  | [MegaBlocks](https://github.com/databricks/megablocks) inspired triton Kernels and acclerations for Mixture-of-Expert models |  | Apache 2.0 | Coming Soon
 
 ## Usage with FMS HF Tuning
@@ -175,7 +174,6 @@ The benchmarks can be reproduced [with the provided scripts](./scripts/benchmark
 
 See below CSV files for various results:
 - [A100-80GB](./scripts/benchmarks/refs/a100_80gb.csv).
-- [L40-40GB](./scripts/benchmarks/refs/l40_40gb.csv).
 
 ### Code Architecture
 

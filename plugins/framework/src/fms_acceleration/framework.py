@@ -179,11 +179,12 @@ class AccelerationFramework:
         self, model: torch.nn.Module = None, accelerator: Accelerator = None
     ):
         # show the initialized message
-        log_initialization_message(
-            {x for x, _ in self.active_plugins},
-            PLUGIN_REGISTRATIONS,
-            logging_func=logger.info,
-        )
+        if accelerator is not None and accelerator.is_main_process:
+            log_initialization_message(
+                {x for x, _ in self.active_plugins},
+                PLUGIN_REGISTRATIONS,
+                logging_func=logger.info,
+            )
 
         cbks = []
         for _, plugin in self.active_plugins:

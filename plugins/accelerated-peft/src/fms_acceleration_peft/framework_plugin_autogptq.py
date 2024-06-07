@@ -20,15 +20,16 @@
 from functools import partial
 from types import MethodType
 from typing import Dict, Tuple
+import os
 
 # Third Party
 from fms_acceleration import AccelerationPlugin
 from peft import LoraConfig, prepare_model_for_kbit_training
 from peft.tuners.lora.model import LoraModel
-import torch.distributed
 from transformers import AutoModelForCausalLM, TrainingArguments
+from transformers.modeling_utils import is_fsdp_enabled
 import torch
-import os
+import torch.distributed
 
 
 class AutoGPTQAccelerationPlugin(AccelerationPlugin):
@@ -48,12 +49,21 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
         )
 
     def model_loader(self, model_name: str, **kwargs):
-
         # guarded imports
         # Third Party
-        from auto_gptq import AutoGPTQForCausalLM, BaseQuantizeConfig
-        from auto_gptq.nn_modules.qlinear.qlinear_tritonv2 import QuantLinear, QuantLinearFunction
-        from .autogptq_utils import patch_forward_to_view_attributes_before_call
+        from auto_gptq import (  # pylint: disable=import-outside-toplevel,import-error
+            AutoGPTQForCausalLM,
+            BaseQuantizeConfig,
+        )
+        from auto_gptq.nn_modules.qlinear.qlinear_tritonv2 import (  # pylint: disable=import-outside-toplevel,import-error
+            QuantLinear,
+        )
+
+        # Local
+        from .autogptq_utils import (  # pylint: disable=import-outside-toplevel
+            PATCH_FOR_FSDP_TRITON_V2,
+            patch_forward_to_view_attributes_before_call,
+        )
 
         # Currently we allow only a quantized checkpoint to be loaded, we do not
         # implement the quantization process here.
@@ -61,16 +71,18 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
         # The quantization process is used to convert a non-quantized checkpoint
         # (provided in model_name) into a quantized one. This entails
         # 1. providing a BaseQuantizeConfig with the appropriate quantization settings
-        # 2. calling BaseGPTQForCausalLM.quantize to run the quantization algorithm (may take time, e.g. hours)
+        # 2. calling BaseGPTQForCausalLM.quantize to run the quantization algorithm
+        # (may take time, e.g. hours)
         # 3. calling BaseGPTQForCausalLM.save_pretrained to save a quantized checkpoint
         #
         # The reasons for not implementing the flow at this point are.
         # 1. The quantization can take very long for large models. As such, it is more appropriate
-        #    to run it once outside of training, and save the checkpoint to be used for multiple runs.
+        # to run it once outside of training, and save the checkpoint to be used for multiple runs.
         # 2. Requires some API changes to point to where the quantized checkpoint should be saved.
         #    Can be confusing to the user since it will be different from model_name
         # NOTE: there will be a warning that can be ignored
-        # "WARNING - QuantLinear with the exllama backend not does support the trainable mode yet, switching to cuda/cuda_old/triton backend."
+        # "WARNING - QuantLinear with the exllama backend not does support the trainable mode yet,
+        # switching to cuda/cuda_old/triton backend."
         # assume model_name points to a quantized checkpoint. Thus we load the quantization
         # config directly from the checkpoint.
         quantize_config = BaseQuantizeConfig.from_pretrained(model_name)
@@ -80,35 +92,49 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
         low_cpu_mem_usage = kwargs.get("low_cpu_mem_usage")
         attn_implementation = kwargs.get("attn_implementation")
 
-        if low_cpu_mem_usage:
-            # Note that low_cpu_mem_usage is typically set to transformers.modeling_utils.is_fsdp_enabled.
-            # e.g., https://github.com/huggingface/transformers/blob/a98c41798cf6ed99e1ff17e3792d6e06a2ff2ff3/src/transformers/modeling_utils.py#L2989-L2990
-            # but not doing that now as AutoGPTQ will call make_sure_no_tensor_in_meta_device
-            # https://github.com/AutoGPTQ/AutoGPTQ/blob/ea829c7bbe83561c2b1de26795b6592992373ef7/auto_gptq/modeling/_base.py#L982C17-L982C51
-            # which does not properly check if a QuantLayer has a bias set or not,
-            # https://github.com/AutoGPTQ/AutoGPTQ/blob/ea829c7bbe83561c2b1de26795b6592992373ef7/auto_gptq/modeling/_utils.py#L514
-            raise ValueError(
-                "low_cpu_mem_usage set to True. This may raise error if model has no bias, "
-                "due to AutoGPTQ bug. Not supporting at the moment."
-            )
-
         # there are some kwargs that we wont be passed to AutoModel, so we need
         # to patch them in
         _old_from_config = AutoModelForCausalLM.from_config
-        # Standard
-        from functools import partial
 
         _from_config = partial(
             _old_from_config, attn_implementation=attn_implementation
         )
         AutoModelForCausalLM.from_config = _from_config  # patch
 
+        # this is a HF method that checks if the low_cpu_mem mode is enabled
+        # via HF accelerate
+        if is_fsdp_enabled():
+            # Local
+            from .autogptq_utils import (  # pylint: disable=import-outside-toplevel
+                _patch_target_module,
+                make_sure_no_tensor_in_meta_device,
+            )
+
+            # We patch `make_sure_no_tensor_in_meta_device`
+            # from autogptq to avoid errors on models without bias
+            _patch_target_module(
+                to_patch="auto_gptq.modeling._utils.make_sure_no_tensor_in_meta_device",
+                replace_with=make_sure_no_tensor_in_meta_device,
+                target_module="auto_gptq.modeling._base",
+            )
+            low_cpu_mem_usage = True
+
         # NOTE: need to set the device map as below as we want to use AutoGPTQ for training.
-        # device_map is for inference only https://huggingface.co/docs/accelerate/en/concept_guides/big_model_inference
-        # Thus we set it as below to effectively disable it.
-        device_map = (
-            {"": torch.cuda.current_device()} if torch.cuda.is_available() else None
-        )
+        # device_map is for inference only
+        # https://huggingface.co/docs/accelerate/en/concept_guides/big_model_inference
+        # For low_cpu_mem_usage = True, we have to set the device map to load checkpoints to "cpu"
+        # to avoid gpu consumption before train
+        # This approach will divert consumption to cpu memory,
+        # a better approach would be to load the checkpoints to meta device
+        # QLoRA is currently implemented by the former approach and will encounter the same issue.
+        # see https://github.com/huggingface/transformers/pull/25107#issuecomment-2134833262
+        device_map = {
+            "": (
+                (torch.cuda.current_device() if not low_cpu_mem_usage else "cpu")
+                if torch.cuda.is_available()
+                else None
+            )
+        }
 
         # currently only enable triton_v2, because the triton kernels are the only ones
         # that have backwards
@@ -119,14 +145,14 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
             low_cpu_mem_usage=low_cpu_mem_usage,
             use_marlin=False,  # disable, cannot be used for training (no forward+backward)
             disable_exllama=True,  # disable, cannot be used for training (no backward)
-            warmup_triton=False,  # disable for now, because it will try to run the warmup while on CPU
+            warmup_triton=False,  # disable for now as it will try to run the warmup while on CPU
             use_tritonv2=True,
             trainable=True,  # only support trainable mode
             device_map=device_map,
         )
 
         # https://github.com/foundation-model-stack/fms-acceleration/pull/15
-        # if FSDP distributed need to convert the AutoGPTQ model's 
+        # if FSDP distributed need to convert the AutoGPTQ model's
         # parameters (in tensors) to parameters. Also need to
         # store the int32 tensors in a float type
 
@@ -139,9 +165,6 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
             world_size > 1
             and os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true"
         ):
-            # these parameters are to be patched for triton v2
-            # consider making a map if patching more kernels
-            PATCH_FOR_FSDP_TRITON_V2 = ['qweight', 'qzeros']
 
             # patch all the QuantLinear base layers
             for mod in model.modules():
@@ -151,14 +174,17 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
                     # so FSDP can shard them
                     for attr_name in PATCH_FOR_FSDP_TRITON_V2:
                         attr = getattr(mod, attr_name)
-                        attr = torch.nn.Parameter(attr.view(torch_dtype), requires_grad=False)
+                        attr = torch.nn.Parameter(
+                            attr.view(torch_dtype), requires_grad=False
+                        )
                         setattr(mod, attr_name, attr)
 
-                    # this patches the forward to convert them back to original 
+                    # this patches the forward to convert them back to original
                     # type (i.e. int32) before the function call into the kernels
                     _forward = patch_forward_to_view_attributes_before_call(
-                        mod.forward, attribute_names=PATCH_FOR_FSDP_TRITON_V2,
-                        torch_dtype=torch.int32, # patch it back to 
+                        mod.forward,
+                        attribute_names=PATCH_FOR_FSDP_TRITON_V2,
+                        torch_dtype=torch.int32,  # patch it back to
                     )
                     mod.forward = MethodType(_forward, mod)
 
@@ -193,11 +219,19 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
     ):
         # guarded imports
         # Third Party
-        from auto_gptq.nn_modules.qlinear.qlinear_tritonv2 import QuantLinear
-        from auto_gptq.utils.peft_utils import GPTQLoraModel, get_gptq_peft_model
+        from auto_gptq.nn_modules.qlinear.qlinear_tritonv2 import (  # pylint: disable=import-outside-toplevel,import-error
+            QuantLinear,
+        )
+        from auto_gptq.utils.peft_utils import (  # pylint: disable=import-outside-toplevel,import-error
+            GPTQLoraModel,
+            get_gptq_peft_model,
+        )
 
         # Local
-        from .autogptq_utils import create_new_module_peft, replace_module_peft
+        from .autogptq_utils import (  # pylint: disable=import-outside-toplevel
+            create_new_module_peft,
+            replace_module_peft,
+        )
 
         (peft_config,) = modifiable_args  # unpack modifiable args
 

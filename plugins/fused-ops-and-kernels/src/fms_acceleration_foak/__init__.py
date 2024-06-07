@@ -12,14 +12,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-KEY_PLUGINS = "plugins"
-PLUGIN_PREFIX = "fms_acceleration_"
-
-# the order below is a linear precedence in which the plugins will be registered
-# and activated.
-# - hence the plugins that have model loaders should be on top of this list
-
-PLUGINS = [
-    "peft",
-    "foak"
-]
+# Local
+from .framework_plugin_fast_quantized_peft import FastQuantizedPeftAccelerationPlugin

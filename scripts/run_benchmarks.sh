@@ -38,7 +38,7 @@ PIP_REQUIREMENTS_FILE=requirements.txt
 DRY_RUN=${DRY_RUN:-"false"}
 NO_DATA_PROCESSING=${NO_DATA_PROCESSING:-"false"}
 NO_OVERWRITE=${NO_OVERWRITE:-"false"}
-MEMORY_LOGGING=${MEMORY_LOGGING:-"huggingface"}
+MEMORY_LOGGING=${MEMORY_LOGGING:-"all"}
 
 # inputs
 NUM_GPUS_MATRIX=${1-"1 2"}
@@ -58,10 +58,10 @@ if [ -n "$RESULT_DIR" ]; then
         echo "Results dir $RESULT_DIR is not empty, but NO_OVERWRITE=true"
         echo "If intending to overwrite please delete the folder manually"
         echo "or do not set NO_OVERWRITE"
-        exit 1
+    else
+        echo "Deleting $RESULT_DIR"
+        rm -rf $RESULT_DIR
     fi
-    echo "Deleting $RESULT_DIR"
-    rm -rf $RESULT_DIR
 fi
 
 # tag on the directories
@@ -98,7 +98,11 @@ elif [ "$MEMORY_LOGGING" = "all" ]; then
 fi
 
 # dump out the environment
-pip freeze > $PIP_REQUIREMENTS_FILE
+if [ ! "$NO_OVERWRITE" = "true" ]; then 
+    echo "Creating $RESULT_DIR"
+    mkdir -p $RESULT_DIR
+    pip freeze > $PIP_REQUIREMENTS_FILE
+fi
 
 # run the bench
 python $WORKING_DIR/benchmark.py \
@@ -114,8 +118,10 @@ python $WORKING_DIR/benchmark.py \
 # this will write to the BENCH_RESULT_FILE
 # Remove the columns with values already represented by other metrics in the summary report
 PYTHONPATH=. \
-    python $WORKING_DIR/display_bench_results.py benchmark_outputs \
+    python $WORKING_DIR/display_bench_results.py $RESULT_DIR \
     --result_file $BENCH_RESULT_FILE \
+    --keep_columns \
+        'torch_dtype' \
     --remove_columns \
         'before_init_mem_cpu' \
         'before_init_mem_gpu' \
@@ -127,5 +133,7 @@ PYTHONPATH=. \
         'train_mem_cpu_peaked_delta' \
         'train_mem_gpu_alloc_delta' \
         'train_mem_gpu_peaked_delta' \
+        'training_data_path' \
+        'error_messages' \
         'acceleration_framework_config_file'
 

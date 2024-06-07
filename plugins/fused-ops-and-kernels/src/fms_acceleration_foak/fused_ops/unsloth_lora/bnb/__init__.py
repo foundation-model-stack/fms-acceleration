@@ -1,4 +1,4 @@
-# Copyright The FMS HF Tuning Authors
+# Copyright 2023-present Daniel Han-Chen & the Unsloth team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,14 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-KEY_PLUGINS = "plugins"
-PLUGIN_PREFIX = "fms_acceleration_"
 
-# the order below is a linear precedence in which the plugins will be registered
-# and activated.
-# - hence the plugins that have model loaders should be on top of this list
 
-PLUGINS = [
-    "peft",
-    "foak"
-]
+from .fast_lora import (
+	get_lora_parameters,
+	apply_lora_mlp_swiglu,
+	apply_lora_mlp_geglu_exact,
+	apply_lora_mlp_geglu_approx,
+	apply_lora_qkv,
+	apply_lora_o,
+)

@@ -27,7 +27,8 @@ jobs:
       matrix:
         plugin_name:
           - "framework"
-          # - "accelerated-peft" # enable later
+          - "accelerated-peft"
+          - "fused-ops-and-kernels"
 
     steps:
       - uses: actions/checkout@v4
