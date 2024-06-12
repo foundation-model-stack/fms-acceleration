@@ -230,7 +230,7 @@ def fast_linear_forward(proj, X, temp_lora = None, out = None):
 pass
 
 
-def matmul_lora(X, W, W_quant, A, B, s, out = None):
+def matmul_lora(X, W, W_quant, A, B, s, out = None, dropout=None):
     dtype = X.dtype
     W = fast_dequantize(W.t(), W_quant)
 
@@ -247,6 +247,9 @@ def matmul_lora(X, W, W_quant, A, B, s, out = None):
 
     if A is not None:
         # LoRA is enabled
+        if dropout:
+            dropout.X = dropout(X)
+            X = dropout.X
         A, B = A.t(), B.t()
         out += (X @ A.to(dtype)) @ (s * B.to(dtype))
     pass
