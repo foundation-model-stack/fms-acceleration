@@ -61,7 +61,7 @@ def get_lora_parameters(proj):
     W = base_layer.weight
 
     if not hasattr(proj, "disable_adapters") or proj.disable_adapters or proj.merged:
-        return W, QUANT_STATE(W, base_layer), None, None, None
+        return W, QUANT_STATE(W, base_layer), None, None, None, None
     pass
 
     active_adapter = proj.active_adapters[0] if \
@@ -69,7 +69,9 @@ def get_lora_parameters(proj):
     A = proj.lora_A [active_adapter].weight
     B = proj.lora_B [active_adapter].weight
     s = proj.scaling[active_adapter]
-    return W, QUANT_STATE(W, base_layer), A, B, s
+    dropout = proj.lora_dropout[active_adapter] if hasattr(proj, "lora_dropout") else None
+    dropout.X = None
+    return W, QUANT_STATE(W, base_layer), A, B, s, dropout
 pass
 
 
@@ -248,8 +250,8 @@ def matmul_lora(X, W, W_quant, A, B, s, out = None, dropout=None):
     if A is not None:
         # LoRA is enabled
         if dropout:
-            dropout.X = dropout(X)
-            X = dropout.X
+            X = dropout(X)
+        dropout.X = X
         A, B = A.t(), B.t()
         out += (X @ A.to(dtype)) @ (s * B.to(dtype))
     pass

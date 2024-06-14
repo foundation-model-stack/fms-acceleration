@@ -160,9 +160,9 @@ def apply_lora_mlp_swiglu(self, X):
     dropout_up.training = self.training
     dropout_down.training = self.training
 
-    gateW, gateW_quant, gateA, gateB, gateS = get_lora_parameters(self.gate_proj)
-    upW,     upW_quant,   upA,   upB,   upS = get_lora_parameters(self.  up_proj)
-    downW, downW_quant, downA, downB, downS = get_lora_parameters(self.down_proj)
+    gateW, gateW_quant, gateA, gateB, gateS, dropout_gate = get_lora_parameters(self.gate_proj)
+    upW,     upW_quant,   upA,   upB,   upS, dropout_up = get_lora_parameters(self.  up_proj)
+    downW, downW_quant, downA, downB, downS, dropout_down = get_lora_parameters(self.down_proj)
     out = LoRA_MLP.apply(X,
                          gateW, gateW_quant, gateA, gateB, gateS,
                          upW,     upW_quant, upA,   upB,   upS,
@@ -176,16 +176,9 @@ pass
 
 from ..geglu import geglu_exact_forward_kernel, geglu_exact_backward_kernel
 def apply_lora_mlp_geglu_exact(self, X):
-    dropout_gate = torch.nn.Dropout(p = self.dropout)
-    dropout_up = torch.nn.Dropout(p = self.dropout)
-    dropout_down = torch.nn.Dropout(p = self.dropout)
-    dropout_gate.training = self.training
-    dropout_up.training = self.training
-    dropout_down.training = self.training
-
-    gateW, gateW_quant, gateA, gateB, gateS = get_lora_parameters(self.gate_proj)
-    upW,     upW_quant,   upA,   upB,   upS = get_lora_parameters(self.  up_proj)
-    downW, downW_quant, downA, downB, downS = get_lora_parameters(self.down_proj)
+    gateW, gateW_quant, gateA, gateB, gateS, dropout_gate = get_lora_parameters(self.gate_proj)
+    upW,     upW_quant,   upA,   upB,   upS, dropout_up = get_lora_parameters(self.  up_proj)
+    downW, downW_quant, downA, downB, downS, dropout_down = get_lora_parameters(self.down_proj)
     out = LoRA_MLP.apply(X,
                          gateW, gateW_quant, gateA, gateB, gateS,
                          upW,     upW_quant, upA,   upB,   upS,
@@ -199,16 +192,9 @@ pass
 
 from ..geglu import geglu_approx_forward_kernel, geglu_approx_backward_kernel
 def apply_lora_mlp_geglu_approx(self, X):
-    dropout_gate = torch.nn.Dropout(p = self.dropout)
-    dropout_up = torch.nn.Dropout(p = self.dropout)
-    dropout_down = torch.nn.Dropout(p = self.dropout)
-    dropout_gate.training = self.training
-    dropout_up.training = self.training
-    dropout_down.training = self.training
-
-    gateW, gateW_quant, gateA, gateB, gateS = get_lora_parameters(self.gate_proj)
-    upW,     upW_quant,   upA,   upB,   upS = get_lora_parameters(self.  up_proj)
-    downW, downW_quant, downA, downB, downS = get_lora_parameters(self.down_proj)
+    gateW, gateW_quant, gateA, gateB, gateS, dropout_gate = get_lora_parameters(self.gate_proj)
+    upW,     upW_quant,   upA,   upB,   upS, dropout_up = get_lora_parameters(self.  up_proj)
+    downW, downW_quant, downA, downB, downS, dropout_down = get_lora_parameters(self.down_proj)
     out = LoRA_MLP.apply(X,
                          gateW, gateW_quant, gateA, gateB, gateS,
                          upW,     upW_quant, upA,   upB,   upS,
@@ -285,7 +271,7 @@ class LoRA_QKV(torch.autograd.Function):
     def backward(ctx, dQ, dK, dV):
         QW, QW_quant, QS, KW, KW_quant, KS, VW, VW_quant, VS = \
             ctx.custom_saved_tensors
-        X, QA, QB, KA, KB, VA, VB, dropout_QX, dropout_KX, dropout_VX, = ctx.saved_tensors
+        X, QA, QB, KA, KB, VA, VB, dropout_QX, dropout_KX, dropout_VX = ctx.saved_tensors
 
         QA, QB, KA, KB, VA, VB = \
             QA.t(), QB.t(), KA.t(), KB.t(), VA.t(), VB.t()
@@ -344,27 +330,20 @@ class LoRA_QKV(torch.autograd.Function):
             None, None, d_QA.t(), d_QB.t(), None, \
             None, None, d_KA.t(), d_KB.t(), None, \
             None, None, d_VA.t(), d_VB.t(), None, \
-            None, None, None # dropout modules
+            None, None, None
     pass
 pass
 
 
 def apply_lora_qkv(self, X):
-    dropout_Q = torch.nn.Dropout(p = self.dropout)
-    dropout_K = torch.nn.Dropout(p = self.dropout)
-    dropout_V = torch.nn.Dropout(p = self.dropout)
-    dropout_Q.training = self.training
-    dropout_K.training = self.training
-    dropout_V.training = self.training
-
-    QW, QW_quant, QA, QB, QS = get_lora_parameters(self.q_proj)
-    KW, KW_quant, KA, KB, KS = get_lora_parameters(self.k_proj)
-    VW, VW_quant, VA, VB, VS = get_lora_parameters(self.v_proj)
+    QW, QW_quant, QA, QB, QS, dropoutQ = get_lora_parameters(self.q_proj)
+    KW, KW_quant, KA, KB, KS, dropoutK = get_lora_parameters(self.k_proj)
+    VW, VW_quant, VA, VB, VS, dropoutV = get_lora_parameters(self.v_proj)
     Q, K, V = LoRA_QKV.apply(X,
         QW, QW_quant, QA, QB, QS,
         KW, KW_quant, KA, KB, KS,
         VW, VW_quant, VA, VB, VS,
-        dropout_Q, dropout_K, dropout_V,
+        dropoutQ, dropoutK, dropoutV,
     )
     return Q, K, V
 pass
@@ -445,18 +424,14 @@ class LoRA_W(torch.autograd.Function):
 pass
 
 def apply_lora_o(self, X):
-    dropout = torch.nn.Dropout(p = self.dropout)
-    dropout.training = self.training
-    OW, OW_quant, OA, OB, OS = get_lora_parameters(self.o_proj)
-    O = LoRA_W.apply(X, OW, OW_quant, OA, OB, OS, dropout)
+    OW, OW_quant, OA, OB, OS, dropoutO = get_lora_parameters(self.o_proj)
+    O = LoRA_W.apply(X, OW, OW_quant, OA, OB, OS, dropoutO)
     return O
 pass
 
 # added by flim@sg.ibm.com
 # this will be patchable on the actual module
 def apply_lora_o_v2(self, X):
-    dropout = torch.nn.Dropout(p = self.dropout)
-    dropout.training = self.training
-    OW, OW_quant, OA, OB, OS = get_lora_parameters(self)
-    O = LoRA_W.apply(X, OW, OW_quant, OA, OB, OS, dropout)
+    OW, OW_quant, OA, OB, OS, dropoutO = get_lora_parameters(self)
+    O = LoRA_W.apply(X, OW, OW_quant, OA, OB, OS, dropoutO)
     return O
