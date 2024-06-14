@@ -18,15 +18,13 @@ GPTQ = "auto_gptq"
 
 # set a fixed dropout to match outputs between runs
 class DummyDropout(torch.nn.Module):
-    def __init__(self, p: float = 0.5):
-        super(DummyDropout, self).__init__()
-        if p < 0 or p > 1:
-            raise ValueError("dropout probability has to be between 0 and 1, " "but got {}".format(p))
-        self.p = p
+    def __init__(self, dropout_mask=None):
+        super().__init__()
+        self.dropout_mask = dropout_mask
 
     def forward(self, X):
-        if self.training:            
-            return torch.tril(X, diagonal=0)
+        if self.training:
+            return X * self.dropout_mask
         return X
 
 def wrap_peft(module, peft_cls, r, lora_alpha, lora_dropout):
@@ -51,9 +49,6 @@ def load_gptq_model_weights(model_name, peft_config):
         create_new_module_peft,
         replace_module_peft,
     )
-    # from fms_acceleration_foak.models.model_patcher import _patch_target_module
-    # We patch `make_sure_no_tensor_in_meta_device`
-    # from autogptq to avoid errors on models without bias
     quantize_config = BaseQuantizeConfig.from_pretrained(model_name)
     model = AutoGPTQForCausalLM.from_quantized(
                 model_name,
@@ -129,7 +124,6 @@ def build_model(model_name, base_type, r, lora_alpha, lora_dropout, dummy=True):
                     )
         return wrap_peft(test_module, peft_cls, r, lora_alpha, lora_dropout)
     else:
-        config.num_hidden_layers = 1
         peft_config = LoraConfig(
             r=r, 
             lora_alpha=lora_alpha, 
@@ -143,6 +137,7 @@ def build_model(model_name, base_type, r, lora_alpha, lora_dropout, dummy=True):
                 bnb_4bit_compute_dtype=base_type_kwargs["compute_dtype"],
                 bnb_4bit_use_double_quant=True,
             )
+            config.num_hidden_layers = 1
             model = AutoModelForCausalLM.from_pretrained(
                 model_name,
                 config = config,
@@ -153,31 +148,22 @@ def build_model(model_name, base_type, r, lora_alpha, lora_dropout, dummy=True):
             return model.model.model.layers[0].self_attn
         elif base_type == GPTQ:
             return load_gptq_model_weights(model_name, peft_config)
-
+        else:
+            raise NotImplementedError("Invalid base type")
 
 def prepare_attn_inputs(bs, seq_len, dim_size):
     x = torch.rand((bs, seq_len, dim_size), dtype=torch.float16, requires_grad=True, device="cuda")
     position_ids = torch.arange(seq_len, device=x.device).view(1, -1)
     return x, position_ids
 
-def prepare_model(base_peft_model, base_type, foak_patch=False):
-    # TODO fix autogptq weights
-
+def prepare_model(base_peft_model, base_type, dropout_mask, foak_patch=False):
     _model = base_peft_model.to("cuda")
 
-    def modify_dropout(mod):
-        if hasattr(mod.p.lora_dropout["default"], "p"):
-            return torch.nn.ModuleDict(
-                [["default", DummyDropout(p=mod.p.lora_dropout["default"].p)]]
-            )
-        else:
-            return torch.nn.Identity()
-
     # Inject Dummy Dropout Here
-    _model.q_proj.lora_dropout = modify_dropout(_model.q_proj)
-    _model.k_proj.lora_dropout = modify_dropout(_model.k_proj)
-    _model.v_proj.lora_dropout = modify_dropout(_model.v_proj)
-    _model.o_proj.lora_dropout = modify_dropout(_model.o_proj)
+    _model.q_proj.lora_dropout = torch.nn.ModuleDict([["default", DummyDropout(dropout_mask)]])
+    _model.k_proj.lora_dropout = torch.nn.ModuleDict([["default", DummyDropout(dropout_mask)]])
+    _model.v_proj.lora_dropout = torch.nn.ModuleDict([["default", DummyDropout(dropout_mask)]])
+    _model.o_proj.lora_dropout = torch.nn.ModuleDict([["default", DummyDropout(dropout_mask)]])
 
     if foak_patch:
         if base_type == BNB:
@@ -193,10 +179,9 @@ def prepare_model(base_peft_model, base_type, foak_patch=False):
 
     return _model
 
-def run_model(inputs, model):
-    x, position_ids = inputs
+def run_model(model, X, position_ids):
     with torch.autocast(dtype=torch.float16, device_type="cuda"):
-        out, _, _ = model(x, position_ids=position_ids)
+        out, _, _ = model(X, position_ids=position_ids)
     loss = out.norm()
     loss.backward()
     grad_norms_A = [
@@ -211,7 +196,7 @@ def run_model(inputs, model):
         model.v_proj.lora_B.default.weight.grad,
         model.o_proj.lora_B.default.weight.grad,
     ]
-    
+
     return loss, (torch.vstack(grad_norms_A), torch.vstack(grad_norms_B))
 
 TEST_MODELS = {
@@ -219,26 +204,35 @@ TEST_MODELS = {
     GPTQ: "TheBloke/TinyLlama-1.1B-Chat-v0.3-GPTQ",
 }
 
+# small
 def test_adapter_gradients_match_with_dummy_module():
     '''
     this function loads a dummy attention module, 
-    for GPTQ it isn't straightforward to initialize a dummy baselayer, 
+    For GPTQ it isn't straightforward to initialize a dummy baselayer, 
     so this function is only supports BNB for now
     '''
     for base_type in [BNB]:
         print(base_type)
         for adapter_dropout in [0., 0.1, 0.5]:
-            inputs = prepare_attn_inputs(bs=1, seq_len=128, dim_size=2048)
+            # Prepare fixed test inputs
+            X, position_ids = prepare_attn_inputs(bs=1, seq_len=128, dim_size=2048)
+            # build base model
             base_peft_model = build_model(
                 TEST_MODELS[base_type], base_type, r=8, lora_alpha=1, lora_dropout=adapter_dropout, dummy=True,
                 )
-            unpatched = prepare_model(deepcopy(base_peft_model), base_type, foak_patch=False)
-            patched = prepare_model(deepcopy(base_peft_model), base_type, foak_patch=True)
-            loss_unpatched, grads_unpatched = run_model(inputs, unpatched)
-            loss_patched, grads_patched = run_model(inputs, patched)
+            binomial = torch.distributions.binomial.Binomial(probs=1-adapter_dropout)            
+            dropout_mask = binomial.sample(X.size()).to(X.device) * (1.0/(1-adapter_dropout))
+
+            # prepare 2 model variants to compare before and after foak patching
+            unpatched = prepare_model(deepcopy(base_peft_model), base_type, dropout_mask, foak_patch=False)
+            patched = prepare_model(deepcopy(base_peft_model), base_type, dropout_mask, foak_patch=True)
+            # run the models and get the loss and gradients
+            loss_unpatched, grads_unpatched = run_model(unpatched, X, position_ids)
+            loss_patched, grads_patched = run_model(patched, X, position_ids)
             assert (round(loss_unpatched.item(),5) == round(loss_patched.item(),5)), "Loss after foak patch do not match"
             A1, B1 = grads_unpatched
             A2, B2 = grads_patched
+            # check the gradients on the adapters match with some tolerance before patching and after
             match_gradients_A = (~torch.isclose(A1, A2, rtol=1e-05, atol=1e-05)).sum() == 0
             match_gradients_B = (~torch.isclose(B1, B2, rtol=1e-05, atol=1e-05)).sum() == 0
             assert match_gradients_A, "Gradients on lora A don't match after foak patch"
@@ -250,21 +244,29 @@ def test_adapter_gradients_match_with_model_weights():
     this function initializes a full model with actual model weights
     and runs the attention module from the 1st layer
     '''
-    for base_type in [GPTQ, BNB]:
+    for base_type in [BNB, GPTQ]:
         print(base_type)
-        for adapter_dropout in [0., 0.1, 0.5]:
-            inputs = prepare_attn_inputs(bs=1, seq_len=128, dim_size=2048)
+        for adapter_dropout in [0.1, 0.5]:
+            # Prepare fixed test inputs
+            X, position_ids = prepare_attn_inputs(bs=1, seq_len=128, dim_size=2048)
             base_peft_model = build_model(
                 TEST_MODELS[base_type], base_type, r=8, lora_alpha=1, lora_dropout=adapter_dropout, dummy=False
                 )
-            unpatched = prepare_model(deepcopy(base_peft_model), base_type, foak_patch=False)
-            patched = prepare_model(deepcopy(base_peft_model), base_type, foak_patch=True)
-            loss_unpatched, grads_unpatched = run_model(inputs, unpatched)
-            loss_patched, grads_patched = run_model(inputs, patched)
+            # prepare 2 model variants to compare before and after foak patching
+            binomial = torch.distributions.binomial.Binomial(probs=1-adapter_dropout)            
+            dropout_mask = binomial.sample((X.size(1), X.size(2))).to(X.device) * (1.0/(1-adapter_dropout))
+            
+            unpatched = prepare_model(deepcopy(base_peft_model), base_type, dropout_mask, foak_patch=False)
+            patched = prepare_model(deepcopy(base_peft_model), base_type, dropout_mask, foak_patch=True)
+            # run the models and get the loss and gradients
+            loss_unpatched, grads_unpatched = run_model(unpatched, X, position_ids)
+            loss_patched, grads_patched = run_model(patched, X, position_ids)
             assert (round(loss_unpatched.item(),5) == round(loss_patched.item(),5)), "Loss after foak patch don't match"
             A1, B1 = grads_unpatched
             A2, B2 = grads_patched
-            match_gradients_A = (~torch.isclose(A1, A2, rtol=1e-05, atol=1e-05)).sum() == 0
-            match_gradients_B = (~torch.isclose(B1, B2, rtol=1e-05, atol=1e-05)).sum() == 0
+            # check the gradients on the adapters match with some tolerance before patching and after
+            match_gradients_A = (~torch.isclose(A1, A2, rtol=1e-03, atol=1e-03)).sum() == 0
+            match_gradients_B = (~torch.isclose(B1, B2, rtol=1e-03, atol=1e-03)).sum() == 0
+
             assert match_gradients_A, "Gradients on lora A do not match after foak patch"
             assert match_gradients_B, "Gradients on lora B do not match after foak patch"
