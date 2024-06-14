@@ -28,188 +28,146 @@ class DummyDropout(torch.nn.Module):
             return torch.tril(X, diagonal=0)
         return X
 
-torch.nn.Dropout = DummyDropout
-torch.nn.functional.dropout = lambda x, p, training: torch.tril(x, diagonal=0)
+def wrap_peft(module, peft_cls, r, lora_alpha, lora_dropout):
+    module.q_proj = peft_cls(module.q_proj, "default", r=r, lora_alpha=lora_alpha, lora_dropout=lora_dropout)
+    module.k_proj = peft_cls(module.k_proj, "default", r=r, lora_alpha=lora_alpha, lora_dropout=lora_dropout)
+    module.v_proj = peft_cls(module.v_proj, "default", r=r, lora_alpha=lora_alpha, lora_dropout=lora_dropout)
+    module.o_proj = peft_cls(module.o_proj, "default", r=r, lora_alpha=lora_alpha, lora_dropout=lora_dropout)
+    return module
 
-class Test:
-    def __init__(self, base_type) -> None:
-        # attention input
-        self.x = torch.rand((1, 128, 2048), dtype=torch.float16, requires_grad=True, device="cuda")
-        # quantize layer type
-        self.base_type = base_type
-        # model name
-        if self.base_type == BNB:
-            self.test_model_name = "TinyLlama/TinyLlama-1.1B-Chat-v0.3"
-        elif self.base_type == GPTQ:
-            self.test_model_name = "TheBloke/TinyLlama-1.1B-Chat-v0.3-GPTQ"
-        else:
-            raise NotImplementedError("Invalid base type") 
-
-        self.r = 8
-        self.lora_alpha = 1.0
-        self.lora_dropout = 0.2
-
-    def load_model(self):
+def build_model(model_name, base_type, r, lora_alpha, lora_dropout):
+    def get_general_kwargs(mod):
+        return {
+            "input_features": mod.in_features,
+            "output_features": mod.out_features,
+            "bias": mod.bias is not None,
+        }
+    if base_type == BNB:
+        config = AutoConfig.from_pretrained(model_name)
+        quant_cls = Linear4bit
+        peft_cls = LoraBNBLinear4bit
+        base_type_kwargs = {
+            "compute_dtype": torch.float16,
+            "quant_type": 'nf4',
+            "quant_storage": torch.float16,
+        }
+    elif base_type == GPTQ:
+        config = AutoConfig.from_pretrained(model_name)
+        quant_cls = QuantLinear
+        peft_cls = LoraGPTQLinear4bit
+        base_type_kwargs = {
+            "bits": 4,
+            "group_size": -1,
+        }
+    else:
         raise NotImplementedError
 
-    def run_model(self, attention_mod, foak_patch):
-        position_ids = torch.arange(self.x.size(1), device=self.x.device).view(1, -1)
-        if foak_patch:
-            attention_mod = patch_model(attention_mod, base_type=self.base_type)
-            print(patch_model_summary())
-        out, _, _ = attention_mod(self.x, position_ids=position_ids)
-        loss = out.norm()
-        loss.backward()
-        grad_norms = [
-            loss.item(),
-            attention_mod.q_proj.lora_A.default.weight.grad.norm().item(),
-            attention_mod.k_proj.lora_A.default.weight.grad.norm().item(),
-            attention_mod.v_proj.lora_A.default.weight.grad.norm().item(),
-            attention_mod.o_proj.lora_A.default.weight.grad.norm().item(),
-            attention_mod.q_proj.lora_B.default.weight.grad.norm().item(),
-            attention_mod.k_proj.lora_B.default.weight.grad.norm().item(),
-            attention_mod.v_proj.lora_B.default.weight.grad.norm().item(),
-            attention_mod.o_proj.lora_B.default.weight.grad.norm().item(),
+    test_module = LlamaAttention(config, 0)
+    test_module.q_proj = quant_cls(
+                    **get_general_kwargs(test_module.q_proj),
+                    **base_type_kwargs
+                )
+
+    test_module.k_proj = quant_cls(
+                    **get_general_kwargs(test_module.k_proj),
+                    **base_type_kwargs
+                )
+    test_module.v_proj = quant_cls(
+                    **get_general_kwargs(test_module.v_proj),
+                    **base_type_kwargs
+                )
+    test_module.o_proj = quant_cls(
+                    **get_general_kwargs(test_module.o_proj),
+                    **base_type_kwargs
+                )
+
+    return wrap_peft(test_module, peft_cls, r, lora_alpha, lora_dropout)
+
+def prepare_attn_inputs(bs, seq_len, dim_size):
+    x = torch.rand((bs, seq_len, dim_size), dtype=torch.float16, requires_grad=True, device="cuda")
+    position_ids = torch.arange(seq_len, device=x.device).view(1, -1)
+    return x, position_ids
+
+def prepare_model(base_peft_model, base_type, foak_patch=False):
+    # TODO fix autogptq weights
+
+    _model = base_peft_model.to("cuda")
+
+    # Inject Dummy Dropout Here
+    _model.q_proj.lora_dropout = torch.nn.ModuleDict(
+        [
+            ["default", DummyDropout(p=_model.q_proj.lora_dropout["default"].p)]
         ]
-        return grad_norms
+    )
+    _model.k_proj.lora_dropout = torch.nn.ModuleDict(
+        [
+            ["default", DummyDropout(p=_model.k_proj.lora_dropout["default"].p)]
+        ]
+    )
+    _model.v_proj.lora_dropout = torch.nn.ModuleDict(
+        [
+            ["default", DummyDropout(p=_model.v_proj.lora_dropout["default"].p)]
+        ]
+    )
+    _model.o_proj.lora_dropout = torch.nn.ModuleDict(
+        [
+            ["default", DummyDropout(p=_model.o_proj.lora_dropout["default"].p)]
+        ]
+    )
 
-class Test1(Test):
-    def __init__(self, base_type) -> None:
-        super().__init__(base_type)
-        self.model = self.load_model().to(self.x.device)
+    if foak_patch:
+        if base_type == BNB:
+            # TODO sets quant_state dtype to float16 here 1st to avoid type mismatch error
+            # will revisit later to find out how to initialize quant_state on casting to device
+            base_peft_model.q_proj.base_layer.weight.quant_state.dtype = torch.float16
+            base_peft_model.k_proj.base_layer.weight.quant_state.dtype = torch.float16
+            base_peft_model.v_proj.base_layer.weight.quant_state.dtype = torch.float16
+            base_peft_model.o_proj.base_layer.weight.quant_state.dtype = torch.float16
 
-    def load_model(self):
-        config = AutoConfig.from_pretrained(self.test_model_name)
-        config.num_hidden_layers = 1
-        if self.base_type == BNB:
-            bnb_config = BitsAndBytesConfig(
-                load_in_4bit=True,
-                bnb_4bit_quant_type="nf4",
-                bnb_4bit_compute_dtype=torch.float16,
-                bnb_4bit_use_double_quant=True,
-            )
-            test_model = AutoModelForCausalLM.from_pretrained(
-                self.test_model_name,
-                config = config,
-                torch_dtype = torch.float16,
-                quantization_config=bnb_config,
-            )
-        elif self.base_type == GPTQ:
-            raise NotImplementedError
+        _model = patch_model(base_peft_model, base_type=base_type)
+        print(patch_model_summary())
 
-        peft_config = LoraConfig(
-            r=self.r, 
-            lora_alpha=self.lora_alpha, 
-            lora_dropout=self.lora_dropout, 
-            target_modules=[
-                "q_proj",
-                "k_proj",
-                "v_proj",
-                "o_proj",
-                ]
-        )
-        return get_peft_model(test_model, peft_config)
+    return _model
 
-    def run_model(self, foak_patch = False):
-        with torch.autocast(dtype=torch.float16, device_type="cuda"):
-            attention_mod = deepcopy(self.model.base_model.model.model.layers[0].self_attn)
-            return super().run_model(attention_mod, foak_patch)
+def run_model(inputs, model):
+    x, position_ids = inputs
+    with torch.autocast(dtype=torch.float16, device_type="cuda"):
+        out, _, _ = model(x, position_ids=position_ids)
+    loss = out.norm()
+    loss.backward()
+    grad_norms_A = [
+        model.q_proj.lora_B.default.weight.grad,
+        model.k_proj.lora_B.default.weight.grad,
+        model.v_proj.lora_B.default.weight.grad,
+        model.o_proj.lora_B.default.weight.grad,
+    ]
+    grad_norms_B = [
+        model.q_proj.lora_B.default.weight.grad,
+        model.k_proj.lora_B.default.weight.grad,
+        model.v_proj.lora_B.default.weight.grad,
+        model.o_proj.lora_B.default.weight.grad,
+    ]
 
-class Test2(Test):
-    def __init__(self, base_type) -> None:
-        super().__init__(base_type)
-        self.model = self.load_model().to(self.x.device)
+    return loss, (torch.vstack(grad_norms_A), torch.vstack(grad_norms_B))
 
-    def load_model(self):
-        config = AutoConfig.from_pretrained("TinyLlama/TinyLlama-1.1B-Chat-v0.3")
-        test_module = LlamaAttention(config, 0)
-        if self.base_type == BNB:
-            quant_cls = Linear4bit
-            peft_cls = LoraBNBLinear4bit
-            target_kwargs = {
-                "compute_dtype": torch.float16,
-                "quant_type": 'nf4',
-                "quant_storage": torch.float16,
-            }
-        elif self.base_type == GPTQ:
-            quant_cls = QuantLinear
-            peft_cls = LoraGPTQLinear4bit
-            target_kwargs = {}
-        else:
-            raise NotImplementedError
-
-        test_module = Test2.replace_linear(
-                                    test_module, 
-                                    linear_replacement=quant_cls,
-                                    **target_kwargs,
-        )
-        return self.wrap_peft(test_module, peft_cls)
-
-    def run_model(self, foak_patch = False):
-        if self.base_type == BNB:
-            self.model.q_proj.base_layer.quant_state.dtype = torch.float16
-            self.model.k_proj.base_layer.quant_state.dtype = torch.float16
-            self.model.v_proj.base_layer.quant_state.dtype = torch.float16
-            self.model.o_proj.base_layer.quant_state.dtype = torch.float16
-        with torch.autocast(dtype=torch.float16, device_type="cuda"):
-            attention_mod = deepcopy(self.model)
-            return super().run_model(attention_mod, foak_patch)
-
-    def wrap_peft(self, module, peft_cls):
-        module.q_proj = peft_cls(module.q_proj, "default", r=self.r, lora_alpha=self.lora_alpha, lora_dropout = self.lora_dropout)
-        module.k_proj = peft_cls(module.k_proj, "default", r=self.r, lora_alpha=self.lora_alpha, lora_dropout = self.lora_dropout)
-        module.v_proj = peft_cls(module.v_proj, "default", r=self.r, lora_alpha=self.lora_alpha, lora_dropout = self.lora_dropout)
-        module.o_proj = peft_cls(module.o_proj, "default", r=self.r, lora_alpha=self.lora_alpha, lora_dropout = self.lora_dropout)
-        return module
-
-    @staticmethod
-    def replace_linear(model:torch.nn.Module, linear_replacement:torch.nn.Module, quant_config=None,
-                   skip_modules=["lm_head"], **kwargs):
-        """
-        Replace linear modules with a new Linear module.
-        Parameters:
-            model (`torch.nn.Module`):
-                Input model or `torch.nn.Module` as the function is run recursively.
-            linear_replacement (`torch.nn.Module`):
-                The linear module that replaces the old one. Only expects standard arguments.
-                If other arguments need to be passed, use a lambda.
-            skip_modules (`List[str]`, *optional*, defaults to `lm_head`):
-                List of modules names not to convert. Defaults to `lm_head`.
-        """
-        for name, module in model.named_children():
-            if name in skip_modules:
-                continue
-
-            if len(list(module.children())) > 0:
-                Test2.replace_linear(module, linear_replacement, quant_config, skip_modules, **kwargs)
-
-            if isinstance(module, torch.nn.Linear):
-                if issubclass(linear_replacement, Linear4bit):
-                    model._modules[name] = linear_replacement(
-                        module.in_features,
-                        module.out_features,
-                        module.bias is not None,
-                        **kwargs
-                    )
-                elif issubclass(linear_replacement, QuantLinear):
-                    model._modules[name] = linear_replacement(
-                        4,
-                        -1,
-                        module.in_features,
-                        module.out_features,
-                        module.bias is not None,
-                        **kwargs
-                    )
-        return model
-
-# This loads a single layer tiny llama model
-def test_foak_dropout_1():
-    for base_type in [BNB, GPTQ]:
-        t1 = Test1(base_type = base_type)
-        assert all([round(a,5)==round(b,5) for a,b in zip(t1.run_model(), t1.run_model(foak_patch=True))]), "Loss and gradients don't match"
+TEST_MODELS = {
+    BNB: "TinyLlama/TinyLlama-1.1B-Chat-v0.3",
+    GPTQ: "TheBloke/TinyLlama-1.1B-Chat-v0.3-GPTQ",
+}
 
 # this loads a dummy attention module
-def test_foak_dropout_2():
+def test_adapter_gradients_match():
     for base_type in [BNB, GPTQ]:
-        t2 = Test2(base_type = base_type)
-        assert all([round(a,5)==round(b,5) for a,b in zip(t2.run_model(), t2.run_model(foak_patch=True))]), "Loss and gradients don't match"
+        inputs = prepare_attn_inputs(bs=1, seq_len=128, dim_size=2048)
+        base_peft_model = build_model(
+            TEST_MODELS[base_type], base_type, r=8, lora_alpha=1, lora_dropout=0.1
+            )
+        unpatched = prepare_model(deepcopy(base_peft_model), base_type, foak_patch=False)
+        patched = prepare_model(deepcopy(base_peft_model), base_type, foak_patch=True)
+        loss_unpatched, grads_unpatched = run_model(inputs, unpatched)
+        loss_patched, grads_patched = run_model(inputs, patched)
+        assert (round(loss_unpatched.item(),5) == round(loss_patched.item(),5)), "Loss between unpatched and foak-patched don't match"
+        A1, B2 = grads_unpatched
+        A2, B2 = grads_patched
+        import pdb; pdb.set_trace()        
+        assert torch.isclose(A1, A2, rtol=1e-05, atol=1e-05).long()

@@ -112,7 +112,7 @@ def get_lora_parameters(proj):
     return qstate, A, B, s, dropout
 
 
-def matmul_lora_canonicalized(X, W, A, B, s, dropout):
+def matmul_lora_canonicalized(X, W, A, B, s, dropout=None):
     """
     X: rank-2 tensor (batch, seq_len) x (din)
     W: rank-2 tensor (din, dout)
@@ -122,9 +122,9 @@ def matmul_lora_canonicalized(X, W, A, B, s, dropout):
     """
 
     out = torch.matmul(X, W)
-    if dropout:
-        X = dropout(X)
-    dropout.X = X
+    if dropout is not None:
+        X = dropout(X)        
+        dropout.X = X
     A, B = A.t(), B.t()
     out += (X @ A) @ (s * B)
 
@@ -145,9 +145,10 @@ def matmul_lora(X, W, A, B, s, out=None, dropout=None):
 
     if A is not None:
         # LoRA is enabled
-        if dropout:
-            dropout.X = dropout(X)
-            X = dropout.X
+        if dropout is not None:
+            # save post-dropout X for backward computation
+            X = dropout(X)
+            dropout.X = X
         A, B = A.t(), B.t()
         out += (X @ A.to(dtype)) @ (s * B.to(dtype))
 
@@ -264,12 +265,21 @@ class LoRA_MLP(torch.autograd.Function):
             down_bits,
             downS,
         )
+        # Extract post-dropout X for use in backward computation
+        dropout_gateX = getattr(dropout_gate, "X", X)
+        dropout_upX = getattr(dropout_up, "X", X)
+        dropout_downX = getattr(dropout_down, "X", X)
+
         ctx.save_for_backward(gateA, gateB, upA, upB, downA, downB, X, e, g,
-        dropout_gate.X, dropout_up.X, dropout_down.X
+        dropout_gateX, dropout_upX, dropout_downX
         )
-        delattr(dropout_gate, "X")
-        delattr(dropout_up, "X")
-        delattr(dropout_down, "X")
+        # remove x once saved to ctx
+        if hasattr(dropout_gate, "X"):
+            del dropout_gate.X
+        if hasattr(dropout_up, "X"):
+            del dropout_up.X
+        if hasattr(dropout_down, "X"):
+            del dropout_down.X
         return i
 
     @staticmethod
@@ -514,6 +524,10 @@ class LoRA_QKV(torch.autograd.Function):
             V_bits,
             VS,
         )
+        # Extract post-dropout X for use in backward computation
+        dropout_QX = getattr(dropout_Q, "X", X)
+        dropout_KX = getattr(dropout_K, "X", X)
+        dropout_VX = getattr(dropout_V, "X", X)
         ctx.save_for_backward(
             X,
             QA,
@@ -522,13 +536,17 @@ class LoRA_QKV(torch.autograd.Function):
             KB,
             VA,
             VB,
-            dropout_Q.X, 
-            dropout_K.X, 
-            dropout_V.X,
+            dropout_QX,
+            dropout_KX,
+            dropout_VX,
         )
-        delattr(dropout_Q, "X")
-        delattr(dropout_K, "X")
-        delattr(dropout_V, "X")
+        # remove X once saved to ctx
+        if hasattr(dropout_Q, "X"):
+            del dropout_Q.X
+        if hasattr(dropout_K, "X"):
+            del dropout_K.X
+        if hasattr(dropout_V, "X"):
+            del dropout_V.X
         return Q, K, V
 
     @staticmethod
@@ -730,8 +748,12 @@ class LoRA_W(torch.autograd.Function):
             O_bits,
             S,
         )
-        ctx.save_for_backward(A, B, X, dropout_O.X)
-        delattr(dropout_O, "X")
+        # Extract post-dropout X for use in backward computation
+        dropout_OX = getattr(dropout_O, "X", X)
+        ctx.save_for_backward(A, B, X, dropout_OX)
+        # remove X once saved to ctx
+        if hasattr(dropout_O, "X"): 
+            del dropout_O.X
         return XW
 
     @staticmethod

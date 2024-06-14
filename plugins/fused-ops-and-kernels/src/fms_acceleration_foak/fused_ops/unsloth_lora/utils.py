@@ -249,9 +249,10 @@ def matmul_lora(X, W, W_quant, A, B, s, out = None, dropout=None):
 
     if A is not None:
         # LoRA is enabled
-        if dropout:
+        if dropout is not None:
+            # save post-dropout X for backward computation
             X = dropout(X)
-        dropout.X = X
+            dropout.X = X
         A, B = A.t(), B.t()
         out += (X @ A.to(dtype)) @ (s * B.to(dtype))
     pass
