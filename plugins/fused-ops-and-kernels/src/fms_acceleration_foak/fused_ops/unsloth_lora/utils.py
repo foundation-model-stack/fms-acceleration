@@ -70,7 +70,6 @@ def get_lora_parameters(proj):
     B = proj.lora_B [active_adapter].weight
     s = proj.scaling[active_adapter]
     dropout = proj.lora_dropout[active_adapter] if hasattr(proj, "lora_dropout") else None
-    dropout.X = None
     return W, QUANT_STATE(W, base_layer), A, B, s, dropout
 pass
 
