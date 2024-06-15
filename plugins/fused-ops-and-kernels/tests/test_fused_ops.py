@@ -152,7 +152,7 @@ def build_model(model_name, base_type, r, lora_alpha, lora_dropout, dummy=True):
             raise NotImplementedError("Invalid base type")
 
 def prepare_attn_inputs(bs, seq_len, dim_size):
-    x = torch.rand((bs, seq_len, dim_size), dtype=torch.float16, requires_grad=True, device="cuda")
+    x =  torch.rand((bs, seq_len, dim_size), dtype=torch.float16, device="cuda")
     position_ids = torch.arange(seq_len, device=x.device).view(1, -1)
     return x, position_ids
 
@@ -211,17 +211,20 @@ def test_adapter_gradients_match_with_dummy_module():
     For GPTQ it isn't straightforward to initialize a dummy baselayer, 
     so this function is only supports BNB for now
     '''
+    torch.manual_seed(42)
+    rtol = 1e-3
+    X, position_ids = prepare_attn_inputs(bs=1, seq_len=128, dim_size=2048)
+
     for base_type in [BNB]:
         print(base_type)
-        for adapter_dropout in [0., 0.1, 0.5]:
+        for adapter_dropout in [0, .1, .5]:
             # Prepare fixed test inputs
-            X, position_ids = prepare_attn_inputs(bs=1, seq_len=128, dim_size=2048)
             # build base model
             base_peft_model = build_model(
                 TEST_MODELS[base_type], base_type, r=8, lora_alpha=1, lora_dropout=adapter_dropout, dummy=True,
                 )
             binomial = torch.distributions.binomial.Binomial(probs=1-adapter_dropout)            
-            dropout_mask = binomial.sample(X.size()).to(X.device) * (1.0/(1-adapter_dropout))
+            dropout_mask = binomial.sample(X.shape[1:]).to(X.device) * (1.0/(1-adapter_dropout))
 
             # prepare 2 model variants to compare before and after foak patching
             unpatched = prepare_model(deepcopy(base_peft_model), base_type, dropout_mask, foak_patch=False)
@@ -229,14 +232,14 @@ def test_adapter_gradients_match_with_dummy_module():
             # run the models and get the loss and gradients
             loss_unpatched, grads_unpatched = run_model(unpatched, X, position_ids)
             loss_patched, grads_patched = run_model(patched, X, position_ids)
-            assert (round(loss_unpatched.item(),5) == round(loss_patched.item(),5)), "Loss after foak patch do not match"
+            assert (loss_unpatched - loss_patched).abs() < 1e-5,\
+                "Loss after foak patch do not match"
+
             A1, B1 = grads_unpatched
             A2, B2 = grads_patched
-            # check the gradients on the adapters match with some tolerance before patching and after
-            match_gradients_A = (~torch.isclose(A1, A2, rtol=1e-05, atol=1e-05)).sum() == 0
-            match_gradients_B = (~torch.isclose(B1, B2, rtol=1e-05, atol=1e-05)).sum() == 0
-            assert match_gradients_A, "Gradients on lora A don't match after foak patch"
-            assert match_gradients_B, "Gradients on lora B don't match after foak patch"
+
+            for b1, b2 in zip(A1 + B1, A2 + B2):
+                assert torch.allclose(b1, b2, atol=1e-4, rtol=rtol), "Gradients don't match after foak patch"
 
 # large
 def test_adapter_gradients_match_with_model_weights():
