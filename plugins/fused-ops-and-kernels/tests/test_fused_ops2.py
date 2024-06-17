@@ -64,7 +64,7 @@ class DummyDropout(torch.nn.Module):
         return X
 
 @pytest.fixture()
-def test_inputs(seed: int=42, device: torch.device='cuda'):
+def attention_inputs(seed: int=42, device: torch.device='cuda'):
     torch.manual_seed(seed)
 
     for dtype in DTYPES:
@@ -91,7 +91,7 @@ def dropout_masks(seed: int=42, device: torch.device='cuda'):
     yield masks
 
 @pytest.fixture()
-def test_attention_layers(device: torch.device = 'cuda'):
+def attention_layers(device: torch.device = 'cuda'):
     from bitsandbytes.nn.modules import Linear4bit
     from auto_gptq.nn_modules.qlinear.qlinear_tritonv2 import QuantLinear
 
@@ -160,7 +160,7 @@ def prepare_foak(attn_module, base_type):
     return _model
 
 def run_model(
-    model, target_modules, dtype, X, 
+    model, dtype, X, 
     device: torch.device = 'cuda', **kwargs, 
 ):
     with torch.autocast(dtype=getattr(torch, dtype), device_type=device):
@@ -168,52 +168,64 @@ def run_model(
     loss = out.norm()
     loss.backward()
 
+    return loss
+
+def get_attention_lora_grads(
+    model, target_modules
+):
     # comparing the grads on the adapters
     adapter_grads = []
     for tm in target_modules:
         for n in ['lora_A', 'lora_B']:
             mod = model.get_submodule(f"{tm}.{n}.{ADAPTER_NAME}")
-            adapter_grads.append(mod.weight.grad)
-
-    return loss, adapter_grads
+            adapter_grads.append(mod.weight.grad) 
+    return adapter_grads
 
 # small
 def test_adapter_gradients_match_with_attention_layer(
-    test_inputs, test_attention_layers, dropout_masks
+    attention_inputs, attention_layers, dropout_masks
 ):
     '''
     this function loads a dummy attention module, 
     For GPTQ it isn't straightforward to initialize a dummy baselayer, 
     so this function is only supports BNB for now
     '''
-    for (bs, sl, hd), dtype in product(SIZES, DTYPES):
-        # only running on one size for now
-        X, position_ids = test_inputs[(bs, sl, hd, dtype)]
-        _kwargs = {'position_ids': position_ids}
-        for base_type in [BNB]:
+    for base_type in [BNB]:
+        model_name, target_modules = TEST_MODELS[base_type]
+        config = AutoConfig.from_pretrained(model_name)
+
+        # find compatible sizes
+        sizes = [(bs, sl, hd) for bs, sl, hd in SIZES if hd == config.hidden_size]
+
+        for (bs, sl, hd), dtype in product(sizes, DTYPES):
+            X, position_ids = attention_inputs[(bs, sl, hd, dtype)]
+            _kwargs = {'position_ids': position_ids}
+
             for r, lora_alpha in LORA_PARAMS:
                 for d in DROPOUTS:
 
                     # attn layer + mask
-                    attn = test_attention_layers[(base_type, r, lora_alpha, dtype)]
+                    attn = attention_layers[(base_type, r, lora_alpha, dtype)]
                     DummyDropout.dropout_mask = dropout_masks[(sl, hd, d)]
-                    _, target_modules = TEST_MODELS[base_type]
 
                     # prepare models
                     without_foak = deepcopy(attn)
                     with_foak = prepare_foak(deepcopy(attn), base_type)
 
                     # run the models and get the loss and gradients
-                    loss_unpatched, grads_unpatched = run_model(
-                        without_foak, target_modules, dtype, X, **_kwargs
+                    loss_unpatched = run_model(
+                        without_foak, dtype, X, **_kwargs
                     )
-                    loss_patched, grads_patched = run_model(
-                        with_foak, target_modules, dtype, X, **_kwargs
+                    loss_patched = run_model(
+                        with_foak, dtype, X, **_kwargs
                     )
 
                     # compute outputs
                     assert (loss_unpatched - loss_patched).abs() < LOSS_TOL,\
                         "Loss after foak patch do not match"
+
+                    grads_unpatched = get_attention_lora_grads(without_foak, target_modules)
+                    grads_patched = get_attention_lora_grads(with_foak, target_modules)
 
                     for x, y in zip(grads_unpatched, grads_patched):
                         assert torch.allclose(x, y, atol=ALLCLOSE_ATOL, rtol=ALLCLOSE_RTOL), "Gradients don't match after foak patch"
