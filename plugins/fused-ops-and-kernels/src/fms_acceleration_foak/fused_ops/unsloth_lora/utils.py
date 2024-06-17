@@ -36,6 +36,7 @@ if _bitsandbytes_available:
     import ctypes
     import torch
     cdequantize_blockwise_fp32      = bnb.functional.lib.cdequantize_blockwise_fp32
+    cdequantize_blockwise_fp32_nf4  = bnb.functional.lib.cdequantize_blockwise_fp32_nf4
     cdequantize_blockwise_fp16_nf4  = bnb.functional.lib.cdequantize_blockwise_fp16_nf4
     cdequantize_blockwise_bf16_nf4  = bnb.functional.lib.cdequantize_blockwise_bf16_nf4
     cgemm_4bit_inference_naive_fp16 = bnb.functional.lib.cgemm_4bit_inference_naive_fp16
@@ -114,8 +115,15 @@ def fast_dequantize(W, quant_state = None, out = None):
     )
     out_absmax += offset
 
-    fx = cdequantize_blockwise_fp16_nf4 if dtype == torch.float16 else \
-         cdequantize_blockwise_bf16_nf4
+
+    if dtype == torch.float16:
+        fx = cdequantize_blockwise_fp16_nf4 
+    elif dtype == torch.bfloat16:
+        fx = cdequantize_blockwise_bf16_nf4 
+    elif dtype == torch.float32:
+        fx = cdequantize_blockwise_fp32_nf4 
+    else:
+        raise NotImplementedError(f"Fused-lora does not support '{dtype}'")
     fx(get_ptr(None), get_ptr(W), ptr_out_absmax, get_ptr(out),
        ctypes.c_int(blocksize), ctypes.c_int(out.numel()))
 

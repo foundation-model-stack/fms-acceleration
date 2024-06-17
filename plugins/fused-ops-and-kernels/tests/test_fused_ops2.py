@@ -111,7 +111,7 @@ def attention_layers(device: torch.device = 'cuda'):
             if base_type == BNB:
                 base_type_kwargs = {
                     "compute_dtype": getattr(torch, dtype),
-                    "quant_type": 'nf4', # TODO how aboute fp4 also?
+                    "quant_type": 'nf4', # NOTE: fp4 is not supported by atm
                     "quant_storage": getattr(torch, dtype),
                 }
             elif base_type == GPTQ:
@@ -130,10 +130,12 @@ def attention_layers(device: torch.device = 'cuda'):
                 )
 
                 if base_type == BNB:
-                    quant_base_layer = quant_base_layer.to(device)
-                    # TODO sets quant_state dtype to float16 here 1st to avoid type mismatch error
-                    # will revisit later to find out how to initialize quant_state on casting to device
-                    quant_base_layer.weight.quant_state.dtype = getattr(torch, dtype)
+                    # need to cast it so that the quant_type will be correct
+                    # because it takes the quantype from the weights dtype
+                    quant_base_layer.to(getattr(torch, dtype))
+
+                # bring to device
+                quant_base_layer = quant_base_layer.to(device)
 
                 lora_linear_layer = peft_cls(
                     quant_base_layer, ADAPTER_NAME, 
