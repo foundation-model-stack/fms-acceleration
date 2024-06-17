@@ -1,8 +1,9 @@
 import torch
 from copy import deepcopy
-from transformers import AutoConfig
+from transformers import AutoConfig, AutoModelForCausalLM, BitsAndBytesConfig
 from transformers.models.llama.modeling_llama import LlamaAttention
 
+from peft import LoraConfig, get_peft_model
 from peft.tuners.lora.bnb import Linear4bit as LoraBNBLinear4bit
 from peft.tuners.lora.gptq import QuantLinear as LoraGPTQLinear4bit
 
@@ -67,15 +68,18 @@ class DummyDropout(torch.nn.Module):
 def attention_inputs(seed: int=42, device: torch.device='cuda'):
     torch.manual_seed(seed)
 
+    inputs = {}
     for dtype in DTYPES:
-        inputs = {
-            (bs, seq_len, dim_size, dtype): (
-                torch.rand((bs, seq_len, dim_size), dtype=getattr(torch, dtype)),
-                torch.arange(seq_len).repeat(bs,1)
+        for bs, seq_len, dim_size in SIZES:
+            inputs[(bs, seq_len, dim_size, dtype)] = (
+                torch.rand(
+                    (bs, seq_len, dim_size), 
+                    dtype=getattr(torch, dtype),
+                    device=device,
+                ),
+                torch.arange(seq_len).repeat(bs,1).to(device)
             )
-            for bs, seq_len, dim_size in SIZES
-        }
-    yield {k: (v1.to(device) for v1 in v)for k,v in inputs.items()}
+    yield inputs
 
 @pytest.fixture()
 def dropout_masks(seed: int=42, device: torch.device='cuda'):
@@ -153,6 +157,69 @@ def attention_layers(device: torch.device = 'cuda'):
 
     yield layers
 
+@pytest.fixture()
+def loaded_models(device: torch.device = 'cuda'):
+
+    from fms_acceleration_peft.framework_plugin_bnb import BNBAccelerationPlugin
+    from fms_acceleration_peft.framework_plugin_autogptq import AutoGPTQAccelerationPlugin
+
+    plugins = {
+        BNB: BNBAccelerationPlugin(
+            {
+                'peft': {
+                    'quantization': {
+                        'bitsandbytes': {'quant_type': 'nf4', 'no_peft_model': False}
+                    }
+                }
+            }
+        ),
+        GPTQ: AutoGPTQAccelerationPlugin(
+            {
+                'peft': {
+                    'quantization': {
+                        'auto_gptq': {'kernel': 'triton_v2', 'from_quantized': True}
+                    }
+                }
+            }
+        ),
+    }
+
+    class TrainArgs:
+        gradient_checkpointing = False
+        gradient_checkpointing_kwargs = {}
+    args = TrainArgs()
+
+    all_models = {}
+    for dtype in DTYPES:
+        for base_type in [BNB, GPTQ]:
+            for r, lora_alpha in LORA_PARAMS:
+                model_name, target_modules = TEST_MODELS[base_type]
+                # config = AutoConfig.from_pretrained(model_name)
+                peft_config = LoraConfig(
+                    r=r, 
+                    lora_alpha=lora_alpha, 
+                    lora_dropout=0., # anyway we are going to override it
+                    target_modules=target_modules,
+                )
+
+                _plugin = plugins[base_type]
+                model = _plugin.model_loader(
+                    model_name, torch_dtype=getattr(torch, dtype)
+                )
+                model, _ = _plugin.augmentation(model, args, (peft_config,))
+                all_models[(base_type, r, lora_alpha, dtype)] = model
+
+                lora_mods = []
+                for mod in model.modules():
+                    if hasattr(mod, 'lora_dropout'):
+                        lora_mods.append(mod)
+                
+                for mod in lora_mods:
+                    mod.lora_dropout = torch.nn.ModuleDict(
+                        [[ADAPTER_NAME, DummyDropout()]]
+                    )
+
+    return all_models
 
 def prepare_foak(attn_module, base_type):
 
@@ -182,6 +249,8 @@ def get_attention_lora_grads(
             mod = model.get_submodule(f"{tm}.{n}.{ADAPTER_NAME}")
             adapter_grads.append(mod.weight.grad) 
     return adapter_grads
+
+# -------------------------- TESTS ----------------------------------
 
 # small
 def test_adapter_gradients_match_with_attention_layer(
@@ -213,6 +282,55 @@ def test_adapter_gradients_match_with_attention_layer(
                     # prepare models
                     without_foak = deepcopy(attn)
                     with_foak = prepare_foak(deepcopy(attn), base_type)
+
+                    # run the models and get the loss and gradients
+                    loss_unpatched = run_model(
+                        without_foak, dtype, X, **_kwargs
+                    )
+                    loss_patched = run_model(
+                        with_foak, dtype, X, **_kwargs
+                    )
+
+                    # compute outputs
+                    assert (loss_unpatched - loss_patched).abs() < LOSS_TOL,\
+                        "Loss after foak patch do not match"
+
+                    grads_unpatched = get_attention_lora_grads(without_foak, target_modules)
+                    grads_patched = get_attention_lora_grads(with_foak, target_modules)
+
+                    for x, y in zip(grads_unpatched, grads_patched):
+                        assert torch.allclose(x, y, atol=ALLCLOSE_ATOL, rtol=ALLCLOSE_RTOL), "Gradients don't match after foak patch"
+
+@pytest.mark.slow
+def test_adapter_gradients_match_with_model(
+    attention_inputs, loaded_models, dropout_masks
+):
+
+     for base_type in [BNB, GPTQ]:
+        model_name, target_modules = TEST_MODELS[base_type]
+        config = AutoConfig.from_pretrained(model_name)
+
+        # find compatible sizes
+        sizes = [(bs, sl, hd) for bs, sl, hd in SIZES if hd == config.hidden_size]
+
+        for (bs, sl, hd), dtype in product(sizes, DTYPES):
+            X, position_ids = attention_inputs[(bs, sl, hd, dtype)]
+            _kwargs = {'position_ids': position_ids}
+
+            for r, lora_alpha in LORA_PARAMS:
+                for d in DROPOUTS:
+
+                    # attn layer + mask
+                    model = loaded_models[(base_type, r, lora_alpha, dtype)]
+                    DummyDropout.dropout_mask = dropout_masks[(sl, hd, d)]
+
+                    # prepare models
+                    without_foak = deepcopy(model)
+                    with_foak = prepare_foak(deepcopy(model), base_type)
+
+                    # FIXME:
+                    without_foak = without_foak.model.model.layers[0].self_attn
+                    with_foak = with_foak.model.model.layers[0].self_attn
 
                     # run the models and get the loss and gradients
                     loss_unpatched = run_model(
