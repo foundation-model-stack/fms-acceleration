@@ -1,5 +1,7 @@
 # Copyright 2023-present Daniel Han-Chen & the Unsloth team. All rights reserved.
 #
+# Copyright The FMS HF Tuning Authors
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -74,7 +76,7 @@ def get_lora_parameters(proj):
     return W, QUANT_STATE(W, base_layer), A, B, s, dropout
 pass
 
-
+# modified by flim@sg.ibm.com
 def fast_dequantize(W, quant_state = None, out = None):
     if quant_state is None: return W
     if type(quant_state) is not list:
@@ -257,7 +259,8 @@ def matmul_lora(X, W, W_quant, A, B, s, out = None, dropout=None):
     if A is not None:
         # LoRA is enabled
         if dropout is not None:
-            # save post-dropout X for backward computation
+            # in order to return the dropped out X to the 
+            # top level, we save it on the dropout module
             X = dropout(X)
             dropout.X = X
         A, B = A.t(), B.t()

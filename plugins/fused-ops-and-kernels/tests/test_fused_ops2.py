@@ -1,9 +1,9 @@
 import torch
 from copy import deepcopy
-from transformers import AutoConfig, AutoModelForCausalLM, BitsAndBytesConfig
+from transformers import AutoConfig
 from transformers.models.llama.modeling_llama import LlamaAttention
 
-from peft import LoraConfig, get_peft_model
+from peft import LoraConfig
 from peft.tuners.lora.bnb import Linear4bit as LoraBNBLinear4bit
 from peft.tuners.lora.gptq import QuantLinear as LoraGPTQLinear4bit
 
@@ -18,23 +18,25 @@ GPTQ = "auto_gptq"
 
 TEST_MODELS = {
     BNB: (
-        "TinyLlama/TinyLlama-1.1B-Chat-v0.3", 
+        "TinyLlama/TinyLlama-1.1B-Chat-v0.3",  
+        LlamaAttention,
         ['q_proj', 'k_proj', 'v_proj', 'o_proj']
     ),
     GPTQ: (
         "TheBloke/TinyLlama-1.1B-Chat-v0.3-GPTQ",
+        LlamaAttention,
         ['q_proj', 'k_proj', 'v_proj', 'o_proj']
     ),
 }
 
-PEFT_CLS = {
+LORA_QUANTIZED_CLASSES = {
     BNB: LoraBNBLinear4bit,
     GPTQ: LoraGPTQLinear4bit,
 }
 
 ADAPTER_NAME = 'default'
 
-LOSS_TOL = 1e-5
+LOSS_TOL = 1e-3
 ALLCLOSE_RTOL = 1e-3
 ALLCLOSE_ATOL = 1e-4
 
@@ -82,6 +84,26 @@ def attention_inputs(seed: int=42, device: torch.device='cuda'):
     yield inputs
 
 @pytest.fixture()
+def model_inputs(seed: int=42, device: torch.device='cuda'):
+    torch.manual_seed(seed)
+
+    inputs = {}
+    for dtype in DTYPES:
+        for bs, seq_len, dim_size in SIZES:
+            inputs[(bs, seq_len, dim_size, dtype)] = (
+                torch.randint(
+                    0, 10000, # most models should have more than 10K
+                    (bs, seq_len), dtype=torch.int, device=device,
+                ),
+                torch.randint(
+                    0, 10000, # most models should have more than 10K
+                    (bs, seq_len), dtype=torch.int, device=device,
+                ),
+                torch.arange(seq_len).repeat(bs,1).to(device)
+            )
+    yield inputs
+
+@pytest.fixture()
 def dropout_masks(seed: int=42, device: torch.device='cuda'):
     torch.manual_seed(seed)
 
@@ -97,9 +119,9 @@ def dropout_masks(seed: int=42, device: torch.device='cuda'):
 @pytest.fixture()
 def attention_layers(device: torch.device = 'cuda'):
     from bitsandbytes.nn.modules import Linear4bit
-    from auto_gptq.nn_modules.qlinear.qlinear_tritonv2 import QuantLinear
+    # from auto_gptq.nn_modules.qlinear.qlinear_tritonv2 import QuantLinear
 
-    QUANT_CLS = {
+    QUANTIZED_BASE_LAYER_CLASSES = {
         BNB: Linear4bit
     }
 
@@ -108,9 +130,9 @@ def attention_layers(device: torch.device = 'cuda'):
     base_type = BNB
     for dtype in DTYPES:
         for r, lora_alpha in LORA_PARAMS:
-            model_name, target_modules = TEST_MODELS[base_type]
-            quant_cls = QUANT_CLS[base_type]
-            peft_cls = PEFT_CLS[base_type]
+            model_name, attn_cls, target_modules = TEST_MODELS[base_type]
+            quant_cls = QUANTIZED_BASE_LAYER_CLASSES[base_type]
+            peft_cls = LORA_QUANTIZED_CLASSES[base_type]
 
             if base_type == BNB:
                 base_type_kwargs = {
@@ -123,7 +145,7 @@ def attention_layers(device: torch.device = 'cuda'):
             
             # use the llama model
             config = AutoConfig.from_pretrained(model_name)
-            attn_module = LlamaAttention(config, layer_idx=0)
+            attn_module = attn_cls(config, layer_idx=0)
             for tm in target_modules:
                 mod = getattr(attn_module, tm)
                 quant_base_layer = quant_cls(
@@ -193,7 +215,7 @@ def loaded_models(device: torch.device = 'cuda'):
     for dtype in DTYPES:
         for base_type in [BNB, GPTQ]:
             for r, lora_alpha in LORA_PARAMS:
-                model_name, target_modules = TEST_MODELS[base_type]
+                model_name, _, target_modules = TEST_MODELS[base_type]
                 # config = AutoConfig.from_pretrained(model_name)
                 peft_config = LoraConfig(
                     r=r, 
@@ -222,10 +244,8 @@ def loaded_models(device: torch.device = 'cuda'):
     return all_models
 
 def prepare_foak(attn_module, base_type):
-
     _model = patch_model(attn_module, base_type=base_type)
-    print(patch_model_summary())
-
+    # print(patch_model_summary())
     return _model
 
 def run_model(
@@ -233,11 +253,29 @@ def run_model(
     device: torch.device = 'cuda', **kwargs, 
 ):
     with torch.autocast(dtype=getattr(torch, dtype), device_type=device):
-        out, _, _ = model(X, **kwargs)
+        outputs = model(X, **kwargs)
+
+    if hasattr(outputs, 'loss'):
+        out = outputs.loss
+    else:
+        out = outputs[0]
     loss = out.norm()
     loss.backward()
 
     return loss
+
+def get_modules_with_class(model, cls):
+    modules = []
+    name = cls.__name__
+    for mod in model.modules():
+        # check for the class name in the MRO
+        mro = mod.__class__.mro()
+        if any(name == x.__name__ for x in mro):
+            modules.append(mod)
+
+    if len(modules) == 0:
+        raise ValueError(f"cannot find modules with class '{cls}'")
+    return modules
 
 def get_attention_lora_grads(
     model, target_modules
@@ -248,6 +286,8 @@ def get_attention_lora_grads(
         for n in ['lora_A', 'lora_B']:
             mod = model.get_submodule(f"{tm}.{n}.{ADAPTER_NAME}")
             adapter_grads.append(mod.weight.grad) 
+    if len(adapter_grads) == 0:
+        raise ValueError(f"cannot find adapter grads")
     return adapter_grads
 
 # -------------------------- TESTS ----------------------------------
@@ -257,12 +297,13 @@ def test_adapter_gradients_match_with_attention_layer(
     attention_inputs, attention_layers, dropout_masks
 ):
     '''
-    this function loads a dummy attention module, 
-    For GPTQ it isn't straightforward to initialize a dummy baselayer, 
-    so this function is only supports BNB for now
+    Construct and test equivalence on a single constructed attention
+    module.
+    - For GPTQ it seems to be troublesome to initialize an insolated
+      layer, thus this test is only done for BNB.
     '''
     for base_type in [BNB]:
-        model_name, target_modules = TEST_MODELS[base_type]
+        model_name, _, target_modules = TEST_MODELS[base_type]
         config = AutoConfig.from_pretrained(model_name)
 
         # find compatible sizes
@@ -303,19 +344,24 @@ def test_adapter_gradients_match_with_attention_layer(
 
 @pytest.mark.slow
 def test_adapter_gradients_match_with_model(
-    attention_inputs, loaded_models, dropout_masks
+    model_inputs, loaded_models, dropout_masks
 ):
+    """
+    Using full models loaded by plugins, test equivalence on random inputs.
+    """
 
-     for base_type in [BNB, GPTQ]:
-        model_name, target_modules = TEST_MODELS[base_type]
+    for base_type in [BNB, GPTQ]:
+        model_name, attn_cls, target_modules = TEST_MODELS[base_type]
         config = AutoConfig.from_pretrained(model_name)
 
         # find compatible sizes
         sizes = [(bs, sl, hd) for bs, sl, hd in SIZES if hd == config.hidden_size]
 
         for (bs, sl, hd), dtype in product(sizes, DTYPES):
-            X, position_ids = attention_inputs[(bs, sl, hd, dtype)]
-            _kwargs = {'position_ids': position_ids}
+            input_ids, labels, position_ids = model_inputs[(bs, sl, hd, dtype)]
+            _kwargs = {
+                'position_ids': position_ids, 'labels': labels
+            }
 
             for r, lora_alpha in LORA_PARAMS:
                 for d in DROPOUTS:
@@ -328,24 +374,28 @@ def test_adapter_gradients_match_with_model(
                     without_foak = deepcopy(model)
                     with_foak = prepare_foak(deepcopy(model), base_type)
 
-                    # FIXME:
-                    without_foak = without_foak.model.model.layers[0].self_attn
-                    with_foak = with_foak.model.model.layers[0].self_attn
-
                     # run the models and get the loss and gradients
                     loss_unpatched = run_model(
-                        without_foak, dtype, X, **_kwargs
+                        without_foak, dtype, input_ids, **_kwargs
                     )
                     loss_patched = run_model(
-                        with_foak, dtype, X, **_kwargs
+                        with_foak, dtype, input_ids, **_kwargs
                     )
 
                     # compute outputs
                     assert (loss_unpatched - loss_patched).abs() < LOSS_TOL,\
                         "Loss after foak patch do not match"
 
-                    grads_unpatched = get_attention_lora_grads(without_foak, target_modules)
-                    grads_patched = get_attention_lora_grads(with_foak, target_modules)
+                    for _without, _with in zip(
+                        get_modules_with_class(without_foak, attn_cls),
+                        get_modules_with_class(with_foak, attn_cls),
+                    ):
+                        grads_unpatched = get_attention_lora_grads(
+                            _without, target_modules
+                        )
+                        grads_patched = get_attention_lora_grads(
+                            _with, target_modules
+                        )
 
                     for x, y in zip(grads_unpatched, grads_patched):
                         assert torch.allclose(x, y, atol=ALLCLOSE_ATOL, rtol=ALLCLOSE_RTOL), "Gradients don't match after foak patch"

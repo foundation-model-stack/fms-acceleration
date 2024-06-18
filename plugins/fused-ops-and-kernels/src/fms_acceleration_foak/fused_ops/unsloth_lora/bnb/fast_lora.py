@@ -16,6 +16,8 @@ import torch
 from ..utils import fast_dequantize, QUANT_STATE, get_lora_parameters, matmul_lora
 
 
+# modified by flim@sg.ibm.com
+# modified by aaron.chew1@ibm.com
 class LoRA_MLP(torch.autograd.Function):
     """
     ### LoRA weights
@@ -61,7 +63,7 @@ class LoRA_MLP(torch.autograd.Function):
                   upW,   upW_quant, upA,   upB,   upS,
                 downW, downW_quant, downA, downB, downS,
                 _forward_function, _backward_function,
-                dropout_gate, dropout_up, dropout_down,
+                dropout_gate=None, dropout_up=None, dropout_down=None,
                 ):
         dtype = X.dtype
 
@@ -71,9 +73,17 @@ class LoRA_MLP(torch.autograd.Function):
         i = matmul_lora(h, downW, downW_quant, downA, downB, downS, dropout=dropout_down)
 
         # Extract post-dropout X for use in backward computation
-        dropout_gateX = getattr(dropout_gate, "X", X)
-        dropout_upX = getattr(dropout_up, "X", X)
-        dropout_downX = getattr(dropout_down, "X", X)
+        _dropped_X = []
+        for _dropout in [
+            dropout_gate, dropout_up, dropout_down
+        ]:
+            if _dropout is not None:
+                # then matmul_lora must have attached the X
+                _dropped_X.append(_dropout.X)
+                del _dropout.X # remove it
+            else:
+                # otherwise will use X
+                _dropped_X.append(X)
 
         ctx.custom_saved_tensors = (
             gateW, gateW_quant, gateS,
@@ -83,15 +93,9 @@ class LoRA_MLP(torch.autograd.Function):
         )
         ctx.save_for_backward(
             gateA, gateB, upA, upB, downA, downB,
-            X, e, g, dropout_gateX, dropout_upX, dropout_downX
+            X, e, g, *_dropped_X
         )
-        # remove x once saved to ctx
-        if hasattr(dropout_gate, "X"):
-            del dropout_gate.X
-        if hasattr(dropout_up, "X"):
-            del dropout_up.X
-        if hasattr(dropout_down, "X"):
-            del dropout_down.X
+
         return i
     pass
 
@@ -102,7 +106,7 @@ class LoRA_MLP(torch.autograd.Function):
         gateW, gateW_quant, gateS, upW, upW_quant, upS, downW, downW_quant, downS, \
             _backward_function = ctx.custom_saved_tensors
         gateA, gateB, upA, upB, downA, downB, \
-            X, e, g, dropout_gateX, dropout_upX, dropout_downX  = ctx.saved_tensors
+            X, e, g, gateX, upX, downX  = ctx.saved_tensors
 
         gateA, gateB, upA, upB, downA, downB = \
             gateA.t(), gateB.t(), upA.t(), upB.t(), downA.t(), downB.t()
@@ -125,14 +129,14 @@ class LoRA_MLP(torch.autograd.Function):
         d_downB *= downS
 
         # Up projection LoRA weights
-        d_upA   = dropout_upX.t() @ (df @ upB.t())
-        d_upB   = (upA.t() @ dropout_upX.t()) @ df
+        d_upA   = upX.t() @ (df @ upB.t())
+        d_upB   = (upA.t() @ upX.t()) @ df
         d_upA  *= upS
         d_upB  *= upS
 
         # Gate projection LoRA weights
-        d_gateA = dropout_gateX.t() @ (de @ gateB.t())
-        d_gateB = (gateA.t() @ dropout_gateX.t()) @ de
+        d_gateA = gateX.t() @ (de @ gateB.t())
+        d_gateB = (gateA.t() @ gateX.t()) @ de
         d_gateA *= gateS
         d_gateB *= gateS
 
@@ -164,13 +168,6 @@ pass
 
 from ..swiglu import swiglu_fg_kernel, swiglu_DWf_DW_dfg_kernel
 def apply_lora_mlp_swiglu(self, X):
-    dropout_gate = torch.nn.Dropout(p = self.dropout)
-    dropout_up = torch.nn.Dropout(p = self.dropout)
-    dropout_down = torch.nn.Dropout(p = self.dropout)
-    dropout_gate.training = self.training
-    dropout_up.training = self.training
-    dropout_down.training = self.training
-
     gateW, gateW_quant, gateA, gateB, gateS, dropout_gate = get_lora_parameters(self.gate_proj)
     upW,     upW_quant,   upA,   upB,   upS, dropout_up = get_lora_parameters(self.  up_proj)
     downW, downW_quant, downA, downB, downS, dropout_down = get_lora_parameters(self.down_proj)
@@ -253,7 +250,7 @@ class LoRA_QKV(torch.autograd.Function):
                 QW, QW_quant, QA, QB, QS,
                 KW, KW_quant, KA, KB, KS,
                 VW, VW_quant, VA, VB, VS,
-                dropout_Q, dropout_K, dropout_V
+                dropout_Q=None, dropout_K=None, dropout_V=None
                 ):
         dtype = X.dtype
 
@@ -262,9 +259,17 @@ class LoRA_QKV(torch.autograd.Function):
         V = matmul_lora(X, VW, VW_quant, VA, VB, VS, dropout=dropout_V)
 
         # Extract post-dropout X for use in backward computation
-        dropout_QX = getattr(dropout_Q, "X", X)
-        dropout_KX = getattr(dropout_K, "X", X)
-        dropout_VX = getattr(dropout_V, "X", X)
+        _dropped_X = []
+        for _dropout in [
+            dropout_Q, dropout_K, dropout_V
+        ]:
+            if _dropout is not None:
+                # then matmul_lora must have attached the X
+                _dropped_X.append(_dropout.X)
+                del _dropout.X # remove it
+            else:
+                # otherwise will use X
+                _dropped_X.append(X)
 
         ctx.custom_saved_tensors = (
             QW, QW_quant, QS,
@@ -273,16 +278,8 @@ class LoRA_QKV(torch.autograd.Function):
         )
         ctx.save_for_backward(
             X, QA, QB, KA, KB, VA, VB,
-            dropout_QX, dropout_KX, dropout_VX
+           *_dropped_X 
         )
-        
-        # remove x once saved to ctx
-        if hasattr(dropout_Q, "X"):
-            del dropout_Q.X
-        if hasattr(dropout_K, "X"):
-            del dropout_K.X
-        if hasattr(dropout_V, "X"):
-            del dropout_V.X
         return Q, K, V
     pass
 
@@ -291,7 +288,7 @@ class LoRA_QKV(torch.autograd.Function):
     def backward(ctx, dQ, dK, dV):
         QW, QW_quant, QS, KW, KW_quant, KS, VW, VW_quant, VS = \
             ctx.custom_saved_tensors
-        X, QA, QB, KA, KB, VA, VB, dropout_QX, dropout_KX, dropout_VX = ctx.saved_tensors
+        X, QA, QB, KA, KB, VA, VB, QX, KX, VX = ctx.saved_tensors
 
         QA, QB, KA, KB, VA, VB = \
             QA.t(), QB.t(), KA.t(), KB.t(), VA.t(), VB.t()
@@ -307,20 +304,20 @@ class LoRA_QKV(torch.autograd.Function):
         # See our blogpost for more details.
 
         # Q Projection
-        d_QA = dropout_QX.t() @ (dQ @ QB.t())
-        d_QB = (QA.t() @ dropout_QX.t()) @ dQ
+        d_QA = QX.t() @ (dQ @ QB.t())
+        d_QB = (QA.t() @ QX.t()) @ dQ
         d_QA *= QS
         d_QB *= QS
 
         # K Projection
-        d_KA = dropout_KX.t() @ (dK @ KB.t())
-        d_KB = (KA.t() @ dropout_KX.t()) @ dK
+        d_KA = KX.t() @ (dK @ KB.t())
+        d_KB = (KA.t() @ KX.t()) @ dK
         d_KA *= KS
         d_KB *= KS
 
         # V Projection
-        d_VA = dropout_VX.t() @ (dV @ VB.t())
-        d_VB = (VA.t() @ dropout_VX.t()) @ dV
+        d_VA = VX.t() @ (dV @ VB.t())
+        d_VB = (VA.t() @ VX.t()) @ dV
         d_VA *= VS
         d_VB *= VS
 
@@ -350,7 +347,7 @@ class LoRA_QKV(torch.autograd.Function):
             None, None, d_QA.t(), d_QB.t(), None, \
             None, None, d_KA.t(), d_KB.t(), None, \
             None, None, d_VA.t(), d_VB.t(), None, \
-            None, None, None
+            None, None, None # dropout
     pass
 pass
 
@@ -402,12 +399,15 @@ class LoRA_W(torch.autograd.Function):
                 W, W_quant, A, B, S, dropout_O):
         dtype = X.dtype
         XW = matmul_lora(X, W, W_quant, A, B, S, dropout=dropout_O)
+
         # Extract post-dropout X for use in backward computation
-        dropout_OX = getattr(dropout_O, "X", X)
-        ctx.custom_saved_tensors = (W, W_quant, S,)
-        ctx.save_for_backward(A, B, X, dropout_OX)
-        if hasattr(dropout_O, "X"):
+        if dropout_O is not None:
+            _dropped_X = dropout_O.X
             del dropout_O.X
+        else:
+            _dropped_X = X
+        ctx.custom_saved_tensors = (W, W_quant, S,)
+        ctx.save_for_backward(A, B, X, _dropped_X)
         return XW
     pass
 
@@ -415,7 +415,7 @@ class LoRA_W(torch.autograd.Function):
     @torch.cuda.amp.custom_bwd
     def backward(ctx, dY : torch.Tensor):
         W, W_quant, S = ctx.custom_saved_tensors
-        A, B, X, dropout_OX = ctx.saved_tensors
+        A, B, X, OX = ctx.saved_tensors
 
         A, B = A.t(), B.t()
 
@@ -426,8 +426,8 @@ class LoRA_W(torch.autograd.Function):
 
         ### Weight projection LoRA weights
         # Weight projection
-        d_A = dropout_OX.t() @ (dY @ B.t())
-        d_B = (A.t() @ dropout_OX.t()) @ dY
+        d_A = OX.t() @ (dY @ B.t())
+        d_B = (A.t() @ OX.t()) @ dY
         d_A *= S
         d_B *= S
 
