@@ -4,10 +4,9 @@ from itertools import product
 
 # Third Party
 from peft import LoraConfig
-from peft.tuners.lora.bnb import Linear4bit as LoraBNBLinear4bit
-from peft.tuners.lora.gptq import QuantLinear as LoraGPTQLinear4bit
 from transformers import AutoConfig
 from transformers.models.llama.modeling_llama import LlamaAttention
+from transformers.utils.import_utils import _is_package_available
 import pytest  # pylint: disable=import-error
 import torch
 
@@ -16,6 +15,21 @@ from fms_acceleration_foak.models.model_patcher import patch_model
 
 BNB = "bitsandbytes"
 GPTQ = "auto_gptq"
+
+LORA_QUANTIZED_CLASSES = {}
+if _is_package_available("bitsandbytes"):
+    # pylint: disable=ungrouped-imports
+    # Third Party
+    from peft.tuners.lora.bnb import Linear4bit as LoraBNBLinear4bit
+
+    LORA_QUANTIZED_CLASSES[BNB] = LoraBNBLinear4bit
+
+if _is_package_available("auto_gptq"):
+    # pylint: disable=ungrouped-imports
+    # Third Party
+    from peft.tuners.lora.gptq import QuantLinear as LoraGPTQLinear4bit
+
+    LORA_QUANTIZED_CLASSES[GPTQ] = LoraGPTQLinear4bit
 
 TEST_MODELS = {
     BNB: (
@@ -28,11 +42,6 @@ TEST_MODELS = {
         LlamaAttention,
         ["q_proj", "k_proj", "v_proj", "o_proj"],
     ),
-}
-
-LORA_QUANTIZED_CLASSES = {
-    BNB: LoraBNBLinear4bit,
-    GPTQ: LoraGPTQLinear4bit,
 }
 
 ADAPTER_NAME = "default"
@@ -50,7 +59,7 @@ DROPOUTS = [0, 0.1, 0.5]
 LORA_PARAMS = [(8, 1.0)]
 
 # bs, seqlen, hiddim
-SIZES = [(1, 128, 2048)]
+SIZES = [(1, 128, 2048), (2, 256, 2048)]
 
 
 # set a fixed dropout to match outputs between runs
@@ -62,17 +71,21 @@ class DummyDropout(torch.nn.Module):
         super().__init__()
 
     def forward(self, X):
-
-        # may raise if dropout mask not set
-        if self.training:
-            return X * self.dropout_mask
-        return X
+        # return X * self.dropout_mask.repeat(0, sel)
+        if len(X.shape) == 2:
+            sl = self.dropout_mask.shape[0]
+            bs_sl = X.shape[0]
+            # this is needed since fast-rope does this:
+            # dY.reshape(batch*seq_len, n_heads*head_dim)
+            return X * self.dropout_mask.repeat(bs_sl // sl, 1)
+        return X * self.dropout_mask
 
 
 @pytest.fixture()
 def attention_inputs(seed: int = 42, device: torch.device = "cuda"):
     torch.manual_seed(seed)
 
+    # see
     inputs = {}
     for dtype in DTYPES:
         for bs, seq_len, dim_size in SIZES:
@@ -82,7 +95,7 @@ def attention_inputs(seed: int = 42, device: torch.device = "cuda"):
                     dtype=getattr(torch, dtype),
                     device=device,
                 ),
-                torch.arange(seq_len).repeat(bs, 1).to(device),
+                torch.arange(seq_len).unsqueeze(0).to(device),  # only can handle
             )
     yield inputs
 
@@ -109,7 +122,7 @@ def model_inputs(seed: int = 42, device: torch.device = "cuda"):
                     dtype=torch.int,
                     device=device,
                 ),
-                torch.arange(seq_len).repeat(bs, 1).to(device),
+                None,  # dont pass in position ids for now
             )
     yield inputs
 
@@ -130,7 +143,7 @@ def dropout_masks(seed: int = 42, device: torch.device = "cuda"):
 
 @pytest.fixture()
 def attention_layers(device: torch.device = "cuda"):
-    # pylint: disable=import-outside-toplevel
+    # pylint: disable=import-error,import-outside-toplevel
     # Third Party
     from bitsandbytes.nn.modules import Linear4bit
 
@@ -237,7 +250,6 @@ def loaded_models(device: torch.device = "cuda"):
         for base_type in [BNB, GPTQ]:
             for r, lora_alpha in LORA_PARAMS:
                 model_name, _, target_modules = TEST_MODELS[base_type]
-                # config = AutoConfig.from_pretrained(model_name)
                 peft_config = LoraConfig(
                     r=r,
                     lora_alpha=lora_alpha,
@@ -321,9 +333,13 @@ def get_attention_lora_grads(model, target_modules):
 
 
 # small
+@pytest.mark.skipif(
+    not _is_package_available("bitsandbytes"),
+    reason="Only runs if bitsandbytes is installed",
+)
 def test_adapter_gradients_match_with_attention_layer(
-    attention_inputs,
-    attention_layers,
+    attention_inputs,  # pylint: disable=redefined-outer-name
+    attention_layers,  # pylint: disable=redefined-outer-name
     dropout_masks,  # pylint: disable=redefined-outer-name
 ):
     """
@@ -374,7 +390,10 @@ def test_adapter_gradients_match_with_attention_layer(
                         ), "Gradients don't match after foak patch"
 
 
-@pytest.mark.slow
+@pytest.mark.skipif(
+    not _is_package_available("bitsandbytes") or not _is_package_available("auto_gptq"),
+    reason="Only runs if both bitsandbytes and auto_gptq are installed",
+)
 def test_adapter_gradients_match_with_model(
     model_inputs, loaded_models, dropout_masks  # pylint: disable=redefined-outer-name
 ):
