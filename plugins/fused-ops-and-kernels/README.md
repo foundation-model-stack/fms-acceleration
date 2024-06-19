@@ -26,6 +26,7 @@ Notes on the extraction of code from [unsloth](https://github.com/unslothai/unsl
 - These exceptions appear to be located around the trainer improvements, see [another example here](https://github.com/unslothai/unsloth/blob/ec19e61c854dcf9104386fa63fc6c4f2944d4f35/unsloth/models/llama.py#L1177-L1183).
 - These exceptions appear around [Feb 2024 Release](https://github.com/unslothai/unsloth/commit/3e4c5a323c16bbda2c92212b790073c4e99c2a55); any code that appears in any file where such exceptions occur **is not extracted**.
 - Instead in its place, we have adopted a different approach; we adopt the approach of model patching, as opposed unsloths' approach to rewrite the model. Our approach is novel and **completely rewritten from scratch**. 
+- We have also enabled dropout on the lora fused operations.
 - All extracted code appears before the Feb 2024 Release. 
 - In the table below we record what was extracted, and the exact commit from which it was taken.
 

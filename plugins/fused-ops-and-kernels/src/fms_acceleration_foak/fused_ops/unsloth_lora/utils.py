@@ -1,5 +1,7 @@
 # Copyright 2023-present Daniel Han-Chen & the Unsloth team. All rights reserved.
 #
+# Copyright The FMS HF Tuning Authors
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
@@ -36,6 +38,7 @@ if _bitsandbytes_available:
     import ctypes
     import torch
     cdequantize_blockwise_fp32      = bnb.functional.lib.cdequantize_blockwise_fp32
+    cdequantize_blockwise_fp32_nf4  = bnb.functional.lib.cdequantize_blockwise_fp32_nf4
     cdequantize_blockwise_fp16_nf4  = bnb.functional.lib.cdequantize_blockwise_fp16_nf4
     cdequantize_blockwise_bf16_nf4  = bnb.functional.lib.cdequantize_blockwise_bf16_nf4
     cgemm_4bit_inference_naive_fp16 = bnb.functional.lib.cgemm_4bit_inference_naive_fp16
@@ -61,7 +64,7 @@ def get_lora_parameters(proj):
     W = base_layer.weight
 
     if not hasattr(proj, "disable_adapters") or proj.disable_adapters or proj.merged:
-        return W, QUANT_STATE(W, base_layer), None, None, None
+        return W, QUANT_STATE(W, base_layer), None, None, None, None
     pass
 
     active_adapter = proj.active_adapters[0] if \
@@ -69,10 +72,11 @@ def get_lora_parameters(proj):
     A = proj.lora_A [active_adapter].weight
     B = proj.lora_B [active_adapter].weight
     s = proj.scaling[active_adapter]
-    return W, QUANT_STATE(W, base_layer), A, B, s
+    dropout = proj.lora_dropout[active_adapter] if hasattr(proj, "lora_dropout") else None
+    return W, QUANT_STATE(W, base_layer), A, B, s, dropout
 pass
 
-
+# modified by flim@sg.ibm.com
 def fast_dequantize(W, quant_state = None, out = None):
     if quant_state is None: return W
     if type(quant_state) is not list:
@@ -113,8 +117,15 @@ def fast_dequantize(W, quant_state = None, out = None):
     )
     out_absmax += offset
 
-    fx = cdequantize_blockwise_fp16_nf4 if dtype == torch.float16 else \
-         cdequantize_blockwise_bf16_nf4
+
+    if dtype == torch.float16:
+        fx = cdequantize_blockwise_fp16_nf4 
+    elif dtype == torch.bfloat16:
+        fx = cdequantize_blockwise_bf16_nf4 
+    elif dtype == torch.float32:
+        fx = cdequantize_blockwise_fp32_nf4 
+    else:
+        raise NotImplementedError(f"Fused-lora does not support '{dtype}'")
     fx(get_ptr(None), get_ptr(W), ptr_out_absmax, get_ptr(out),
        ctypes.c_int(blocksize), ctypes.c_int(out.numel()))
 
@@ -230,7 +241,7 @@ def fast_linear_forward(proj, X, temp_lora = None, out = None):
 pass
 
 
-def matmul_lora(X, W, W_quant, A, B, s, out = None):
+def matmul_lora(X, W, W_quant, A, B, s, out = None, dropout=None):
     dtype = X.dtype
     W = fast_dequantize(W.t(), W_quant)
 
@@ -247,6 +258,11 @@ def matmul_lora(X, W, W_quant, A, B, s, out = None):
 
     if A is not None:
         # LoRA is enabled
+        if dropout is not None:
+            # in order to return the dropped out X to the 
+            # top level, we save it on the dropout module
+            X = dropout(X)
+            dropout.X = X
         A, B = A.t(), B.t()
         out += (X @ A.to(dtype)) @ (s * B.to(dtype))
     pass
