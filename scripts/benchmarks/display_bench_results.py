@@ -32,7 +32,7 @@ def main(
 
     # assume keep and remove are disjoint
     kept = 0
-    if keep_columns: 
+    if keep_columns:
         for c in keep_columns:
             if c in constant:
                 df[c] = constant[c]

@@ -343,7 +343,7 @@ class Experiment:
         experiment_arg: List,
         save_dir: str,
         tag: str = None,
-        framework_config: str = None
+        framework_config: str = None,
     ) -> None:
         self.num_gpus = num_gpus
         self.experiment_arg = experiment_arg
@@ -640,9 +640,11 @@ def prepare_arguments(args):
         if args.preload_models and len(products) > 0:
             scenario.preload_models()
 
-        for num_gpus, framework_config, experiment_arg in ConfigUtils.build_args_from_products(
-            products, constants
-        ):
+        for (
+            num_gpus,
+            framework_config,
+            experiment_arg,
+        ) in ConfigUtils.build_args_from_products(products, constants):
             yield num_gpus, framework_config, experiment_arg
 
 
@@ -706,7 +708,7 @@ def gather_report(result_dir: Union[str, List[str]], raw: bool = True):
             except FileNotFoundError:
                 pass
 
-            if script_args["log_nvidia_smi"]:
+            if script_args["log_nvidia_smi"] and tag in experiment_stats:
                 gpu_logs = pd.read_csv(gpu_log_filename, skipinitialspace=True)
                 peak_nvidia_mem_by_device_id, device_name = (
                     get_peak_mem_usage_by_device_id(gpu_logs)
@@ -844,7 +846,9 @@ def main(args):
         device_ids = ",".join(available_gpus_indices[: experiment.num_gpus])
         environment_vars = {"CUDA_VISIBLE_DEVICES": device_ids}
         if experiment.framework_config is not None:
-            environment_vars['ACCELERATION_FRAMEWORK_CONFIG_FILE'] = experiment.framework_config
+            environment_vars["ACCELERATION_FRAMEWORK_CONFIG_FILE"] = (
+                experiment.framework_config
+            )
 
         experiment.run(
             f"{prefix} {FMS_TRAINER}",
