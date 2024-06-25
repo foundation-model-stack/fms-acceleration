@@ -38,23 +38,23 @@ Plugin | Description | Depends | License | Status
 
 Below we demonstrate how to accelerate your tuning experience with [tuning/sft_trainer.py](https://github.com/foundation-model-stack/fms-hf-tuning/blob/main/tuning/sft_trainer.py) from `fms-hf-tuning`. 
 
+**Note: New exciting [plugins](#plugins) will be added over time, so please check here for the latest accelerations!**.
 
 ### Integration with FMS HF Tuning
 
 
-`fms-acceleration` has already been merged to `fms-hf-tuning`, and the instructions to utilize this repository with [here](https://github.com/foundation-model-stack/fms-hf-tuning?tab=readme-ov-file#fms-acceleration). This reference shows how to use `fms-acceleration` with the [integrated acceleration config dataclasses](https://github.com/foundation-model-stack/fms-hf-tuning/tree/main/tuning/config/acceleration_configs).
+`fms-acceleration` is part of `fms-hf-tuning`, and instructions to utilize `fms-acceleration` for tuning are found [here](https://github.com/foundation-model-stack/fms-hf-tuning?tab=readme-ov-file#fms-acceleration). In particular, `fms-acceleration` plugins can be accessed via command line arguments to `fms-hf-tuning` (e.g., `--auto_gptq triton_v2`); this is made available via integrated [configuration dataclasses](https://github.com/foundation-model-stack/fms-hf-tuning/tree/main/tuning/config/acceleration_configs) that configures the `AccelerationFramework` for the user.
 
-**New exciting [plugins](#plugins) will be added over time, so please check here for the latest accelerations!**.
+#### Need for an alternative way to access features pre-integration
 
-Also as new plugins become [available here](#plugins), we will also continue to integrate new acceleration config dataclasses into `fms-hf-tuning`. However not all plugins may be integrated, we may omit certain plugins for certain reasons (e.g. stability concerns), and in general integration efforts take time.
+As new plugins [become available](#plugins), more command line arguments will be made avaiable to `fms-hf-tuning` to enable them. However, this kind of integration takes time; plugins that are in development / research stages may not be immediately integrated.
 
-To this end, we provide another way to access the plugins in `fms-acceleration` without being integrated into `fms-hf-tuning` dataclasses. 
-The main reason is because we need a way to benchmark and test plugins before `fms-hf-tuning` integration. Thus, we provide a method for `experienced users` to configure the acceleration framework via a configuration YAML via an environment variable. This method has a higher learning curve as it requires the user to know how to understand such a configuration YAML, but it will provide a means to early test new plugins as they become available.
+Therefore, an intermediary step is required to access plugins in `fms-acceleration` before they become integrated into `fms-hf-tuning`. In fact, such a method is critical for benchmarking / testing, that needs to happen before integration of any plugin in `fms-hf-tuning` can even be considered. Hence, we provide a method to configure the acceleration framework via a configuration YAML, that is passed into `AccelerationFramework` via an environment variable; the instructions for this is provided below. Futhermore, *experienced users* can also leverage this to early test plugins, but be warned that the learning curve to use these plugins is high (since it requires knowledge on how to write such a configuration). To aid on this, the following instructions are provide that describes both a basic and advanced flow.
 
 
 ### FMS Acceleration Via Configuration YAML
 
-**Note**: As mentioned above, the recomemnded approach for `fms-hf-tuning` is to use the [acceleration config dataclasses](https://github.com/foundation-model-stack/fms-hf-tuning?tab=readme-ov-file#fms-acceleration). 
+**Note**: As mentioned above, the recommended approach for `fms-hf-tuning` is to use the [acceleration config dataclasses](https://github.com/foundation-model-stack/fms-hf-tuning?tab=readme-ov-file#fms-acceleration). 
 This method documented for the configuration YAML is only for *testing/research purposes* and not recommended for production. For general use, please refer instead [to the instructions here](#integration-with-fms-hf-tuning).
 
 Below we illustrate a configuration YAML flow using the accelerated quantised PEFT using GPTQ-LoRA tuning with the AutoGPTQ `triton_v2` kernel use case; this kernel is state-of-the-art [provided by `jeromeku` on Mar 2024](https://github.com/AutoGPTQ/AutoGPTQ/pull/596):
