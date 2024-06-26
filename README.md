@@ -38,18 +38,35 @@ Plugin | Description | Depends | License | Status
 
 Below we demonstrate how to accelerate your tuning experience with [tuning/sft_trainer.py](https://github.com/foundation-model-stack/fms-hf-tuning/blob/main/tuning/sft_trainer.py) from `fms-hf-tuning`. 
 
-### Example: Accelerated GPTQ-LoRA Training
+**Note: New exciting [plugins](#plugins) will be added over time, so please check here for the latest accelerations!**.
 
-Below we illustrate accelerated quantised PEFT using GPTQ-LoRA tuning with the AutoGPTQ `triton_v2` kernel; this kernel is state-of-the-art [provided by `jeromeku` on Mar 2024](https://github.com/AutoGPTQ/AutoGPTQ/pull/596):
+### Integration with FMS HF Tuning
 
-There is both a *basic* and *advanced* usage low
+
+`fms-acceleration` is part of `fms-hf-tuning`, and instructions to utilize `fms-acceleration` for tuning are found [here](https://github.com/foundation-model-stack/fms-hf-tuning?tab=readme-ov-file#fms-acceleration). In particular, `fms-acceleration` plugins can be accessed via command line arguments to `fms-hf-tuning` (e.g., `--auto_gptq triton_v2`); this is made available via integrated [configuration dataclasses](https://github.com/foundation-model-stack/fms-hf-tuning/tree/main/tuning/config/acceleration_configs) that configures the `AccelerationFramework` for the user.
+
+#### Need for an alternative way to access features pre-integration
+
+As new plugins [become available](#plugins), more command line arguments will be made avaiable to `fms-hf-tuning` to enable them. However, this kind of integration takes time; plugins that are in development / research stages may not be immediately integrated.
+
+Therefore, an intermediary step is required to access plugins in `fms-acceleration` before they become integrated into `fms-hf-tuning`. In fact, such a method is critical for benchmarking / testing, that needs to happen before integration of any plugin in `fms-hf-tuning` can even be considered. Hence, we provide a method to configure the acceleration framework via a configuration YAML, that is passed into `AccelerationFramework` via an environment variable; the instructions for this is provided below. Futhermore, *experienced users* can also leverage this to early test plugins, but be warned that the learning curve to use these plugins is high (since it requires knowledge on how to write such a configuration). To aid on this, the following instructions are provide that describes both a basic and advanced flow.
+
+
+### FMS Acceleration Via Configuration YAML
+
+**Note**: As mentioned above, the recommended approach for `fms-hf-tuning` is to use the [acceleration config dataclasses](https://github.com/foundation-model-stack/fms-hf-tuning?tab=readme-ov-file#fms-acceleration). 
+This method documented for the configuration YAML is only for *testing/research purposes* and not recommended for production. For general use, please refer instead [to the instructions here](#integration-with-fms-hf-tuning).
+
+Below we illustrate a configuration YAML flow using the accelerated quantised PEFT using GPTQ-LoRA tuning with the AutoGPTQ `triton_v2` kernel use case; this kernel is state-of-the-art [provided by `jeromeku` on Mar 2024](https://github.com/AutoGPTQ/AutoGPTQ/pull/596):
+
+There is both a *basic* and *advanced* usage for the configuration YAML flow.
 
 ![Usage Flows](img/fms-accel-flows.png)
 
-#### Basic Flow 🤡
+#### Basic Configuration YAML Flow 🤡
 
 Most users of `fms-hf-tuning` only require the basic flow:
-- Assumption 1: user has an already prepared configuration, say from [fms-hf-tuning/fixtures](https://github.com/foundation-model-stack/fms-hf-tuning).
+- Assumption 1: user has an already prepared configuration, say from [sample-configurations](./sample-configurations/accelerated-peft-autogptq-sample-configuration.yaml).
 - Assumption 2: user knows exactly what acceleration 'plugins` are required (based on the configuration).
 - Assumption 3: the arguments for running `sft_trainer.py` is the same; save for one extra argument `--acceleration_framework_config_file` used to pass in the acceleration config.
 
@@ -74,12 +91,12 @@ In this case then the basic flow comprises of 3 steps:
     pip install git+https://github.com/foundation-model-stack/fms-acceleration.git#subdirectory=plugins/accelerated-peft
     ```
 
-5. Run `sft_trainer.py` providing the acceleration configuration and arguments; given the basic flow assumption that we simply re-use the same `sft_trainer.py` arguments as we had without using the `fms_acceleration` package:
+5. Run `sft_trainer.py` providing the acceleration configuration (via the environment variable `ACCELERATION_FRAMEWORK_CONFIG_FILE` and arguments; given the basic flow assumption that we simply re-use the same `sft_trainer.py` arguments as we had without using the `fms_acceleration` package:
     ```
     # when using sample-configurations, arguments can be referred from
     # defaults.yaml and scenarios.yaml
+    ACCELERATION_FRAMEWORK_CONFIG_FILE=framework.yaml \
     python sft_trainer.py \
-        --acceleration_framework_config_file framework.yaml \
         ...  # arguments
     ```
 
@@ -101,9 +118,7 @@ In this case then the basic flow comprises of 3 steps:
     Number of trainable parameters = 13,631,488
     ```
 
-**New exciting [plugins](#plugins) will be added, so please check here for the latest accelerations!**.
-
-#### Advanced Flow 🥷 🦹
+#### Advanced Configuration YAML Flow 🥷 🦹
 
 The advanced flow makes further use of `fms_acceleration.cli` to: 
 * list all available configs and acceleration plugins the configs depend on. 

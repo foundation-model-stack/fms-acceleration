@@ -15,11 +15,10 @@
 KEY_PLUGINS = "plugins"
 PLUGIN_PREFIX = "fms_acceleration_"
 
+ACCELERATION_FRAMEWORK_ENV_KEY = "ACCELERATION_FRAMEWORK_CONFIG_FILE"
+
 # the order below is a linear precedence in which the plugins will be registered
 # and activated.
 # - hence the plugins that have model loaders should be on top of this list
 
-PLUGINS = [
-    "peft",
-    "foak"
-]
+PLUGINS = ["peft", "foak"]

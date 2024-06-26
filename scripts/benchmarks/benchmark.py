@@ -242,6 +242,9 @@ class ConfigUtils:
         for product in products:
             num_gpus = product.pop("num_gpus")
             effective_batch_size = product.pop("effective_batch_size")
+            framework_config = None
+            if "acceleration_framework_config_file" in product:
+                framework_config = product.pop("acceleration_framework_config_file")
             combined_args = {**product, **defaults}
             argument_list = ConfigUtils.convert_keyvalue_arguments_to_list(
                 combined_args
@@ -252,7 +255,7 @@ class ConfigUtils:
                     str(effective_batch_size // num_gpus),
                 ]
             )
-            args.append((num_gpus, argument_list))
+            args.append((num_gpus, framework_config, argument_list))
         return args
 
     @staticmethod
@@ -340,11 +343,13 @@ class Experiment:
         experiment_arg: List,
         save_dir: str,
         tag: str = None,
+        framework_config: str = None,
     ) -> None:
         self.num_gpus = num_gpus
         self.experiment_arg = experiment_arg
         self.result = None
         self.tag = tag
+        self.framework_config = framework_config
 
         # to be set in run
         self.shell_command = None
@@ -499,6 +504,8 @@ class Experiment:
         # save some basic args
         save_result = ConfigUtils.convert_args_to_dict(self.experiment_args_str)
         save_result["num_gpus"] = self.num_gpus
+        if self.framework_config is not None:
+            save_result["acceleration_framework_config_file"] = self.framework_config
 
         # if there is an error we save the error message else we save the final result
         maybe_error_messages = self.maybe_get_experiment_error_traceback()
@@ -632,10 +639,13 @@ def prepare_arguments(args):
         )
         if args.preload_models and len(products) > 0:
             scenario.preload_models()
-        for num_gpus, experiment_arg in ConfigUtils.build_args_from_products(
-            products, constants
-        ):
-            yield num_gpus, experiment_arg
+
+        for (
+            num_gpus,
+            framework_config,
+            experiment_arg,
+        ) in ConfigUtils.build_args_from_products(products, constants):
+            yield num_gpus, framework_config, experiment_arg
 
 
 def generate_list_of_experiments(
@@ -649,7 +659,7 @@ def generate_list_of_experiments(
     any matrices in scenario and experiment_config
     """
     experiments = []
-    for _expr_id, (num_gpus, exp_arg) in enumerate(experiment_args):
+    for _expr_id, (num_gpus, fcfg, exp_arg) in enumerate(experiment_args):
         experiment_tag = f"{DIR_PREFIX_EXPERIMENT}_{_expr_id}"
         experiment_output_dir = os.path.join(output_dir, experiment_tag)
         expr_arg_w_outputdir = exp_arg + [
@@ -664,6 +674,7 @@ def generate_list_of_experiments(
             expr_arg_w_outputdir,
             save_dir=experiment_output_dir,
             tag=experiment_tag,
+            framework_config=fcfg,
         )
         experiments.append(_expr)
     return experiments
@@ -697,7 +708,7 @@ def gather_report(result_dir: Union[str, List[str]], raw: bool = True):
             except FileNotFoundError:
                 pass
 
-            if script_args["log_nvidia_smi"]:
+            if script_args["log_nvidia_smi"] and tag in experiment_stats:
                 gpu_logs = pd.read_csv(gpu_log_filename, skipinitialspace=True)
                 peak_nvidia_mem_by_device_id, device_name = (
                     get_peak_mem_usage_by_device_id(gpu_logs)
@@ -833,10 +844,15 @@ def main(args):
         devices that each experiment can have access to.
         """
         device_ids = ",".join(available_gpus_indices[: experiment.num_gpus])
+        environment_vars = {"CUDA_VISIBLE_DEVICES": device_ids}
+        if experiment.framework_config is not None:
+            environment_vars["ACCELERATION_FRAMEWORK_CONFIG_FILE"] = (
+                experiment.framework_config
+            )
 
         experiment.run(
             f"{prefix} {FMS_TRAINER}",
-            environment_variables={"CUDA_VISIBLE_DEVICES": device_ids},
+            environment_variables=environment_vars,
             log_nvidia_smi=args.log_nvidia_smi,
         )
 
