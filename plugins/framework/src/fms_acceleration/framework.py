@@ -14,6 +14,7 @@
 
 # Standard
 from typing import Callable, List, Optional, Set, Tuple
+import os
 
 # Third Party
 from accelerate import Accelerator
@@ -24,7 +25,7 @@ import torch
 import yaml
 
 # Local
-from .constants import KEY_PLUGINS
+from .constants import ACCELERATION_FRAMEWORK_ENV_KEY, KEY_PLUGINS
 from .framework_plugin import (
     PLUGIN_REGISTRATIONS,
     AccelerationPlugin,
@@ -70,21 +71,49 @@ def log_initialization_message(
             logging_func(_registration_display(reg))
 
 
+def read_configuration_file(configuration_file: str):
+    with open(configuration_file, "r", encoding="utf-8") as f:
+        contents = yaml.safe_load(f)
+
+    if KEY_PLUGINS not in contents or contents[KEY_PLUGINS] is None:
+        raise ValueError(f"Configuration file must contain a '{KEY_PLUGINS}' body")
+
+    # pepare the plugin configurations
+    return dict(contents[KEY_PLUGINS].items())
+
+
 class AccelerationFramework:
     active_plugins: List[Tuple[str, AccelerationPlugin]] = []
     plugins_require_custom_loading: List = []
 
     def __init__(
-        self, configuration_file: Optional[str], require_packages_check: bool = True
+        self,
+        configuration_file: Optional[str] = None,
+        require_packages_check: bool = True,
     ):
-        with open(configuration_file, "r", encoding="utf-8") as f:
-            contents = yaml.safe_load(f)
+        # if configuration_file is none, it could be passed in via the env var
+        if (
+            configuration_file is None
+            and ACCELERATION_FRAMEWORK_ENV_KEY not in os.environ
+        ):
+            raise ValueError(
+                "configuration_file is not passed into configuration_file but "
+                f"{ACCELERATION_FRAMEWORK_ENV_KEY} is not set. Please choose one "
+                "of the means to initialize the framework."
+            )
 
-        if KEY_PLUGINS not in contents or contents[KEY_PLUGINS] is None:
-            raise ValueError(f"Configuration file must contain a '{KEY_PLUGINS}' body")
+        # read the configs
+        if configuration_file is not None:
+            plugin_configs = read_configuration_file(configuration_file)
 
-        # pepare the plugin configurations
-        plugin_configs = dict(contents[KEY_PLUGINS].items())
+        # if the configuration file was not specified or we cannot
+        # get anything out from the configs
+        if ACCELERATION_FRAMEWORK_ENV_KEY in os.environ and (
+            configuration_file is None or len(plugin_configs) == 0
+        ):
+            plugin_configs = read_configuration_file(
+                os.environ[ACCELERATION_FRAMEWORK_ENV_KEY]
+            )
 
         # relevant sections are returned following plugin precedence, i.e.,
         # they follow the registration order.
