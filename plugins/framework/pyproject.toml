@@ -22,10 +22,12 @@ classifiers=[
     "Programming Language :: Python :: 3.11",
 ]
 dependencies = [
+  "numpy<2.0", # numpy needs to be bounded due to incompatiblity with current torch<2.3
   "torch>2.2,<2.3",
   "transformers<4.40",
   "peft",
-  "accelerate"
+  "accelerate",
+  "trl<0.9", # trl version needs to be constrained until below issue is resolved. https://github.com/foundation-model-stack/fms-hf-tuning/issues/198
 ]
 
 [tool.hatch.build.targets.wheel]
