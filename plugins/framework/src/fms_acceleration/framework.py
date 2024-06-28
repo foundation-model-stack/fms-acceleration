@@ -177,7 +177,9 @@ class AccelerationFramework:
         train_args: TrainingArguments,
         modifiable_args: Tuple,
     ):
-        model_archs = set(model.config.architectures)  # get the config
+        # get the config
+        archs = model.config.architectures 
+        model_archs = set(archs if archs is not None else [])
 
         # NOTE: this assumes that augmentation order does not matter
         for plugin_name, plugin in self.active_plugins:
