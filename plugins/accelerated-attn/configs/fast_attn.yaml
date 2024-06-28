@@ -1,0 +1,42 @@
+
+training:
+
+  fast_attention:
+    padding_free: 
+      method: huggingface
+    
+    loss:
+      token_averaged_loss: True
+
+    multipack:
+      effective_batch_size: 3840
+      max_number_tokens: 60000
+
+# ideally it should be like this
+# but the config parser does not support this
+# at the moment
+# training:
+# 
+#   dataloader:
+#     multipack:
+#
+#       # the packing depends on padding is added
+#       or not
+#       padding_free: true
+#
+#       effective_batch_size: 3840
+#
+#       max_number_tokens: 60000
+#      
+#       padding_free: huggingface
+# 
+#   loss:
+#     # if we need to change the loss computation
+#     # maybe we can do it in 
+#     token_averaged_loss: True
+# 
+#   attention:
+#     # do we use dolomite or huggingface PR
+#     padding_free: 
+#       method: "huggingface"
+
