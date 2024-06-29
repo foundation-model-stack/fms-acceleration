@@ -16,7 +16,7 @@ jobs:
           #   tox: "py311"
         plugin_name:
           - "framework"
-          # - "accelerated-peft"
+          - "accelerated-peft"
           - "fused-ops-and-kernels"
 
     permissions:
