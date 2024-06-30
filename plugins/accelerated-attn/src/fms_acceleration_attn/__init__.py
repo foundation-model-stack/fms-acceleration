@@ -14,3 +14,13 @@
 
 # Local
 from .framework_plugin_fast_attention import FastAttentionAccelerationPlugin
+
+from .model_patcher import ModelPatcher
+
+PATCHES = [".flash_attn"]
+PLUGIN_PREFIX = "fms_acceleration_attn"
+
+# TODO: remove the need for the prefix
+ModelPatcher.load_patches(
+    [f"{PLUGIN_PREFIX}{postfix}" for postfix in PATCHES],
+)

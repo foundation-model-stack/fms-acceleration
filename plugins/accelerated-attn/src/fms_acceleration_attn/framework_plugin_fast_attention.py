@@ -31,6 +31,22 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 logger.setLevel(logging._get_default_logging_level())
 logger.addHandler(logging._default_handler)
 
+def log_patch_summary(
+    logging_func: Callable = None,
+):
+    if logging_func is None:
+        logging_func = print
+
+    # this is a guarded import, because the model rule registration
+    # does not need to be loaded unless patch_model is required
+    # Local
+    from .model_patcher import (  # pylint: disable=import-outside-toplevel
+        patch_model_summary,
+    )
+
+    for line in patch_model_summary().split("\n"):
+        logging_func(line)
+
 
 class FastAttentionAccelerationPlugin(AccelerationPlugin):
 
@@ -79,11 +95,23 @@ class FastAttentionAccelerationPlugin(AccelerationPlugin):
             effective_batch_size // self._grad_accum // num_bins
         )
 
+        from .model_patcher import (  # pylint: disable=import-outside-toplevel
+            patch_model,
+        )
+        model = patch_model(model)
+
         return model, modifiable_args
 
     def get_callbacks_and_ready_for_train(
         self, model: torch.nn.Module = None, accelerator: Accelerator=None
     ):
+        # if this is moved to framework, it can be handled as the same way as
+        # log_initialization_message
+        # log the patch summary
+        if accelerator is not None and accelerator.is_main_process:
+            log_patch_summary(logging_func=logger.info)
+            # log_patch_summary(logging_func=print)
+
         max_batch_len = self._multipack["max_number_tokens"]
         per_token_loss = self._loss["token_averaged_loss"]
 
