@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fms-acceleration"
-version = '0.1.0'
+version = '0.0.1'
 description = "FMS Acceleration Plugin Framework"
 authors = [
   {name = "Fabian Lim", email = "flim@sg.ibm.com"},
