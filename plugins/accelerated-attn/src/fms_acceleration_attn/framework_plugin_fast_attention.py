@@ -24,6 +24,7 @@ from transformers.utils import logging
 import torch
 
 from .dataloader import patch_multipack_dataloader, get_multipack_dataloader
+from .loss import patch_loss_via_accmulate
 
 # want to use the transformers logger, but a bit of pain
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -106,6 +107,9 @@ class FastAttentionAccelerationPlugin(AccelerationPlugin):
             per_token_loss=per_token_loss,
             max_batch_len=max_batch_len,
         )
+
+        if per_token_loss:
+            patch_loss_via_accmulate(accelerator)
         return []
 
 # register
