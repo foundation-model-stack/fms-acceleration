@@ -64,8 +64,8 @@ Thats all! the model will not be reap all acceleration speedups based on the plu
 Each [package](#packages) in this monorepo:
 - can be *independently installed*. Install only the libraries you need:
    ```shell
-   pip install fms-acceleration/plugins/peft
-   pip install fms-acceleration/plugins/unsloth # to be available in the near future
+   pip install fms-acceleration/plugins/accelerated-peft
+   pip install fms-acceleration/plugins/fused-ops-and-kernels
    ```
 - can be *independently configured*. Each plugin is registed under a particular configuration path. E.g., the [autogptq plugin](libs/peft/src/fms_acceleration_peft/framework_plugin_autogptq.py) is reqistered under the config path `peft.quantization.auto_gptq`.
     ```python
@@ -99,7 +99,7 @@ To add new plugins:
     ```python
     PLUGINS = [
         "peft",
-        "unsloth",
+        "foak",
         "<postfix>",
     ]
     ```
