@@ -3,11 +3,7 @@
 
 # put this in here because there is a breaking FSDP api change that 
 # is fixed after peft > 0.10
-accelerate < 0.29
+accelerate <= 0.29
 
 # bitsandbytes for the BNB plugin
 bitsandbytes
-
-# Installing from repository because "auto_gptq > 0.7.1" it not yet available
-# Specifying the commit id here as recent commits to the main branch have introduced additional dependencies
-auto_gptq @ git+https://github.com/AutoGPTQ/AutoGPTQ.git@ea829c7bbe83561c2b1de26795b6592992373ef7
