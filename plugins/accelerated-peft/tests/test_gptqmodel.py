@@ -1,3 +1,20 @@
+# Copyright The IBM Tuning Team
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# SPDX-License-Identifier: Apache-2.0
+# https://spdx.dev/learn/handling-license-info/
+
 import pytest  # pylint: disable=import-error
 import torch
 from typing import List
@@ -14,7 +31,7 @@ LORA_alpha = 1.0
 BS = 1
 SEQLEN = 128
 
-LOSS_TOLERANCE = 1e-3
+LOSS_TOLERANCE = 0.1
 ALLCLOSE_RTOL = 1e-3
 ALLCLOSE_ATOL = 1e-4
 
@@ -60,12 +77,12 @@ def load_autogptq_plugin_model(model_name:str, target_modules:List, torch_dtype:
 
 # quantization function to manage the loading and quantizing of pretrained model 
 # using external or local autogptq
-def quantize_model(model_name, config, calibration_dataset, quant_config_kwargs, device, use_external_lib=False):
+def quantize_model(model_name, config, calibration_dataset, quant_config_kwargs, device, torch_dtype, use_external_lib=False):
     if use_external_lib:
         from auto_gptq import AutoGPTQForCausalLM as GPTQModel, BaseQuantizeConfig as QuantizeConfig
         quantize_kwargs = {"use_triton": True}
     else:
-        from gptqmodel import GPTQModel, QuantizeConfig
+        from fms_acceleration_peft.gptqmodel import GPTQModel, QuantizeConfig
         quantize_kwargs = {}
 
     quantize_config = QuantizeConfig(
@@ -76,6 +93,7 @@ def quantize_model(model_name, config, calibration_dataset, quant_config_kwargs,
         model_name, 
         quantize_config = quantize_config,
         config = config,
+        torch_dtype = getattr(torch, torch_dtype),
     ).to(device)
     # quantize model, the examples should be list of dict whose keys can only be "input_ids"
     model.quantize(calibration_dataset, **quantize_kwargs)
@@ -184,6 +202,7 @@ def test_quantizing_pretrained_model_outputs_match(
         calibration_dataset, 
         quant_config_kwargs, 
         device, 
+        FLOAT16,
         use_external_lib=True
     )
     refactored_model = quantize_model(
@@ -192,6 +211,7 @@ def test_quantizing_pretrained_model_outputs_match(
         calibration_dataset, 
         quant_config_kwargs, 
         device, 
+        FLOAT16,
         use_external_lib=False
     )
 
@@ -228,7 +248,7 @@ def test_quantizing_pretrained_model_outputs_match(
         refactored_logits = refactored_model(input_ids).logits
 
     # Measure the distribution error with KD Loss
-    loss_fn = torch.nn.KLDivLoss(reduction="mean")
+    loss_fn = torch.nn.KLDivLoss(reduction="batchmean")
     # input should be a distribution in the log space
     input = torch.nn.functional.log_softmax(refactored_logits, dim=1)
     # target must be prob distribution

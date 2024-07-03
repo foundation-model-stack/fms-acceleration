@@ -26,13 +26,13 @@ classifiers=[
 
 [project.optional-dependencies]
 flash-attn = ["flash-attn"]
-auto_gptq = ["auto_gptq @ git+https://github.com/AutoGPTQ/AutoGPTQ.git"]
+auto_gptq = ["auto_gptq @ git+https://github.com/AutoGPTQ/AutoGPTQ.git@ea829c7bbe83561c2b1de26795b6592992373ef7"] # known working commitid
 
 [tool.hatch.metadata.hooks.requirements_txt]
 files = ["requirements.txt"]
 
 [tool.hatch.build.targets.wheel]
-only-include = ["src/"]
+only-include = ["src/fms_acceleration_peft"]
 
 [tool.hatch.metadata]
 allow-direct-references = true

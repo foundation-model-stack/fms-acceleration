@@ -47,7 +47,10 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
         self._check_config_equal(
             key="peft.quantization.auto_gptq.from_quantized", value=True
         )
-        self.use_external_lib = use_external_lib and importlib.util.find_spec("autogptq") is not None
+        self.use_external_lib = use_external_lib
+
+        if self.use_external_lib:
+            assert importlib.util.find_spec("auto_gptq") is not None, "Unable to use external library, autogptq module not found."
 
     def model_loader(self, model_name: str, **kwargs):
         # guarded imports
@@ -61,9 +64,9 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
                 QuantLinear,
             )
         else:
-            from gptqmodel import GPTQModel, QuantizeConfig
-            from gptqmodel.utils import Backend
-            from gptqmodel.nn_modules.qlinear.qlinear_tritonv2 import (
+            from .gptqmodel import GPTQModel, QuantizeConfig
+            from .gptqmodel.utils import Backend
+            from .gptqmodel.nn_modules.qlinear.qlinear_tritonv2 import (
                 QuantLinear,
             )
 
@@ -126,22 +129,21 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
 
         # this is a HF method that checks if the low_cpu_mem mode is enabled
         # via HF accelerate
-        if is_fsdp_enabled():
-            if self.use_external_lib:
-                # Local
-                from .autogptq_utils import (  # pylint: disable=import-outside-toplevel
-                    _patch_target_module,
-                    make_sure_no_tensor_in_meta_device,
-                )
+        if is_fsdp_enabled() and self.use_external_lib:
+            # Local
+            from .autogptq_utils import (  # pylint: disable=import-outside-toplevel
+                _patch_target_module,
+                make_sure_no_tensor_in_meta_device,
+            )
 
-                # We patch `make_sure_no_tensor_in_meta_device`
-                # from autogptq to avoid errors on models without bias
-                _patch_target_module(
-                    to_patch="auto_gptq.modeling._utils.make_sure_no_tensor_in_meta_device",
-                    replace_with=make_sure_no_tensor_in_meta_device,
-                    target_module="auto_gptq.modeling._base",
-                )
-                kwargs["low_cpu_mem_usage"] = True
+            # We patch `make_sure_no_tensor_in_meta_device`
+            # from autogptq to avoid errors on models without bias
+            _patch_target_module(
+                to_patch="auto_gptq.modeling._utils.make_sure_no_tensor_in_meta_device",
+                replace_with=make_sure_no_tensor_in_meta_device,
+                target_module="auto_gptq.modeling._base",
+            )
+            kwargs["low_cpu_mem_usage"] = True
 
         # NOTE: need to set the device map as below as we want to use AutoGPTQ for training.
         # device_map is for inference only
@@ -253,7 +255,7 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
                 replace_module_peft,
             )
         else:
-            from gptqmodel.utils.peft import get_gptq_peft_model
+            from .gptqmodel.utils.peft import get_gptq_peft_model
 
 
         (peft_config,) = modifiable_args  # unpack modifiable args

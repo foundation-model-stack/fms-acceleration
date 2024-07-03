@@ -21,7 +21,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 ###############################################################################
-import warnings
 from contextlib import contextmanager
 from typing import List, Optional, Tuple, Union
 
@@ -29,7 +28,7 @@ import torch
 from peft import PeftConfig, PeftModel, PeftType, get_peft_model
 from peft.mapping import PEFT_TYPE_TO_CONFIG_MAPPING
 from peft.peft_model import PEFT_TYPE_TO_MODEL_MAPPING
-from peft.tuners.lora import LoraConfig, LoraLayer, LoraModel
+from peft.tuners.lora import LoraConfig, LoraModel
 from peft.tuners.lora.gptq import QuantLinear as LoraLinearGPTQ
 
 from ..models.base import BaseGPTQModel
@@ -100,7 +99,6 @@ def find_all_linear_names(
                 results.add(res)
     return list(results)
 
-
 @contextmanager
 def hijack_peft_mappings():
     PEFT_TYPE_TO_CONFIG_MAPPING[PeftType.LORA] = GPTQLoraConfig
@@ -139,16 +137,19 @@ def get_gptq_peft_model(
             if peft_type == PeftType.LORA.value and not isinstance(peft_config, GPTQLoraConfig):
                 peft_config = GPTQLoraConfig(**peft_config.to_dict())
 
+    # this hijack is needed as `get_peft_model` uses PEFTModelForCausalLM which inherits from
+    # PEFTModel and it in turn relies on PEFT_TYPE_TO_MODEL_MAPPING to initialize its base LoraModel
     with hijack_peft_mappings():
         try:
             if train_mode:
                 peft_model = get_peft_model(model.model, peft_config, adapter_name=adapter_name)
             else:
                 peft_model = PeftModel.from_pretrained(model.model, model_id, adapter_name)
-        except:
+        except Exception as exc:
             raise NotImplementedError(
-                f"{model.__class__.__name__} not support {peft_config.peft_type.value} peft type yet."
-            )
+                f"{model.__class__.__name__} not support \
+                    {peft_config.peft_type.value} peft type yet."
+            ) from exc
 
     return peft_model
 
