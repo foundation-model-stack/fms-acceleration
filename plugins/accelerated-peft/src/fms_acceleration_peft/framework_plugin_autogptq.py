@@ -100,7 +100,7 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
 
         # get additional parameters
         torch_dtype = kwargs.get("torch_dtype", torch.float32)
-        low_cpu_mem_usage = kwargs.get("low_cpu_mem_usage")
+        low_cpu_mem_usage = kwargs.get("low_cpu_mem_usage", False)
         attn_implementation = kwargs.get("attn_implementation")
 
         # there are some kwargs that we wont be passed to AutoModel, so we need
@@ -129,38 +129,38 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
 
         # this is a HF method that checks if the low_cpu_mem mode is enabled
         # via HF accelerate
-        if is_fsdp_enabled() and self.use_external_lib:
-            # Local
-            from .autogptq_utils import (  # pylint: disable=import-outside-toplevel
-                _patch_target_module,
-                make_sure_no_tensor_in_meta_device,
-            )
-
-            # We patch `make_sure_no_tensor_in_meta_device`
-            # from autogptq to avoid errors on models without bias
-            _patch_target_module(
-                to_patch="auto_gptq.modeling._utils.make_sure_no_tensor_in_meta_device",
-                replace_with=make_sure_no_tensor_in_meta_device,
-                target_module="auto_gptq.modeling._base",
-            )
+        if is_fsdp_enabled():
             kwargs["low_cpu_mem_usage"] = True
+            if self.use_external_lib:
+                # Local
+                from .autogptq_utils import (  # pylint: disable=import-outside-toplevel
+                    _patch_target_module,
+                    make_sure_no_tensor_in_meta_device,
+                )
 
-        # NOTE: need to set the device map as below as we want to use AutoGPTQ for training.
-        # device_map is for inference only
-        # https://huggingface.co/docs/accelerate/en/concept_guides/big_model_inference
-        # For low_cpu_mem_usage = True, we have to set the device map to load checkpoints to "cpu"
-        # to avoid gpu consumption before train
-        # This approach will divert consumption to cpu memory,
-        # a better approach would be to load the checkpoints to meta device
-        # QLoRA is currently implemented by the former approach and will encounter the same issue.
-        # see https://github.com/huggingface/transformers/pull/25107#issuecomment-2134833262
-        device_map = {
-            "": (
-                (torch.cuda.current_device() if not kwargs["low_cpu_mem_usage"] else "cpu")
-                if torch.cuda.is_available()
-                else None
-            )
-        }
+                # We patch `make_sure_no_tensor_in_meta_device`
+                # from autogptq to avoid errors on models without bias
+                _patch_target_module(
+                    to_patch="auto_gptq.modeling._utils.make_sure_no_tensor_in_meta_device",
+                    replace_with=make_sure_no_tensor_in_meta_device,
+                    target_module="auto_gptq.modeling._base",
+                )
+
+                # NOTE: need to set the device map as below as we want to use AutoGPTQ for training.
+                # For low_cpu_mem_usage = True, we have to set the device map to load checkpoints to "cpu"
+                # to avoid gpu consumption before train
+                # This approach will divert consumption to cpu memory,
+                # a better approach would be to load the checkpoints to meta device
+                # QLoRA is currently implemented by the former approach and will encounter the same issue.
+                # see https://github.com/huggingface/transformers/pull/25107#issuecomment-2134833262
+
+                kwargs["device_map"] = {
+                    "": (
+                        (torch.cuda.current_device() if not kwargs["low_cpu_mem_usage"] else "cpu")
+                        if torch.cuda.is_available()
+                        else None
+                    )
+                }
 
         # currently only enable triton_v2, because the triton kernels are the only ones
         # that have backwards
@@ -168,7 +168,6 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
             model_name,
             quantize_config=quantize_config,
             torch_dtype=torch_dtype,
-            device_map=device_map,
             warmup_triton=False,  # disable for now as it will try to run the warmup while on CPU
             **kwargs,
         )

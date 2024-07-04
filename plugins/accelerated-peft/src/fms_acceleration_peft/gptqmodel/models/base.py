@@ -774,7 +774,7 @@ class BaseGPTQModel(nn.Module):
         device_map: Optional[Union[str, Dict[str, Union[int, str]]]] = None,
         max_memory: Optional[dict] = None,
         device: Optional[Union[str, int]] = None,
-
+        low_cpu_mem_usage: bool = False,
         backend: Backend = Backend.AUTO,
 
         torch_dtype: [str | torch.dtype] = "auto",
@@ -909,6 +909,8 @@ class BaseGPTQModel(nn.Module):
         transformers.modeling_utils._init_weights = False
 
         init_contexts = [no_init_weights()]
+        if low_cpu_mem_usage:
+            init_contexts.append(accelerate.init_empty_weights(include_buffers=False))
 
         with ContextManagers(init_contexts):
             model = AutoModelForCausalLM.from_config(
@@ -982,6 +984,11 @@ class BaseGPTQModel(nn.Module):
                 no_split_module_classes=[cls.layer_type],
             )
 
+        if low_cpu_mem_usage:
+            # set device_map on so `dispatch_model` initializes weights on cpu until accelerator
+            # prepares the model on gpu in `trainer.train` to avoid unnecessary gpu usage
+            device_map = {"": "cpu"}
+
         load_checkpoint_in_model = False
         # compat: runtime convert checkpoint gptq(v1) to gptq_v2 format
         if quantize_config.format == FORMAT.GPTQ:
@@ -1019,7 +1026,6 @@ class BaseGPTQModel(nn.Module):
                 offload_state_dict=True,
                 offload_buffers=True,
             )
-
         # TODO: Why are we using this custom function and not dispatch_model?
         model = simple_dispatch_model(model, device_map)
 
