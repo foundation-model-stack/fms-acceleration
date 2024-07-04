@@ -31,7 +31,7 @@ LORA_alpha = 1.0
 BS = 1
 SEQLEN = 128
 
-LOSS_TOLERANCE = 0.1
+LOSS_TOLERANCE = 1e-3
 ALLCLOSE_RTOL = 1e-3
 ALLCLOSE_ATOL = 1e-4
 
@@ -248,11 +248,15 @@ def test_quantizing_pretrained_model_outputs_match(
         refactored_logits = refactored_model(input_ids).logits
 
     # Measure the distribution error with KD Loss
+    # flatten as a single batch bs*seqlen
+    # since batchmean sums the loss and averages on dim=0
     loss_fn = torch.nn.KLDivLoss(reduction="batchmean")
     # input should be a distribution in the log space
-    input = torch.nn.functional.log_softmax(refactored_logits, dim=1)
+    input = torch.nn.functional.log_softmax(refactored_logits, dim=-1)
+    input = torch.flatten(input, start_dim=0, end_dim=1)
     # target must be prob distribution
-    target = torch.nn.functional.softmax(original_logits, dim=1)
+    target = torch.nn.functional.softmax(original_logits, dim=-1)
+    target = torch.flatten(target, start_dim=0, end_dim=1)
     error = loss_fn(input, target)
     assert error.lt(LOSS_TOLERANCE), "Model logits don't match between both libraries \
         after quantization"

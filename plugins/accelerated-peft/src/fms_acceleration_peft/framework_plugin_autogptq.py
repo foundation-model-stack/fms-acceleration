@@ -20,7 +20,6 @@
 from functools import partial
 from types import MethodType
 from typing import Dict, Tuple
-import importlib
 import os
 
 # Third Party
@@ -28,6 +27,7 @@ from fms_acceleration import AccelerationPlugin
 from peft import LoraConfig, prepare_model_for_kbit_training
 from peft.tuners.lora.model import LoraModel
 from transformers import AutoModelForCausalLM, TrainingArguments
+from transformers.utils.import_utils import _is_package_available
 from transformers.modeling_utils import is_fsdp_enabled
 import torch
 import torch.distributed
@@ -50,7 +50,7 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
         self.use_external_lib = use_external_lib
 
         if self.use_external_lib:
-            assert importlib.util.find_spec("auto_gptq") is not None, "Unable to use external library, autogptq module not found."
+            assert _is_package_available("auto_gptq") is True, "Unable to use external library, autogptq module not found."
 
     def model_loader(self, model_name: str, **kwargs):
         # guarded imports
