@@ -13,12 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ###############################################################################
-import json
-import logging
+# Standard
 from dataclasses import dataclass, field, fields
 from os.path import isdir, join
 from typing import Any, Dict, Optional, Tuple
+import json
+import logging
 
+# Third Party
 from packaging import version
 from transformers.utils.hub import cached_file
 
@@ -34,7 +36,11 @@ FORMAT_FIELD_CODE = "format"
 FORMAT_FIELD_JSON = "checkpoint_format"
 QUANT_METHOD_FIELD = "quant_method"
 QUANT_CONFIG_FILENAME = "quantize_config.json"
-QUANT_CONFIG_FILENAME_COMPAT = [QUANT_CONFIG_FILENAME, "quant_config.json", "config.json"]
+QUANT_CONFIG_FILENAME_COMPAT = [
+    QUANT_CONFIG_FILENAME,
+    "quant_config.json",
+    "config.json",
+]
 
 MIN_VERSION_WITH_V2 = "0.9.0"
 
@@ -81,7 +87,7 @@ QUANT_CONFIG_ARG_SYNONYMS = {
 
 
 @dataclass
-class QuantizeConfig():
+class QuantizeConfig:
     bits: int = field(default=4, metadata={"choices": [2, 3, 4, 8]})
     group_size: int = field(default=-1)
     damp_percent: float = field(default=0.01)
@@ -117,7 +123,9 @@ class QuantizeConfig():
             )
 
         if self.bits not in fields_info[0].metadata["choices"]:
-            raise ValueError(f"only support quantize to {fields_info[0].metadata['choices']} bits.")
+            raise ValueError(
+                f"only support quantize to {fields_info[0].metadata['choices']} bits."
+            )
 
         if self.group_size != -1 and self.group_size <= 0:
             raise ValueError("unless equal to -1, group_size must greater then 0.")
@@ -157,14 +165,16 @@ class QuantizeConfig():
     def is_quantized_or_packed_by_v2(self) -> bool:
         # check meta.quantizer
         producer, _version = self.meta_get_versionable(META_FIELD_QUANTIZER)
-        by_v2 = (producer == META_QUANTIZER_GPTQMODEL) and (version.parse(_version) >= version.parse(MIN_VERSION_WITH_V2))
+        by_v2 = (producer == META_QUANTIZER_GPTQMODEL) and (
+            version.parse(_version) >= version.parse(MIN_VERSION_WITH_V2)
+        )
 
         # fallback to meta.packer
         if not by_v2:
             producer, _version = self.meta_get_versionable(META_FIELD_PACKER)
-            by_v2 = producer == META_QUANTIZER_GPTQMODEL and version.parse(_version) >= version.parse(
-                MIN_VERSION_WITH_V2
-            )
+            by_v2 = producer == META_QUANTIZER_GPTQMODEL and version.parse(
+                _version
+            ) >= version.parse(MIN_VERSION_WITH_V2)
 
         return by_v2
 
@@ -182,7 +192,9 @@ class QuantizeConfig():
             if format not in valid_formats:
                 raise ValueError(f"Unknown quantization checkpoint format: {format}.")
             if quantize_cfg.get(FORMAT_FIELD_JSON):
-                raise ValueError("Conflict: quantization format is passed in and also exists in model config.")
+                raise ValueError(
+                    "Conflict: quantization format is passed in and also exists in model config."
+                )
         # compat: warn if checkpoint_format is missing
         elif quantize_cfg.get(FORMAT_FIELD_JSON) is None:
             format_auto_inferred = True
@@ -198,7 +210,10 @@ class QuantizeConfig():
             key = key.lower()
 
             # remap keys according to compat map
-            if key in QUANT_CONFIG_ARG_SYNONYMS and QUANT_CONFIG_ARG_SYNONYMS[key] in field_names:
+            if (
+                key in QUANT_CONFIG_ARG_SYNONYMS
+                and QUANT_CONFIG_ARG_SYNONYMS[key] in field_names
+            ):
                 key = QUANT_CONFIG_ARG_SYNONYMS[key]
 
             if key == FORMAT_FIELD_JSON:
@@ -218,10 +233,14 @@ class QuantizeConfig():
             elif key in field_names:
                 normalized[key] = val
             else:
-                logger.info(f"Ignoring unknown parameter in the quantization configuration: {key}.")
+                logger.info(
+                    f"Ignoring unknown parameter in the quantization configuration: {key}."
+                )
 
         if format_auto_inferred:
-            logger.info(f"`{FORMAT_FIELD_JSON}` is missing from the quantization configuration and is automatically inferred to {normalized[FORMAT_FIELD_CODE]}")
+            logger.info(
+                f"`{FORMAT_FIELD_JSON}` is missing from the quantization configuration and is automatically inferred to {normalized[FORMAT_FIELD_CODE]}"
+            )
 
         if "sym" not in normalized:
             logger.warning(
@@ -301,9 +320,12 @@ class QuantizeConfig():
             META_FIELD: self.meta,
         }
 
+
 # deprecated: will be removed in future update
 @dataclass
 class BaseQuantizeConfig(QuantizeConfig):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        logging.warning("BaseQuantizeConfig is re-named and pending deprecation. Please use `QuantizeConfig` instead.")
+        logging.warning(
+            "BaseQuantizeConfig is re-named and pending deprecation. Please use `QuantizeConfig` instead."
+        )

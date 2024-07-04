@@ -15,13 +15,20 @@
 # SPDX-License-Identifier: Apache-2.0
 # https://spdx.dev/learn/handling-license-info/
 
-import pytest  # pylint: disable=import-error
-import torch
+# Standard
 from typing import List
 
-from transformers.utils.import_utils import _is_package_available
-from transformers import AutoTokenizer, AutoConfig, GenerationConfig, AutoModelForCausalLM
+# Third Party
 from peft import LoraConfig
+from transformers import (
+    AutoConfig,
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    GenerationConfig,
+)
+from transformers.utils.import_utils import _is_package_available
+import pytest  # pylint: disable=import-error
+import torch
 
 GPTQ = "gptq"
 # r, lora_alpha
@@ -38,22 +45,29 @@ ALLCLOSE_ATOL = 1e-4
 VANILLA_MODEL_NAME = "TinyLlama/TinyLlama-1.1B-Chat-v0.3"
 QUANTIZED_MODEL_NAME = "TheBloke/TinyLlama-1.1B-Chat-v0.3-GPTQ"
 TARGET_MODULES = ["q_proj", "k_proj", "v_proj", "o_proj"]
-                
+
+
 # Model loading function for quantized models
-def load_autogptq_plugin_model(model_name:str, target_modules:List, torch_dtype:str, use_external_lib:bool = False):
+def load_autogptq_plugin_model(
+    model_name: str,
+    target_modules: List,
+    torch_dtype: str,
+    use_external_lib: bool = False,
+):
+    # First Party
     from fms_acceleration_peft.framework_plugin_autogptq import (
         AutoGPTQAccelerationPlugin,
     )
 
     _plugin = AutoGPTQAccelerationPlugin(
-            {
-                "peft": {
-                    "quantization": {
-                        "auto_gptq": {"kernel": "triton_v2", "from_quantized": True}
-                    }
+        {
+            "peft": {
+                "quantization": {
+                    "auto_gptq": {"kernel": "triton_v2", "from_quantized": True}
                 }
-            },
-            use_external_lib = use_external_lib,
+            }
+        },
+        use_external_lib=use_external_lib,
     )
 
     class TrainArgs:
@@ -68,48 +82,63 @@ def load_autogptq_plugin_model(model_name:str, target_modules:List, torch_dtype:
         target_modules=target_modules,
     )
 
-    model = _plugin.model_loader(
-        model_name, torch_dtype=getattr(torch, torch_dtype)
-    )
+    model = _plugin.model_loader(model_name, torch_dtype=getattr(torch, torch_dtype))
     model, _ = _plugin.augmentation(model, args, (peft_config,))
     model.eval()
     return model
 
-# quantization function to manage the loading and quantizing of pretrained model 
+
+# quantization function to manage the loading and quantizing of pretrained model
 # using external or local autogptq
-def quantize_model(model_name, config, calibration_dataset, quant_config_kwargs, device, torch_dtype, use_external_lib=False):
+def quantize_model(
+    model_name,
+    config,
+    calibration_dataset,
+    quant_config_kwargs,
+    device,
+    torch_dtype,
+    use_external_lib=False,
+):
     if use_external_lib:
-        from auto_gptq import AutoGPTQForCausalLM as GPTQModel, BaseQuantizeConfig as QuantizeConfig
+        # Third Party
+        from auto_gptq import AutoGPTQForCausalLM as GPTQModel
+        from auto_gptq import BaseQuantizeConfig as QuantizeConfig
+
         quantize_kwargs = {"use_triton": True}
     else:
+        # First Party
         from fms_acceleration_peft.gptqmodel import GPTQModel, QuantizeConfig
+
         quantize_kwargs = {}
 
-    quantize_config = QuantizeConfig(
-        **quant_config_kwargs
-    )
+    quantize_config = QuantizeConfig(**quant_config_kwargs)
     # load un-quantized model, by default, the model will always be loaded into CPU memory
     model = GPTQModel.from_pretrained(
-        model_name, 
-        quantize_config = quantize_config,
-        config = config,
-        torch_dtype = getattr(torch, torch_dtype),
+        model_name,
+        quantize_config=quantize_config,
+        config=config,
+        torch_dtype=getattr(torch, torch_dtype),
     ).to(device)
     # quantize model, the examples should be list of dict whose keys can only be "input_ids"
     model.quantize(calibration_dataset, **quantize_kwargs)
     model.eval()
     return model
 
+
 def get_wikitext2(tokenizer, num_samples=128, seqlen=128):
+    # Standard
     import random
+
+    # Third Party
+    from datasets import load_dataset
     import numpy as np
     import torch
-    from datasets import load_dataset
-    wikidata = load_dataset('wikitext', 'wikitext-2-v1', split='test')
-    wikilist = [' \n' if s == '' else s for s in wikidata['text'] ]
 
-    text = ''.join(wikilist)
-    trainenc = tokenizer(text, return_tensors='pt')
+    wikidata = load_dataset("wikitext", "wikitext-2-v1", split="test")
+    wikilist = [" \n" if s == "" else s for s in wikidata["text"]]
+
+    text = "".join(wikilist)
+    trainenc = tokenizer(text, return_tensors="pt")
 
     random.seed(0)
     np.random.seed(0)
@@ -122,20 +151,23 @@ def get_wikitext2(tokenizer, num_samples=128, seqlen=128):
         j = i + seqlen
         inp = trainenc.input_ids[:, i:j]
         attention_mask = torch.ones_like(inp)
-        traindataset.append({'input_ids':inp,'attention_mask': attention_mask})
+        traindataset.append({"input_ids": inp, "attention_mask": attention_mask})
     return traindataset
+
 
 @pytest.fixture()
 def input_ids(seed: int = 42, device: torch.device = "cuda"):
     torch.manual_seed(seed)
-    yield torch.randint(0, 10000, (BS, SEQLEN), device=device)    
+    yield torch.randint(0, 10000, (BS, SEQLEN), device=device)
+
 
 @pytest.mark.skipif(
     not _is_package_available("auto_gptq"),
     reason="Only runs if auto_gptq is installed",
 )
 def test_pre_quantized_model_outputs_match(
-    input_ids, seed: int = 42,
+    input_ids,
+    seed: int = 42,
 ):
     """
     Test for output equivalence when loading quantized models between
@@ -143,33 +175,33 @@ def test_pre_quantized_model_outputs_match(
     """
     torch.manual_seed(seed)
     original_model = load_autogptq_plugin_model(
-        QUANTIZED_MODEL_NAME, 
-        TARGET_MODULES, FLOAT16, 
-        use_external_lib=True
+        QUANTIZED_MODEL_NAME, TARGET_MODULES, FLOAT16, use_external_lib=True
     )
     refactored_model = load_autogptq_plugin_model(
-        QUANTIZED_MODEL_NAME, 
-        TARGET_MODULES, 
-        FLOAT16
+        QUANTIZED_MODEL_NAME, TARGET_MODULES, FLOAT16
     )
-    with torch.autocast(device_type='cuda', dtype=torch.float32):
+    with torch.autocast(device_type="cuda", dtype=torch.float32):
         with torch.no_grad():
             original_logits = original_model(input_ids.to(original_model.device)).logits
-            refactored_logits = refactored_model(input_ids.to(refactored_model.device)).logits
+            refactored_logits = refactored_model(
+                input_ids.to(refactored_model.device)
+            ).logits
 
     assert torch.allclose(
         original_logits, refactored_logits, atol=ALLCLOSE_ATOL, rtol=ALLCLOSE_RTOL
     ), "Pre-quantized model logits don't match between extracted and external autogptq library"
+
 
 @pytest.mark.skipif(
     not _is_package_available("auto_gptq"),
     reason="Only runs if auto_gptq is installed",
 )
 def test_quantizing_pretrained_model_outputs_match(
-    input_ids, seed: int = 42,
+    input_ids,
+    seed: int = 42,
 ):
     """
-    Test for regression of quantizing pretrained models 
+    Test for regression of quantizing pretrained models
     with refactored gptq library against original autogptq library
     by calculating KL loss on the output logits of both variants
     """
@@ -197,49 +229,53 @@ def test_quantizing_pretrained_model_outputs_match(
 
     # quantize models for external autogptq lib and extracted gptq lib
     original_model = quantize_model(
-        VANILLA_MODEL_NAME, 
+        VANILLA_MODEL_NAME,
         config,
-        calibration_dataset, 
-        quant_config_kwargs, 
-        device, 
+        calibration_dataset,
+        quant_config_kwargs,
+        device,
         FLOAT16,
-        use_external_lib=True
+        use_external_lib=True,
     )
     refactored_model = quantize_model(
-        VANILLA_MODEL_NAME, 
+        VANILLA_MODEL_NAME,
         config,
-        calibration_dataset, 
-        quant_config_kwargs, 
-        device, 
+        calibration_dataset,
+        quant_config_kwargs,
+        device,
         FLOAT16,
-        use_external_lib=False
+        use_external_lib=False,
     )
 
-    # compare generated tokens between 
+    # compare generated tokens between
     # unquantized, original library and refactored gptqmodel library
     unquantized_model = AutoModelForCausalLM.from_pretrained(
-        VANILLA_MODEL_NAME,
-        config=config
+        VANILLA_MODEL_NAME, config=config
     ).to(device)
     gen_config = GenerationConfig.from_pretrained(VANILLA_MODEL_NAME)
     gen_config.max_new_tokens = 5
-    _inputs = torch.tensor([tokenizer("auto-gptq is an easy to use")["input_ids"]], device="cuda")
+    _inputs = torch.tensor(
+        [tokenizer("auto-gptq is an easy to use")["input_ids"]], device="cuda"
+    )
     output1 = tokenizer.decode(
-        original_model.generate(
-                inputs=_inputs, generation_config=gen_config
-            ).view(-1), skip_special_tokens=True
-        )
+        original_model.generate(inputs=_inputs, generation_config=gen_config).view(-1),
+        skip_special_tokens=True,
+    )
     output2 = tokenizer.decode(
-        refactored_model.generate(
-                inputs=_inputs, generation_config=gen_config
-            ).view(-1), skip_special_tokens=True
-        )
+        refactored_model.generate(inputs=_inputs, generation_config=gen_config).view(
+            -1
+        ),
+        skip_special_tokens=True,
+    )
     output3 = tokenizer.decode(
-        unquantized_model.generate(
-                inputs=_inputs, generation_config=gen_config
-            ).view(-1), skip_special_tokens=True
-        )    
-    assert output1==output2==output3, f"generated tokens ({output1}, {output2}, {output3}) \
+        unquantized_model.generate(inputs=_inputs, generation_config=gen_config).view(
+            -1
+        ),
+        skip_special_tokens=True,
+    )
+    assert (
+        output1 == output2 == output3
+    ), f"generated tokens ({output1}, {output2}, {output3}) \
         don't match between both libraries after quantization"
 
     # compare prob. distributions between original library and refactored gptqmodel library
@@ -258,5 +294,7 @@ def test_quantizing_pretrained_model_outputs_match(
     target = torch.nn.functional.softmax(original_logits, dim=-1)
     target = torch.flatten(target, start_dim=0, end_dim=1)
     error = loss_fn(input, target)
-    assert error.lt(LOSS_TOLERANCE), "Model logits don't match between both libraries \
+    assert error.lt(
+        LOSS_TOLERANCE
+    ), "Model logits don't match between both libraries \
         after quantization"

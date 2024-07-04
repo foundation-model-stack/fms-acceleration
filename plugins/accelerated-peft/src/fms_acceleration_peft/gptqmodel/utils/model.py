@@ -13,24 +13,33 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ###############################################################################
+# Standard
+from logging import getLogger
+from typing import List, Optional
 import functools
 import hashlib
 import json
 import logging
 import os
-from logging import getLogger
-from typing import List, Optional
 
+# Third Party
+from tqdm import tqdm
+from transformers import AutoConfig, PretrainedConfig
+from transformers.utils.hub import cached_file
 import accelerate
 import threadpoolctl as tctl
 import torch
 import torch.nn as nn
 import transformers
-from tqdm import tqdm
-from transformers import AutoConfig, PretrainedConfig
-from transformers.utils.hub import cached_file
 
-from ..models._const import CPU, CUDA_0, EXLLAMA_DEFAULT_MAX_INPUT_LENGTH, EXPERT_INDEX_PLACEHOLDER, SUPPORTED_MODELS
+# Local
+from ..models._const import (
+    CPU,
+    CUDA_0,
+    EXLLAMA_DEFAULT_MAX_INPUT_LENGTH,
+    EXPERT_INDEX_PLACEHOLDER,
+    SUPPORTED_MODELS,
+)
 from ..nn_modules.qlinear import BaseQuantLinear
 from ..quantization import FORMAT, QuantizeConfig
 from .backend import Backend
@@ -99,7 +108,11 @@ def find_layers(module, layers=None, name=""):
             return {name: module}
     res = {}
     for name1, child in module.named_children():
-        res.update(find_layers(child, layers=layers, name=name + "." + name1 if name != "" else name1))
+        res.update(
+            find_layers(
+                child, layers=layers, name=name + "." + name1 if name != "" else name1
+            )
+        )
     return res
 
 
@@ -127,7 +140,9 @@ def make_quant(
     use_cuda_fp16: bool = True,
     pack: bool = False,
 ) -> BaseQuantLinear:
-    select_quant_linear_func = select_quant_linear_with_pack if pack else select_quant_linear
+    select_quant_linear_func = (
+        select_quant_linear_with_pack if pack else select_quant_linear
+    )
     QuantLinear = select_quant_linear_func(
         bits=bits,
         group_size=group_size,
@@ -186,6 +201,7 @@ def make_quant(
 
     return QuantLinear
 
+
 def convert_gptq_v1_to_v2_format(
     model,
     quantize_config: QuantizeConfig,
@@ -202,15 +218,15 @@ def convert_gptq_v1_to_v2_format(
                 if quantize_config.bits == 2:
                     submodule.qzeros.data += 0b01010101010101010101010101010101
                 elif quantize_config.bits == 3:
-                    submodule.qzeros.data[:, range(0, submodule.qzeros.data.shape[1], 3)] += (
-                        0b00100100100100100100100100100100
-                    )
-                    submodule.qzeros.data[:, range(1, submodule.qzeros.data.shape[1], 3)] += (
-                        0b10010010010010010010010010010010
-                    )
-                    submodule.qzeros.data[:, range(2, submodule.qzeros.data.shape[1], 3)] += (
-                        0b01001001001001001001001001001001
-                    )
+                    submodule.qzeros.data[
+                        :, range(0, submodule.qzeros.data.shape[1], 3)
+                    ] += 0b00100100100100100100100100100100
+                    submodule.qzeros.data[
+                        :, range(1, submodule.qzeros.data.shape[1], 3)
+                    ] += 0b10010010010010010010010010010010
+                    submodule.qzeros.data[
+                        :, range(2, submodule.qzeros.data.shape[1], 3)
+                    ] += 0b01001001001001001001001001001001
                 elif quantize_config.bits == 4:
                     submodule.qzeros.data += 0b00010001000100010001000100010001
                 elif quantize_config.bits == 8:
@@ -234,15 +250,15 @@ def convert_gptq_v2_to_v1_format(
                 if quantize_config.bits == 2:
                     submodule.qzeros.data -= 0b01010101010101010101010101010101
                 elif quantize_config.bits == 3:
-                    submodule.qzeros.data[:, range(0, submodule.qzeros.data.shape[1], 3)] -= (
-                        0b00100100100100100100100100100100
-                    )
-                    submodule.qzeros.data[:, range(1, submodule.qzeros.data.shape[1], 3)] -= (
-                        0b10010010010010010010010010010010
-                    )
-                    submodule.qzeros.data[:, range(2, submodule.qzeros.data.shape[1], 3)] -= (
-                        0b01001001001001001001001001001001
-                    )
+                    submodule.qzeros.data[
+                        :, range(0, submodule.qzeros.data.shape[1], 3)
+                    ] -= 0b00100100100100100100100100100100
+                    submodule.qzeros.data[
+                        :, range(1, submodule.qzeros.data.shape[1], 3)
+                    ] -= 0b10010010010010010010010010010010
+                    submodule.qzeros.data[
+                        :, range(2, submodule.qzeros.data.shape[1], 3)
+                    ] -= 0b01001001001001001001001001001001
                 elif quantize_config.bits == 4:
                     submodule.qzeros.data -= 0b00010001000100010001000100010001
                 elif quantize_config.bits == 8:
@@ -252,11 +268,16 @@ def convert_gptq_v2_to_v1_format(
 
     return model
 
-def select_quant_linear_with_pack(bits: int,
+
+def select_quant_linear_with_pack(
+    bits: int,
     group_size: int,
     desc_act: bool,
     sym: bool,
-    backend: Backend, format: str, pack: bool):
+    backend: Backend,
+    format: str,
+    pack: bool,
+):
     QuantLinear = select_quant_linear(
         bits=bits,
         group_size=group_size,
@@ -267,6 +288,7 @@ def select_quant_linear_with_pack(bits: int,
         pack=pack,
     )
     return QuantLinear
+
 
 def pack_model(
     model,
@@ -341,12 +363,13 @@ def pack_model(
         QuantLinear.warmup(model.to(CUDA_0), seqlen=model.seqlen)
     return QuantLinear
 
+
 def verify_model_hash(file_path: str, verify_hash: str):
     if not isinstance(verify_hash, str):
         raise ValueError("model verify_hash must be a string")
-    if ':' not in verify_hash:
+    if ":" not in verify_hash:
         raise ValueError("verify_hash must be in the format 'hash_type:hash_value'")
-    hash_type, hash_value = verify_hash.split(':', 1)
+    hash_type, hash_value = verify_hash.split(":", 1)
     hash_func = getattr(hashlib, hash_type, None)
     if not hash_func:
         raise ValueError(f"No hash function found for type: {hash_type}")
@@ -359,9 +382,9 @@ def verify_sharded_model_hashes(jsonPath: str, verify_hash: List[str]):
     if not isinstance(verify_hash, list):
         raise ValueError("sharded model verify_hash must be a list")
 
-    with open(jsonPath, 'r') as f:
+    with open(jsonPath, "r") as f:
         index_data = json.load(f)
-    weight_map = index_data['weight_map']
+    weight_map = index_data["weight_map"]
     shard_files = set(weight_map.values())
     if len(shard_files) != len(verify_hash):
         raise ValueError("Number of shards and number of hash values do not match.")
@@ -372,6 +395,7 @@ def verify_sharded_model_hashes(jsonPath: str, verify_hash: List[str]):
             return False
     return True
 
+
 def check_and_get_model_type(model_dir, trust_remote_code=False):
     config = AutoConfig.from_pretrained(model_dir, trust_remote_code=trust_remote_code)
     if config.model_type not in SUPPORTED_MODELS:
@@ -381,6 +405,7 @@ def check_and_get_model_type(model_dir, trust_remote_code=False):
 
 
 def simple_dispatch_model(model, device_map):
+    # Third Party
     from accelerate.hooks import AlignDevicesHook, add_hook_to_module
 
     if "" in device_map:
@@ -402,10 +427,14 @@ def simple_dispatch_model(model, device_map):
     prev_hook = None
     for idx, (n, d) in enumerate(cpu_offload_group):
         m = get_module_by_name_suffix(model, n)
-        _, prev_hook = accelerate.cpu_offload_with_hook(m, execution_device=main_device, prev_module_hook=prev_hook)
+        _, prev_hook = accelerate.cpu_offload_with_hook(
+            m, execution_device=main_device, prev_module_hook=prev_hook
+        )
     # set first cpu offload module's prev_module_hook to the last cpu offload module's hook
     if len(cpu_offload_group) > 1:
-        get_module_by_name_suffix(model, cpu_offload_group[0][0])._hf_hook.prev_module_hook = prev_hook
+        get_module_by_name_suffix(
+            model, cpu_offload_group[0][0]
+        )._hf_hook.prev_module_hook = prev_hook
 
     for n, d in device_map.items():
         m = get_module_by_name_suffix(model, n)
@@ -423,7 +452,9 @@ def simple_dispatch_model(model, device_map):
 # when qliear type is selected, it should auto-override the model post_init method and
 # not have to go about looping over modules to match qlinear type a second time as it is
 # very prone to bugs
-def gptqmodel_post_init(model, use_act_order: bool, max_input_length: Optional[int] = None):
+def gptqmodel_post_init(
+    model, use_act_order: bool, max_input_length: Optional[int] = None
+):
     """
     The max_input_length argument is specific to the exllama backend, that requires to initialize a buffer temp_state.
     """
@@ -475,6 +506,7 @@ def gptqmodel_post_init(model, use_act_order: bool, max_input_length: Optional[i
 
     if model_uses_exllama:
         # To be honest this is quite ugly, not proud of this.
+        # Third Party
         from gptqmodel_exllama_kernels import prepare_buffers, set_tuning_params
 
         device_to_buffers = {}
@@ -523,7 +555,10 @@ def gptqmodel_post_init(model, use_act_order: bool, max_input_length: Optional[i
 
         # The buffers need to have been initialized first before calling make_q4.
         for name, submodule in model.named_modules():
-            if isinstance(submodule, BaseQuantLinear) and submodule.QUANT_TYPE == "exllama":
+            if (
+                isinstance(submodule, BaseQuantLinear)
+                and submodule.QUANT_TYPE == "exllama"
+            ):
                 submodule.post_init()
 
     # exllamav2
@@ -531,13 +566,17 @@ def gptqmodel_post_init(model, use_act_order: bool, max_input_length: Optional[i
     model_uses_exllamav2 = False
 
     for _, submodule in model.named_modules():
-        if isinstance(submodule, BaseQuantLinear) and submodule.QUANT_TYPE == "exllamav2":
+        if (
+            isinstance(submodule, BaseQuantLinear)
+            and submodule.QUANT_TYPE == "exllamav2"
+        ):
             model_uses_exllamav2 = True
             device = submodule.qweight.device
             scratch_fixed = submodule.scratch_space_fixed()
             fixed_bytes[device] = max(scratch_fixed, fixed_bytes.get(device, 0))
 
     if model_uses_exllamav2:
+        # Local
         from ..nn_modules.qlinear.qlinear_exllamav2 import ExLlamaV2DeviceTensors
 
         device_tensors = {}
@@ -548,7 +587,10 @@ def gptqmodel_post_init(model, use_act_order: bool, max_input_length: Optional[i
         model.device_tensors = device_tensors
 
         for _, submodule in model.named_modules():
-            if isinstance(submodule, BaseQuantLinear) and submodule.QUANT_TYPE == "exllamav2":
+            if (
+                isinstance(submodule, BaseQuantLinear)
+                and submodule.QUANT_TYPE == "exllamav2"
+            ):
                 device = submodule.qweight.device
                 submodule.post_init(temp_dq=model.device_tensors[device])
     torch.cuda.empty_cache()
@@ -557,7 +599,10 @@ def gptqmodel_post_init(model, use_act_order: bool, max_input_length: Optional[i
 
 
 def get_checkpoints(
-    model_name_or_path: str, extensions: List[str], possible_model_basenames: List[str], **cached_file_kwargs
+    model_name_or_path: str,
+    extensions: List[str],
+    possible_model_basenames: List[str],
+    **cached_file_kwargs,
 ):
     """
     Retrives (and if necessary downloads from Hugging Face Hub) the model checkpoint. Sharding is supported. All the `possible_model_basenames` (e.g. `["model", "model-4bit-gptq"]`) will be explored over all `extensions` (e.g. `[".bin", ".safetensors"]`).
@@ -574,10 +619,14 @@ def get_checkpoints(
                 possible_index_file = os.path.join(model_name_or_path, shard_index_name)
                 if os.path.isfile(possible_index_file):
                     # The model is sharded over several checkpoints.
-                    possible_model_basename = possible_index_file.replace(ext + ".index.json", "")
+                    possible_model_basename = possible_index_file.replace(
+                        ext + ".index.json", ""
+                    )
                     return True, possible_index_file, possible_model_basename
                 else:
-                    model_save_name = os.path.join(model_name_or_path, possible_model_basename)
+                    model_save_name = os.path.join(
+                        model_name_or_path, possible_model_basename
+                    )
                     searched_files.append(possible_model_basename + ext)
                     if os.path.isfile(model_save_name + ext):
                         resolved_archive_file = model_save_name + ext
@@ -628,14 +677,19 @@ def get_checkpoints(
 
 
 # return the most stable tensor dtype for quantization while minimizing vram
-def auto_dtype_from_config(config: PretrainedConfig, quant_inference: bool = False) -> torch.dtype:
+def auto_dtype_from_config(
+    config: PretrainedConfig, quant_inference: bool = False
+) -> torch.dtype:
     # all the gptq inference kernels are float16 only
     if quant_inference:
         return torch.float16
 
     dtype = getattr(config, "torch_dtype")
     if not dtype or not isinstance(dtype, torch.dtype):
-        raise ValueError("Your model config.json does not have torch_dtype set. Please check for model " "corruption.")
+        raise ValueError(
+            "Your model config.json does not have torch_dtype set. Please check for model "
+            "corruption."
+        )
 
     if dtype == torch.float32:
         return torch.bfloat16
@@ -654,7 +708,9 @@ def get_moe_layer_modules(layer_modules: List, num_experts: int) -> List:
         for n in names:
             if EXPERT_INDEX_PLACEHOLDER in n:
                 for index in range(num_experts):
-                    new_inside_layer_modules[-1].append(n.replace(EXPERT_INDEX_PLACEHOLDER, str(index)))
+                    new_inside_layer_modules[-1].append(
+                        n.replace(EXPERT_INDEX_PLACEHOLDER, str(index))
+                    )
             else:
                 new_inside_layer_modules[-1].append(n)
 

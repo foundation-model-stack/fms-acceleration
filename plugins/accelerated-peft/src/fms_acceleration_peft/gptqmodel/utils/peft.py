@@ -13,6 +13,7 @@
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 
+# Standard
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -24,19 +25,23 @@
 from contextlib import contextmanager
 from typing import List, Optional, Tuple, Union
 
-import torch
+# Third Party
 from peft import PeftConfig, PeftModel, PeftType, get_peft_model
 from peft.mapping import PEFT_TYPE_TO_CONFIG_MAPPING
 from peft.peft_model import PEFT_TYPE_TO_MODEL_MAPPING
 from peft.tuners.lora import LoraConfig, LoraModel
 from peft.tuners.lora.gptq import QuantLinear as LoraLinearGPTQ
+import torch
 
+# Local
 from ..models.base import BaseGPTQModel
 from ..nn_modules.qlinear.qlinear_tritonv2 import QuantLinear as QuantLinearTriton
+
 
 class GPTQLoraConfig(LoraConfig):
     injected_fused_attention: bool = False
     injected_fused_mlp: bool = False
+
 
 class GPTQLoraModel(LoraModel):
     def _replace_module(self, parent_module, child_name, new_module, old_module):
@@ -70,7 +75,6 @@ class GPTQLoraModel(LoraModel):
         # if module cannot be found, return None which results in a raise in the call-stack
         return new_module
 
-
     def merge_adapter(self):
         raise NotImplementedError("gptq model not support merge ada lora adapter")
 
@@ -99,6 +103,7 @@ def find_all_linear_names(
                 results.add(res)
     return list(results)
 
+
 @contextmanager
 def hijack_peft_mappings():
     PEFT_TYPE_TO_CONFIG_MAPPING[PeftType.LORA] = GPTQLoraConfig
@@ -114,6 +119,7 @@ def hijack_peft_mappings():
         PEFT_TYPE_TO_CONFIG_MAPPING[PeftType.LORA] = GPTQLoraConfig
         PEFT_TYPE_TO_MODEL_MAPPING[PeftType.LORA] = GPTQLoraModel
 
+
 def get_gptq_peft_model(
     model: BaseGPTQModel,
     peft_config: PeftConfig = None,
@@ -125,7 +131,9 @@ def get_gptq_peft_model(
     if train_mode and not peft_config:
         raise ValueError("peft_config not specified when in train mode.")
     if not train_mode and not model_id:
-        raise ValueError("model_id(where to load adapters) not specified when in inference mode.")
+        raise ValueError(
+            "model_id(where to load adapters) not specified when in inference mode."
+        )
 
     if train_mode:
         peft_type = peft_config.peft_type
@@ -133,8 +141,12 @@ def get_gptq_peft_model(
             peft_type = peft_type.value
         if peft_type in [PeftType.LORA.value]:
             if auto_find_all_linears:
-                peft_config.target_modules = find_all_linear_names(model, ignore_lm_head=True)
-            if peft_type == PeftType.LORA.value and not isinstance(peft_config, GPTQLoraConfig):
+                peft_config.target_modules = find_all_linear_names(
+                    model, ignore_lm_head=True
+                )
+            if peft_type == PeftType.LORA.value and not isinstance(
+                peft_config, GPTQLoraConfig
+            ):
                 peft_config = GPTQLoraConfig(**peft_config.to_dict())
 
     # this hijack is needed as `get_peft_model` uses PEFTModelForCausalLM which inherits from
@@ -142,9 +154,13 @@ def get_gptq_peft_model(
     with hijack_peft_mappings():
         try:
             if train_mode:
-                peft_model = get_peft_model(model.model, peft_config, adapter_name=adapter_name)
+                peft_model = get_peft_model(
+                    model.model, peft_config, adapter_name=adapter_name
+                )
             else:
-                peft_model = PeftModel.from_pretrained(model.model, model_id, adapter_name)
+                peft_model = PeftModel.from_pretrained(
+                    model.model, model_id, adapter_name
+                )
         except Exception as exc:
             raise NotImplementedError(
                 f"{model.__class__.__name__} not support \

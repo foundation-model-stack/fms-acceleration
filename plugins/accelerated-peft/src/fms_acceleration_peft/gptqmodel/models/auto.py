@@ -13,10 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ###############################################################################
+# Standard
 from typing import Dict, List, Optional, Union
 
+# Third Party
 import torch
 
+# Local
 from ..utils import Backend
 from ..utils.model import check_and_get_model_type
 from .base import BaseGPTQModel, QuantizeConfig
@@ -40,10 +43,15 @@ MODEL_MAP = {
     "dbrx_converted": DbrxConvertedGPTQ,
 }
 
-at_least_one_cuda_v6 = any(torch.cuda.get_device_capability(i)[0] >= 6 for i in range(torch.cuda.device_count()))
+at_least_one_cuda_v6 = any(
+    torch.cuda.get_device_capability(i)[0] >= 6
+    for i in range(torch.cuda.device_count())
+)
 
 if not at_least_one_cuda_v6:
-    raise EnvironmentError("GPTQModel requires at least one GPU device with CUDA compute capability >= `6.0`.")
+    raise EnvironmentError(
+        "GPTQModel requires at least one GPU device with CUDA compute capability >= `6.0`."
+    )
 
 
 class GPTQModel:
@@ -63,7 +71,9 @@ class GPTQModel:
         trust_remote_code: bool = False,
         **model_init_kwargs,
     ) -> BaseGPTQModel:
-        model_type = check_and_get_model_type(pretrained_model_name_or_path, trust_remote_code)
+        model_type = check_and_get_model_type(
+            pretrained_model_name_or_path, trust_remote_code
+        )
         return MODEL_MAP[model_type].from_pretrained(
             pretrained_model_name_or_path=pretrained_model_name_or_path,
             quantize_config=quantize_config,
@@ -110,4 +120,3 @@ class GPTQModel:
             verify_hash=verify_hash,
             **kwargs,
         )
-

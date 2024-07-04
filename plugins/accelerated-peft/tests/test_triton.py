@@ -14,18 +14,21 @@
 # limitations under the License.
 ###############################################################################
 # -- do not touch
+# Standard
 import os
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 # -- end do not touch
 
+# Standard
 import os  # noqa: E402
 import unittest  # noqa: E402
 
-import torch  # noqa: E402
-import torch.utils.benchmark as benchmark  # noqa: E402
+# Third Party
 from gptqmodel import Backend, GPTQModel  # noqa: E402
 from transformers import AutoTokenizer  # noqa: E402
+import torch  # noqa: E402
+import torch.utils.benchmark as benchmark  # noqa: E402
 
 MODEL_ID = "TheBloke/Llama-7B-GPTQ"
 DATASET_ID = "timdettmers/openassistant-guanaco"
@@ -102,6 +105,8 @@ class TestTriton(unittest.TestCase):
 
         qlinear_ref = ref_model.model.model.layers[0].self_attn.q_proj
 
-        ref_out = qlinear_ref(test_data) # noqa: F841
+        ref_out = qlinear_ref(test_data)  # noqa: F841
 
-        _, measure_triton = benchmark_forward(qlinear_ref, test_data, desc="Triton", verbose=True)
+        _, measure_triton = benchmark_forward(
+            qlinear_ref, test_data, desc="Triton", verbose=True
+        )

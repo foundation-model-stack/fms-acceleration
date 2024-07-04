@@ -13,12 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ###############################################################################
+# Standard
 from enum import Enum
 
 
 class Backend(Enum):
     AUTO = 0  # choose the fastest one based on quant model compatibility
     TRITON = 3
+
 
 def get_backend(backend: str):
     try:

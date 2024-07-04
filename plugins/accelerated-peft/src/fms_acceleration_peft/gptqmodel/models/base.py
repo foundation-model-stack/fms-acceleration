@@ -13,36 +13,64 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ###############################################################################
+# Standard
+from os.path import isfile, join
+from typing import Dict, List, Optional, Union
 import copy
 import json
 import logging
 import os
 import re
-from os.path import isfile, join
-from typing import Dict, List, Optional, Union
 
+# Third Party
+from accelerate.hooks import remove_hook_from_module
+from safetensors.torch import save_file as safe_save
+from tqdm import tqdm
+from transformers import (
+    AutoConfig,
+    AutoModelForCausalLM,
+    PretrainedConfig,
+    PreTrainedModel,
+)
+from transformers.modeling_utils import no_init_weights, shard_checkpoint
+from transformers.utils.generic import ContextManagers
 import accelerate
 import torch
 import torch.nn as nn
 import transformers
-from accelerate.hooks import remove_hook_from_module
-from safetensors.torch import save_file as safe_save
-from tqdm import tqdm
-from transformers import AutoConfig, AutoModelForCausalLM, PretrainedConfig, PreTrainedModel
-from transformers.modeling_utils import no_init_weights, shard_checkpoint
-from transformers.utils.generic import ContextManagers
 
+# Local
 from ..quantization import GPTQ, QuantizeConfig
-from ..quantization.config import (FORMAT, FORMAT_FIELD_JSON, META_FIELD_QUANTIZER,
-                                   META_QUANTIZER_GPTQMODEL, MIN_VERSION_WITH_V2, QUANTIZE_BLACK_LIST)
+from ..quantization.config import (
+    FORMAT,
+    FORMAT_FIELD_JSON,
+    META_FIELD_QUANTIZER,
+    META_QUANTIZER_GPTQMODEL,
+    MIN_VERSION_WITH_V2,
+    QUANTIZE_BLACK_LIST,
+)
 from ..utils.backend import Backend
 from ..utils.data import collate_data
 from ..utils.importer import select_quant_linear
-from ..utils.model import (auto_dtype_from_config, convert_gptq_v1_to_v2_format, convert_gptq_v2_to_v1_format,
-                           find_layers, get_checkpoints, get_device, get_module_by_name_prefix,
-                           get_module_by_name_suffix, get_moe_layer_modules, gptqmodel_post_init, make_quant,
-                           move_to, nested_move_to, pack_model, simple_dispatch_model, verify_model_hash,
-                           verify_sharded_model_hashes)
+from ..utils.model import (
+    auto_dtype_from_config,
+    convert_gptq_v1_to_v2_format,
+    convert_gptq_v2_to_v1_format,
+    find_layers,
+    get_checkpoints,
+    get_device,
+    get_module_by_name_prefix,
+    get_module_by_name_suffix,
+    get_moe_layer_modules,
+    gptqmodel_post_init,
+    make_quant,
+    move_to,
+    nested_move_to,
+    pack_model,
+    simple_dispatch_model,
+    verify_model_hash,
+    verify_sharded_model_hashes,
+)
 from ._const import CPU, CUDA_0, SUPPORTED_MODELS
 
 logger = logging.getLogger(__name__)
@@ -110,9 +138,9 @@ class BaseGPTQModel(nn.Module):
         return getattr(self.model, "hf_device_map", None)
 
     def _prepare_dataset_for_quantization(
-            self,
-            calibration_dataset: List[Dict[str, Union[List[int], torch.LongTensor]]],
-            batch_size: int = 1,
+        self,
+        calibration_dataset: List[Dict[str, Union[List[int], torch.LongTensor]]],
+        batch_size: int = 1,
     ):
         def _convert_tensor_to_list(tensor):
             if isinstance(tensor, torch.Tensor):
@@ -146,10 +174,14 @@ class BaseGPTQModel(nn.Module):
             pad_token_id = self.config.eos_token_id
 
         if pad_token_id is None:
-            raise ValueError("Calibration data requires model's `pad_token_id` or `eos_token_id` to be set: actual = `None`.")
+            raise ValueError(
+                "Calibration data requires model's `pad_token_id` or `eos_token_id` to be set: actual = `None`."
+            )
 
         new_calibration_dataset_batched = [
-            collate_data(new_calibration_dataset[start: start + batch_size], pad_token_id)
+            collate_data(
+                new_calibration_dataset[start : start + batch_size], pad_token_id
+            )
             for start in range(0, len(new_calibration_dataset), batch_size)
         ]
 
@@ -163,25 +195,26 @@ class BaseGPTQModel(nn.Module):
         self,
         calibration_dataset: List[Dict[str, Union[List[int], torch.LongTensor]]],
         batch_size: int = 1,
-
         # TODO: remove use_cuda_fp16 arg..why? doesn't pass smell test @ZX-ModelCloud
         use_cuda_fp16: bool = True,
-
         autotune_warmup_after_quantized: bool = False,
         calibration_enable_gpu_cache: bool = True,
     ):
         if self.quantized:
-            raise EnvironmentError("quantize() is called a model that is already quantized")
+            raise EnvironmentError(
+                "quantize() is called a model that is already quantized"
+            )
 
         if self.quantize_config.quant_method in QUANTIZE_BLACK_LIST:
             raise ValueError(
                 f"Unsupported quantization operation for quant method: {self.quantize_config.quant_method}"
             )
 
-
         # TODO: lm_head quantization is yet ready but pending
         if self.quantize_config.lm_head:
-            raise ValueError("lm_head quantization is currently inference only and not applicable for quantization. Please set `lm_head=False`.")
+            raise ValueError(
+                "lm_head quantization is currently inference only and not applicable for quantization. Please set `lm_head=False`."
+            )
 
         if len(calibration_dataset) == 0:
             raise ValueError("Calibration dataset must not be empty.")
@@ -190,8 +223,10 @@ class BaseGPTQModel(nn.Module):
         min_calibration_dataset_input_ids_avg_length = 256
 
         if len(calibration_dataset) < min_calibration_dataset_size:
-            logger.warning(f"Calibration dataset size should be greater than {min_calibration_dataset_size}. "
-                             f"Current size: {len(calibration_dataset)}.")
+            logger.warning(
+                f"Calibration dataset size should be greater than {min_calibration_dataset_size}. "
+                f"Current size: {len(calibration_dataset)}."
+            )
 
         # Calculate the average length of the average input_ids
         total_input_ids_length = 0
@@ -201,9 +236,10 @@ class BaseGPTQModel(nn.Module):
         avg = total_input_ids_length / len(calibration_dataset)
 
         if avg < min_calibration_dataset_input_ids_avg_length:
-            logger.warning(f"The average length of input_ids of calibration_dataset should be greater than "
-                             f"{min_calibration_dataset_input_ids_avg_length}! Current AVG is {avg}.")
-
+            logger.warning(
+                f"The average length of input_ids of calibration_dataset should be greater than "
+                f"{min_calibration_dataset_input_ids_avg_length}! Current AVG is {avg}."
+            )
 
         device_map = self.hf_device_map
         if device_map:
@@ -220,7 +256,9 @@ class BaseGPTQModel(nn.Module):
         layer_input_kwargs = []
         layer_outputs = []
 
-        calibration_dataset = self._prepare_dataset_for_quantization(calibration_dataset, batch_size)
+        calibration_dataset = self._prepare_dataset_for_quantization(
+            calibration_dataset, batch_size
+        )
 
         forward_pass_use_cache = self.model.config.use_cache
         self.model.config.use_cache = False
@@ -248,7 +286,7 @@ class BaseGPTQModel(nn.Module):
             if pos_ids is not None:
                 position_ids.append(move_to(pos_ids, data_device))
             one_kwargs = {}
-            for (k, v) in kwargs.items():  # make sure other arguments also be captured
+            for k, v in kwargs.items():  # make sure other arguments also be captured
                 if k not in ["hidden_states", "attention_mask", "position_ids"]:
                     one_kwargs[k] = nested_move_to(v, data_device)
             layer_input_kwargs.append(one_kwargs)
@@ -299,8 +337,9 @@ class BaseGPTQModel(nn.Module):
         # dynamic expert layer index for model defs
         if self.dynamic_expert_index is not None:
             num_experts = getattr(self.model.config, self.dynamic_expert_index)
-            layer_modules = get_moe_layer_modules(layer_modules=self.layer_modules,
-                                                      num_experts=num_experts)
+            layer_modules = get_moe_layer_modules(
+                layer_modules=self.layer_modules, num_experts=num_experts
+            )
 
         quantizers = {}
 
@@ -347,11 +386,15 @@ class BaseGPTQModel(nn.Module):
                         layer_input.append(move_to(layer_inp, cur_layer_device))
 
                     mask = attention_masks[j]
-                    layer_attention_mask = mask if mask is None else move_to(mask, cur_layer_device)
+                    layer_attention_mask = (
+                        mask if mask is None else move_to(mask, cur_layer_device)
+                    )
 
                     additional_layer_inputs = {"attention_mask": layer_attention_mask}
                     layer_position_ids = (
-                        None if not position_ids else move_to(position_ids[j], cur_layer_device)
+                        None
+                        if not position_ids
+                        else move_to(position_ids[j], cur_layer_device)
                     )
                     if layer_position_ids is not None:
                         additional_layer_inputs["position_ids"] = layer_position_ids
@@ -362,7 +405,9 @@ class BaseGPTQModel(nn.Module):
                     h.remove()
 
                 for name in subset:
-                    layer_pb.set_description(f"Quantizing {name} in layer {i + 1} of {layer_count}")
+                    layer_pb.set_description(
+                        f"Quantizing {name} in layer {i + 1} of {layer_count}"
+                    )
 
                     try:
                         scale, zero, g_idx, duration, avg_loss = gptq[name].fasterquant(
@@ -372,8 +417,12 @@ class BaseGPTQModel(nn.Module):
                             static_groups=self.quantize_config.static_groups,
                         )
 
-                        stat = {"layer": i + 1, "module": name, "avg_loss": f"{avg_loss:.4f}",
-                                "time": f"{duration:.4f}"}
+                        stat = {
+                            "layer": i + 1,
+                            "module": name,
+                            "avg_loss": f"{avg_loss:.4f}",
+                            "time": f"{duration:.4f}",
+                        }
 
                         quant_log.append(stat)
                         logger.info(stat)
@@ -386,10 +435,18 @@ class BaseGPTQModel(nn.Module):
                         raise e
 
                     quantizers[f"{self.layers_node}.{i}.{name}"] = (
-                        gptq[name].quantizer.to(CPU if force_layer_back_to_cpu else cur_layer_device),
-                        move_to(scale, CPU if force_layer_back_to_cpu else cur_layer_device),
-                        move_to(zero, CPU if force_layer_back_to_cpu else cur_layer_device),
-                        move_to(g_idx, CPU if force_layer_back_to_cpu else cur_layer_device),
+                        gptq[name].quantizer.to(
+                            CPU if force_layer_back_to_cpu else cur_layer_device
+                        ),
+                        move_to(
+                            scale, CPU if force_layer_back_to_cpu else cur_layer_device
+                        ),
+                        move_to(
+                            zero, CPU if force_layer_back_to_cpu else cur_layer_device
+                        ),
+                        move_to(
+                            g_idx, CPU if force_layer_back_to_cpu else cur_layer_device
+                        ),
                     )
                     gptq[name].free()
 
@@ -399,10 +456,16 @@ class BaseGPTQModel(nn.Module):
                     layer_input.append(move_to(layer_inp, cur_layer_device))
 
                 mask = attention_masks[j]
-                layer_attention_mask = mask if mask is None else move_to(mask, cur_layer_device)
+                layer_attention_mask = (
+                    mask if mask is None else move_to(mask, cur_layer_device)
+                )
 
                 additional_layer_inputs = {"attention_mask": layer_attention_mask}
-                layer_position_ids = None if not position_ids else move_to(position_ids[j], cur_layer_device)
+                layer_position_ids = (
+                    None
+                    if not position_ids
+                    else move_to(position_ids[j], cur_layer_device)
+                )
                 if layer_position_ids is not None:
                     additional_layer_inputs["position_ids"] = layer_position_ids
                 for k, v in layer_input_kwargs[j].items():
@@ -413,7 +476,9 @@ class BaseGPTQModel(nn.Module):
                 )
                 layer_outputs.append([layer_output])
 
-            layers[i] = move_to(layer, CPU if force_layer_back_to_cpu else cur_layer_device)
+            layers[i] = move_to(
+                layer, CPU if force_layer_back_to_cpu else cur_layer_device
+            )
             del layer
             del gptq
             del layer_inputs
@@ -480,7 +545,7 @@ class BaseGPTQModel(nn.Module):
         safetensors_metadata: Optional[Dict[str, str]] = None,
         use_safetensors: bool = True,
         max_shard_size: Optional[str] = None,
-        model_base_name: Optional[str] = None
+        model_base_name: Optional[str] = None,
     ):
         """save quantized model and configs to local disk"""
         os.makedirs(save_dir, exist_ok=True)
@@ -498,12 +563,14 @@ class BaseGPTQModel(nn.Module):
         model = self.model
 
         if not self.quantized:
-            raise ValueError("Save aborted as model is not quantized. Please call `quantize()` first.")
+            raise ValueError(
+                "Save aborted as model is not quantized. Please call `quantize()` first."
+            )
 
         if model_base_name is None:
             model_base_name = (
-                    self.quantize_config.model_file_base_name or
-                    f"gptq_model-{self.quantize_config.bits}bit-{self.quantize_config.group_size}g"
+                self.quantize_config.model_file_base_name
+                or f"gptq_model-{self.quantize_config.bits}bit-{self.quantize_config.group_size}g"
             )
 
         if quantize_config.format == FORMAT.GPTQ_V2:
@@ -520,7 +587,11 @@ class BaseGPTQModel(nn.Module):
             # no need to set it back, no calculation below
             if quantize_config.bits != 4:
                 cuda_name_modules = {}
-                from gptqmodel.nn_modules.qlinear.qlinear_cuda import BaseCudaQuantLinear
+                # Third Party
+                from gptqmodel.nn_modules.qlinear.qlinear_cuda import (
+                    BaseCudaQuantLinear,
+                )
+
                 for name, module in model.named_modules():
                     if isinstance(module, BaseCudaQuantLinear):
                         cuda_name_modules[name] = module.gptqmodel_cuda
@@ -528,14 +599,19 @@ class BaseGPTQModel(nn.Module):
                 model = copy.deepcopy(self.model)
 
                 for name, modules in model.named_modules():
-                    if isinstance(module, BaseCudaQuantLinear) and name in cuda_name_modules:
+                    if (
+                        isinstance(module, BaseCudaQuantLinear)
+                        and name in cuda_name_modules
+                    ):
                         module.gptqmodel_cuda = cuda_name_modules[name]
 
                 del cuda_name_modules
             else:
                 model = copy.deepcopy(self.model)
             model = convert_gptq_v2_to_v1_format(
-                model, quantize_config=quantize_config, qlinear_kernel=self.qlinear_kernel
+                model,
+                quantize_config=quantize_config,
+                qlinear_kernel=self.qlinear_kernel,
             )
 
         model.to(CPU)
@@ -557,7 +633,9 @@ class BaseGPTQModel(nn.Module):
             model_save_name = model_base_name + ".bin"
 
         if not self.qlinear_kernel.SUPPORTED_SHARDS and max_shard_size is not None:
-            logger.warning("Sharding is not supported for this quant. Disabling sharding.")
+            logger.warning(
+                "Sharding is not supported for this quant. Disabling sharding."
+            )
             max_shard_size = None
 
         if max_shard_size is None:
@@ -567,7 +645,9 @@ class BaseGPTQModel(nn.Module):
                 elif not isinstance(safetensors_metadata, dict):
                     raise TypeError("safetensors_metadata must be a dictionary.")
                 else:
-                    logger.debug(f"Received safetensors_metadata: {safetensors_metadata}")
+                    logger.debug(
+                        f"Received safetensors_metadata: {safetensors_metadata}"
+                    )
                     new_safetensors_metadata = {}
                     converted_keys = False
                     for key, value in safetensors_metadata.items():
@@ -594,28 +674,35 @@ class BaseGPTQModel(nn.Module):
                 # Format is required to enable Accelerate to load the metadata
                 # otherwise it raises an OSError
                 safetensors_metadata["format"] = "pt"
-                safe_save(state_dict, join(save_dir, model_save_name), safetensors_metadata)
+                safe_save(
+                    state_dict, join(save_dir, model_save_name), safetensors_metadata
+                )
             else:
                 logger.warning(
-                    "We highly suggest saving quantized model using safetensors format for security reasons. Please set `use_safetensors=True` whenever possible.")
+                    "We highly suggest saving quantized model using safetensors format for security reasons. Please set `use_safetensors=True` whenever possible."
+                )
                 torch.save(model.state_dict(), join(save_dir, model_save_name))
         else:
             # Shard checkpoint
-            shards, index = shard_checkpoint(state_dict, max_shard_size=max_shard_size, weights_name=model_save_name)
+            shards, index = shard_checkpoint(
+                state_dict, max_shard_size=max_shard_size, weights_name=model_save_name
+            )
 
             # Clean the folder from a previous save
             for filename in os.listdir(save_dir):
                 full_filename = join(save_dir, filename)
 
                 # make sure that file to be deleted matches format of sharded file, e.g. pytorch_model-00001-of-00005
-                filename_no_suffix = filename.replace(".bin", "").replace(".safetensors", "")
+                filename_no_suffix = filename.replace(".bin", "").replace(
+                    ".safetensors", ""
+                )
                 reg = re.compile(r"(.*?)-\d{5}-of-\d{5}")
 
                 if (
-                        filename.startswith(model_base_name)
-                        and isfile(full_filename)
-                        and filename not in shards.keys()
-                        and reg.fullmatch(filename_no_suffix) is not None
+                    filename.startswith(model_base_name)
+                    and isfile(full_filename)
+                    and filename not in shards.keys()
+                    and reg.fullmatch(filename_no_suffix) is not None
                 ):
                     os.remove(full_filename)
 
@@ -627,7 +714,9 @@ class BaseGPTQModel(nn.Module):
                     elif not isinstance(safetensors_metadata, dict):
                         raise TypeError("safetensors_metadata must be a dictionary.")
                     else:
-                        logger.debug(f"Received safetensors_metadata: {safetensors_metadata}")
+                        logger.debug(
+                            f"Received safetensors_metadata: {safetensors_metadata}"
+                        )
                         new_safetensors_metadata = {}
                         converted_keys = False
                         for key, value in safetensors_metadata.items():
@@ -638,15 +727,18 @@ class BaseGPTQModel(nn.Module):
                                     new_value = str(value)
                                 except Exception as e:
                                     raise TypeError(
-                                        f"safetensors_metadata: both keys and values must be strings and an error occured when trying to convert them: {e}")
+                                        f"safetensors_metadata: both keys and values must be strings and an error occured when trying to convert them: {e}"
+                                    )
                                 if new_key in new_safetensors_metadata:
                                     logger.warning(
-                                        f"After converting safetensors_metadata keys to strings, the key '{new_key}' is duplicated. Ensure that all your metadata keys are strings to avoid overwriting.")
+                                        f"After converting safetensors_metadata keys to strings, the key '{new_key}' is duplicated. Ensure that all your metadata keys are strings to avoid overwriting."
+                                    )
                                 new_safetensors_metadata[new_key] = new_value
                         safetensors_metadata = new_safetensors_metadata
                         if converted_keys:
                             logger.debug(
-                                f"One or more safetensors_metadata keys or values had to be converted to str(). Final safetensors_metadata: {safetensors_metadata}")
+                                f"One or more safetensors_metadata keys or values had to be converted to str(). Final safetensors_metadata: {safetensors_metadata}"
+                            )
 
                     # Format is required to enable Accelerate to load the metadata
                     # otherwise it raises an OSError
@@ -675,7 +767,9 @@ class BaseGPTQModel(nn.Module):
         save_dir: str,
         **kwargs,
     ):
-        logger.warning("You are using save_pretrained, which will re-direct to save_quantized.")
+        logger.warning(
+            "You are using save_pretrained, which will re-direct to save_quantized."
+        )
         self.save_quantized(save_dir=save_dir, **kwargs)
 
     @classmethod
@@ -691,7 +785,9 @@ class BaseGPTQModel(nn.Module):
         """load un-quantized pretrained model to cpu"""
 
         if not torch.cuda.is_available():
-            raise EnvironmentError("Load pretrained model to do quantization requires CUDA available.")
+            raise EnvironmentError(
+                "Load pretrained model to do quantization requires CUDA available."
+            )
 
         if cls.require_trust_remote_code and not trust_remote_code:
             raise ValueError(
@@ -712,12 +808,16 @@ class BaseGPTQModel(nn.Module):
 
         model_init_kwargs["trust_remote_code"] = trust_remote_code
 
-        config = AutoConfig.from_pretrained(pretrained_model_name_or_path, **model_init_kwargs)
+        config = AutoConfig.from_pretrained(
+            pretrained_model_name_or_path, **model_init_kwargs
+        )
 
         if torch_dtype == "auto":
             torch_dtype = auto_dtype_from_config(config)
         elif not isinstance(torch_dtype, torch.dtype):
-            raise ValueError(f"torch_dtype value of `{torch_dtype}` is not a torch.dtype instance.")
+            raise ValueError(
+                f"torch_dtype value of `{torch_dtype}` is not a torch.dtype instance."
+            )
 
         # enforce some values despite user specified
         model_init_kwargs["torch_dtype"] = torch_dtype
@@ -751,7 +851,9 @@ class BaseGPTQModel(nn.Module):
 
         torch.cuda.empty_cache()
 
-        model = AutoModelForCausalLM.from_pretrained(pretrained_model_name_or_path, **model_init_kwargs)
+        model = AutoModelForCausalLM.from_pretrained(
+            pretrained_model_name_or_path, **model_init_kwargs
+        )
 
         model_config = model.config.to_dict()
         seq_len_keys = ["max_position_embeddings", "seq_length", "n_positions"]
@@ -761,7 +863,9 @@ class BaseGPTQModel(nn.Module):
                     model.seqlen = model_config[key]
                     break
         else:
-            logger.warning("can't get model's sequence length from model config, will set to 4096.")
+            logger.warning(
+                "can't get model's sequence length from model config, will set to 4096."
+            )
             model.seqlen = 4096
         model.eval()
 
@@ -776,7 +880,6 @@ class BaseGPTQModel(nn.Module):
         device: Optional[Union[str, int]] = None,
         low_cpu_mem_usage: bool = False,
         backend: Backend = Backend.AUTO,
-
         torch_dtype: [str | torch.dtype] = "auto",
         use_cuda_fp16: bool = True,
         quantize_config: Optional[QuantizeConfig] = None,
@@ -829,7 +932,9 @@ class BaseGPTQModel(nn.Module):
         if torch_dtype == "auto":
             torch_dtype = auto_dtype_from_config(config, quant_inference=True)
         elif not isinstance(torch_dtype, torch.dtype):
-            raise ValueError(f"torch_dtype value of `{torch_dtype}` is not a torch.dtype instance.")
+            raise ValueError(
+                f"torch_dtype value of `{torch_dtype}` is not a torch.dtype instance."
+            )
 
         if config.model_type not in SUPPORTED_MODELS:
             raise TypeError(f"{config.model_type} isn't supported yet.")
@@ -840,8 +945,9 @@ class BaseGPTQModel(nn.Module):
             )
         else:
             if not isinstance(quantize_config, QuantizeConfig):
-                quantize_config = QuantizeConfig.from_quant_config(quantize_config, format)
-
+                quantize_config = QuantizeConfig.from_quant_config(
+                    quantize_config, format
+                )
 
         if model_basename is None:
             if quantize_config.model_file_base_name:
@@ -894,12 +1000,15 @@ class BaseGPTQModel(nn.Module):
             if not verfieid:
                 raise ValueError(f"Hash verification failed for {model_save_name}")
             logger.info(f"Hash verification succeeded for {model_save_name}")
+
         # == step2: convert model to gptq-model (replace Linear with QuantLinear) == #
         def skip(*args, **kwargs):
             pass
 
         if torch_dtype != torch.float16:
-            logger.warning("Overriding use_cuda_fp16 to False since torch_dtype is not torch.float16.")
+            logger.warning(
+                "Overriding use_cuda_fp16 to False since torch_dtype is not torch.float16."
+            )
             use_cuda_fp16 = False
 
         torch.nn.init.kaiming_uniform_ = skip
@@ -919,8 +1028,9 @@ class BaseGPTQModel(nn.Module):
 
             if cls.dynamic_expert_index is not None:
                 num_experts = getattr(config, cls.dynamic_expert_index)
-                cls.layer_modules = get_moe_layer_modules(layer_modules=cls.layer_modules,
-                                                          num_experts=num_experts)
+                cls.layer_modules = get_moe_layer_modules(
+                    layer_modules=cls.layer_modules, num_experts=num_experts
+                )
 
             layers = find_layers(model)
             ignore_layers = [cls.lm_head] + cls.base_modules
@@ -930,8 +1040,12 @@ class BaseGPTQModel(nn.Module):
                 if quantize_config.lm_head and name == cls.lm_head:
                     continue
 
-                if any(name.startswith(ignore_layer) for ignore_layer in ignore_layers) or all(
-                        not name.endswith(ignore_layer) for sublist in cls.layer_modules for ignore_layer in sublist
+                if any(
+                    name.startswith(ignore_layer) for ignore_layer in ignore_layers
+                ) or all(
+                    not name.endswith(ignore_layer)
+                    for sublist in cls.layer_modules
+                    for ignore_layer in sublist
                 ):
                     # log non-lm-head quantizerd layers only
                     if name is not cls.lm_head:
@@ -969,7 +1083,9 @@ class BaseGPTQModel(nn.Module):
             if device is not None:
                 device = torch.device(device)
                 if not max_memory and not device_map:
-                    device_map = {"": device.index if device.type == "cuda" else device.type}
+                    device_map = {
+                        "": device.index if device.type == "cuda" else device.type
+                    }
             if not isinstance(device_map, dict) and device_map != "sequential":
                 max_memory = accelerate.utils.get_balanced_memory(
                     model=model,
@@ -1002,13 +1118,17 @@ class BaseGPTQModel(nn.Module):
                 offload_buffers=True,
             )
             # validate sym=False v1 loading needs to be protected for models produced with new v2 format codebase
-            if not quantize_config.sym and not quantize_config.is_quantized_or_packed_by_v2():
+            if (
+                not quantize_config.sym
+                and not quantize_config.is_quantized_or_packed_by_v2()
+            ):
                 raise ValueError(
                     f"Loading of a sym=False model with format={FORMAT.GPTQ} is only supported if produced by gptqmodel version >= {MIN_VERSION_WITH_V2}"
                 )
 
             logger.info(
-                f"Compatibility: converting `{FORMAT_FIELD_JSON}` from `{FORMAT.GPTQ}` to `{FORMAT.GPTQ_V2}`.")
+                f"Compatibility: converting `{FORMAT_FIELD_JSON}` from `{FORMAT.GPTQ}` to `{FORMAT.GPTQ_V2}`."
+            )
             model = convert_gptq_v1_to_v2_format(
                 model,
                 quantize_config=quantize_config,
@@ -1047,7 +1167,9 @@ class BaseGPTQModel(nn.Module):
                     model.seqlen = model_config[key]
                     break
         else:
-            logger.warning("can't get model's sequence length from model config, will set to 4096.")
+            logger.warning(
+                "can't get model's sequence length from model config, will set to 4096."
+            )
             model.seqlen = 4096
 
         # Any post-initialization that require device information, for example buffers initialization on device.
@@ -1057,6 +1179,7 @@ class BaseGPTQModel(nn.Module):
 
         # == step6: (optional) warmup triton == #
         if backend != Backend.TRITON and warmup_triton:
+            # Local
             from ..nn_modules.qlinear.qlinear_tritonv2 import QuantLinear
 
             QuantLinear.warmup(model, seqlen=model.seqlen)
@@ -1072,6 +1195,7 @@ class BaseGPTQModel(nn.Module):
         if not enabled:
             return
 
+        # Local
         from ..nn_modules.qlinear.qlinear_tritonv2 import QuantLinear
 
         QuantLinear.warmup(self.model, seqlen=self.model.seqlen)

@@ -1,15 +1,18 @@
 # License: GPTQModel/licenses/LICENSE.mit
 # adapted from @qwopqwop200 's [GPTQ-for-LLaMa](https://github.com/qwopqwop200/GPTQ-for-LLaMa/tree/cuda), which itself is based on [gptq](https://github.com/IST-DASLab/gptq)
 
+# Standard
+from logging import getLogger
 import math
 import os
 import time
-from logging import getLogger
 
+# Third Party
 import torch
 import torch.nn as nn
 import transformers
 
+# Local
 from .quantizer import Quantizer
 
 logger = getLogger(__name__)
@@ -40,7 +43,9 @@ class GPTQ:
         if len(inp.shape) == 2:
             inp = inp.unsqueeze(0)
         tmp = inp.shape[0]
-        if isinstance(self.layer, nn.Linear) or isinstance(self.layer, transformers.Conv1D):
+        if isinstance(self.layer, nn.Linear) or isinstance(
+            self.layer, transformers.Conv1D
+        ):
             if len(inp.shape) == 3:
                 inp = inp.reshape((-1, inp.shape[-1]))
             inp = inp.t()
@@ -93,6 +98,7 @@ class GPTQ:
         now_idx = 1
 
         if static_groups:
+            # Standard
             import copy
 
             groups = []
@@ -137,7 +143,9 @@ class GPTQ:
                 if group_size != -1:
                     if not static_groups:
                         if (i1 + i) % group_size == 0:
-                            self.quantizer.find_params(W[:, (i1 + i) : (i1 + i + group_size)], weight=True)
+                            self.quantizer.find_params(
+                                W[:, (i1 + i) : (i1 + i + group_size)], weight=True
+                            )
 
                         if ((i1 + i) // group_size) - now_idx == -1:
                             scale.append(self.quantizer.scale)
@@ -185,7 +193,9 @@ class GPTQ:
 
         if isinstance(self.layer, transformers.Conv1D):
             Q = Q.t()
-        self.layer.weight.data = Q.reshape(self.layer.weight.shape).type_as(self.layer.weight.data)
+        self.layer.weight.data = Q.reshape(self.layer.weight.shape).type_as(
+            self.layer.weight.data
+        )
         if os.environ.get("DEBUG"):
             logger.debug(torch.sum((self.layer(self.inp1) - self.out1) ** 2))
 

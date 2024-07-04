@@ -27,10 +27,11 @@ from fms_acceleration import AccelerationPlugin
 from peft import LoraConfig, prepare_model_for_kbit_training
 from peft.tuners.lora.model import LoraModel
 from transformers import AutoModelForCausalLM, TrainingArguments
-from transformers.utils.import_utils import _is_package_available
 from transformers.modeling_utils import is_fsdp_enabled
+from transformers.utils.import_utils import _is_package_available
 import torch
 import torch.distributed
+
 
 class AutoGPTQAccelerationPlugin(AccelerationPlugin):
 
@@ -50,16 +51,19 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
         self.use_external_lib = use_external_lib
 
         if self.use_external_lib:
-            assert _is_package_available("auto_gptq") is True, "Unable to use external library, autogptq module not found."
+            assert (
+                _is_package_available("auto_gptq") is True
+            ), "Unable to use external library, autogptq module not found."
 
     def model_loader(self, model_name: str, **kwargs):
         # guarded imports
         # Third Party
         if self.use_external_lib:
-            from auto_gptq import (  # pylint: disable=import-outside-toplevel,import-error
-                AutoGPTQForCausalLM as GPTQModel,
-                BaseQuantizeConfig as QuantizeConfig,
+            # Third Party
+            from auto_gptq import (
+                AutoGPTQForCausalLM as GPTQModel,  # pylint: disable=import-outside-toplevel,import-error
             )
+            from auto_gptq import BaseQuantizeConfig as QuantizeConfig
             from auto_gptq.nn_modules.qlinear.qlinear_tritonv2 import (  # pylint: disable=import-outside-toplevel,import-error
                 QuantLinear,
             )
@@ -69,7 +73,6 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
             from .gptqmodel.nn_modules.qlinear.qlinear_tritonv2 import (
                 QuantLinear,
             )
-
         # Local
         from .autogptq_utils import (  # pylint: disable=import-outside-toplevel
             PATCH_FOR_FSDP_TRITON_V2,
@@ -122,10 +125,9 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
             }
         else:
             kwargs = {
-                "low_cpu_mem_usage": low_cpu_mem_usage, # this is only used for device map
+                "low_cpu_mem_usage": low_cpu_mem_usage,  # this is only used for device map
                 "backend": Backend.TRITON,
             }
-
 
         # this is a HF method that checks if the low_cpu_mem mode is enabled
         # via HF accelerate
@@ -156,7 +158,11 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
 
                 kwargs["device_map"] = {
                     "": (
-                        (torch.cuda.current_device() if not kwargs["low_cpu_mem_usage"] else "cpu")
+                        (
+                            torch.cuda.current_device()
+                            if not kwargs["low_cpu_mem_usage"]
+                            else "cpu"
+                        )
                         if torch.cuda.is_available()
                         else None
                     )
@@ -241,6 +247,7 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
         # guarded imports
         # Third Party
         if self.use_external_lib:
+            # Third Party
             from auto_gptq.nn_modules.qlinear.qlinear_tritonv2 import (  # pylint: disable=import-outside-toplevel,import-error
                 QuantLinear,
             )
@@ -248,14 +255,15 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
                 GPTQLoraModel,
                 get_gptq_peft_model,
             )
+
             # Local
             from .autogptq_utils import (  # pylint: disable=import-outside-toplevel
                 create_new_module_peft,
                 replace_module_peft,
             )
         else:
+            # Local
             from .gptqmodel.utils.peft import get_gptq_peft_model
-
 
         (peft_config,) = modifiable_args  # unpack modifiable args
 
@@ -298,8 +306,9 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
             _old_replace_module = GPTQLoraModel._replace_module
             _create_new_module = partial(create_new_module_peft, target_cls=QuantLinear)
             LoraModel._create_new_module = staticmethod(_create_new_module)
-            GPTQLoraModel._replace_module = MethodType(replace_module_peft, GPTQLoraModel)
-
+            GPTQLoraModel._replace_module = MethodType(
+                replace_module_peft, GPTQLoraModel
+            )
 
         # Install GPTQ adapters using the AutoGPTQ package (with the above patches)
         model = get_gptq_peft_model(
@@ -313,7 +322,9 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
         if self.use_external_lib:
             # undo the patching for hygine
             LoraModel._create_new_module = staticmethod(_old_create_new_module)
-            GPTQLoraModel._replace_module = MethodType(_old_replace_module, GPTQLoraModel)
+            GPTQLoraModel._replace_module = MethodType(
+                _old_replace_module, GPTQLoraModel
+            )
 
         return model, modifiable_args
 

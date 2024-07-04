@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ###############################################################################
+# Local
 from .base import BaseGPTQModel
 
 
@@ -28,4 +29,3 @@ class GPTNeoXGPTQ(BaseGPTQModel):
         ["mlp.dense_h_to_4h"],
         ["mlp.dense_4h_to_h"],
     ]
-

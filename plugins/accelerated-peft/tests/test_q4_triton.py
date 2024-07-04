@@ -14,19 +14,25 @@
 # limitations under the License.
 ###############################################################################
 # -- do not touch
+# Standard
 import os
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 # -- end do not touch
 
+# Standard
 import unittest  # noqa: E402
 
-import torch  # noqa: E402
+# Third Party
 from gptqmodel import Backend, GPTQModel  # noqa: E402
-from gptqmodel.nn_modules.qlinear.qlinear_tritonv2 import QuantLinear as TritonV2QuantLinear  # noqa: E402
+from gptqmodel.nn_modules.qlinear.qlinear_tritonv2 import (  # noqa: E402
+    QuantLinear as TritonV2QuantLinear,
+)
 from transformers import AutoTokenizer  # noqa: E402
+import torch  # noqa: E402
 
 GENERATE_EVAL_SIZE = 100
+
 
 class TestsQ4Triton(unittest.TestCase):
     def test_generation_desc_act_false(self):
@@ -54,16 +60,24 @@ class TestsQ4Triton(unittest.TestCase):
         inp = tokenizer(prompt, return_tensors="pt").to("cuda:0")
 
         # This one uses Autocast.
-        res = model_q.generate(**inp, num_beams=1, min_new_tokens=new_tokens, max_new_tokens=new_tokens)
+        res = model_q.generate(
+            **inp, num_beams=1, min_new_tokens=new_tokens, max_new_tokens=new_tokens
+        )
         predicted_text = tokenizer.decode(res[0])
 
-        self.assertEqual(predicted_text[:GENERATE_EVAL_SIZE], reference_output[:GENERATE_EVAL_SIZE])
+        self.assertEqual(
+            predicted_text[:GENERATE_EVAL_SIZE], reference_output[:GENERATE_EVAL_SIZE]
+        )
 
         # This one does not.
-        res = model_q.model.generate(**inp, num_beams=1, min_new_tokens=new_tokens, max_new_tokens=new_tokens)
+        res = model_q.model.generate(
+            **inp, num_beams=1, min_new_tokens=new_tokens, max_new_tokens=new_tokens
+        )
         predicted_text = tokenizer.decode(res[0])
 
-        self.assertEqual(predicted_text[:GENERATE_EVAL_SIZE], reference_output[:GENERATE_EVAL_SIZE])
+        self.assertEqual(
+            predicted_text[:GENERATE_EVAL_SIZE], reference_output[:GENERATE_EVAL_SIZE]
+        )
 
     def test_generation_desc_act_true(self):
         prompt = "I am in Paris and"
@@ -80,7 +94,6 @@ class TestsQ4Triton(unittest.TestCase):
             device="cuda:0",
             backend=Backend.TRITON,
             revision=revision,
-
         )
         for _, submodule in model_q.named_modules():
             if isinstance(submodule, TritonV2QuantLinear):
@@ -96,4 +109,6 @@ class TestsQ4Triton(unittest.TestCase):
 
         predicted_text = tokenizer.decode(res[0])
 
-        self.assertEqual(predicted_text[:GENERATE_EVAL_SIZE], reference_output[:GENERATE_EVAL_SIZE])
+        self.assertEqual(
+            predicted_text[:GENERATE_EVAL_SIZE], reference_output[:GENERATE_EVAL_SIZE]
+        )

@@ -1,3 +1,4 @@
+# Third Party
 import torch.nn as nn
 
 
@@ -12,7 +13,14 @@ class BaseQuantLinear(nn.Module):
     SUPPORTED_SHARDS: bool = True
 
     @classmethod
-    def validate(cls, bits: int, group_size: int, desc_act: bool, sym: bool, raise_error: bool = True) -> bool:
+    def validate(
+        cls,
+        bits: int,
+        group_size: int,
+        desc_act: bool,
+        sym: bool,
+        raise_error: bool = True,
+    ) -> bool:
         validate = True
         err = ""
         if cls.SUPPORTED_BITS and bits not in cls.SUPPORTED_BITS:

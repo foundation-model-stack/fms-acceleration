@@ -13,16 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ###############################################################################
-import copy
-import random
+# Standard
 from functools import partial
 from typing import Callable, Dict, List, Optional
+import copy
+import random
 
-import torch
+# Third Party
 from datasets import DatasetDict, IterableDatasetDict, load_dataset
 from torch import LongTensor
 from torch.utils.data import DataLoader
 from transformers import PreTrainedTokenizer
+import torch
 
 
 def make_data_block(
@@ -69,7 +71,9 @@ def make_data_block(
 
     # filter tokenized samples by length
     dropped_indices = []
-    for idx, (tokenized_prompt, tokenized_label) in enumerate(zip(tokenized_prompts, tokenized_labels)):
+    for idx, (tokenized_prompt, tokenized_label) in enumerate(
+        zip(tokenized_prompts, tokenized_labels)
+    ):
         if add_eos_token:
             tokenized_label += [tokenizer.eos_token_id]
         len_prompt = len(tokenized_prompt)
@@ -87,7 +91,11 @@ def make_data_block(
 
     # make data blocks of samples
     tokenized_samples = sorted(
-        [(p, l) for idx, (p, l) in enumerate(zip(tokenized_prompts, tokenized_labels)) if idx not in dropped_indices],
+        [
+            (p, l)
+            for idx, (p, l) in enumerate(zip(tokenized_prompts, tokenized_labels))
+            if idx not in dropped_indices
+        ],
         key=lambda x: (len(x[0]) + len(x[1])) if merge_prompt_label else len(x[0]),
     )
     sample_blocks = []
@@ -103,7 +111,9 @@ def make_data_block(
             additional_len = blk_max_len
             sample_len = blk_max_len
         else:
-            additional_len = len(sample_block) * (ori_sample_len - blk_max_len) + ori_sample_len
+            additional_len = (
+                len(sample_block) * (ori_sample_len - blk_max_len) + ori_sample_len
+            )
             sample_len = ori_sample_len
 
         if blk_total_len + additional_len > block_max_len:
@@ -139,11 +149,19 @@ def make_data_block(
                 sample_len += len(tokenized_label)
             pad_num = blk_max_len - sample_len
             if merge_prompt_label:
-                input_ids.append([tokenizer.pad_token_id] * pad_num + tokenized_prompt + tokenized_label)
-                label_ids.append([-100] * (pad_num + len(tokenized_prompt)) + tokenized_label)
+                input_ids.append(
+                    [tokenizer.pad_token_id] * pad_num
+                    + tokenized_prompt
+                    + tokenized_label
+                )
+                label_ids.append(
+                    [-100] * (pad_num + len(tokenized_prompt)) + tokenized_label
+                )
             else:
                 input_ids.append([tokenizer.pad_token_id] * pad_num + tokenized_prompt)
-                label_ids.append([-100] * (label_max_len - len(tokenized_label)) + tokenized_label)
+                label_ids.append(
+                    [-100] * (label_max_len - len(tokenized_label)) + tokenized_label
+                )
             attention_mask.append([0] * pad_num + [1] * sample_len)
 
         new_samples["input_ids"].append(input_ids)
@@ -153,7 +171,9 @@ def make_data_block(
     return new_samples
 
 
-def collate_data(blocks: List[Dict[str, List[List[int]]]], pad_token_id: int) -> Dict[str, LongTensor]:
+def collate_data(
+    blocks: List[Dict[str, List[List[int]]]], pad_token_id: int
+) -> Dict[str, LongTensor]:
     def pad_block(block, pads):
         return torch.cat((block, pads.to(block.device)), dim=-1)
 
@@ -170,11 +190,17 @@ def collate_data(blocks: List[Dict[str, List[List[int]]]], pad_token_id: int) ->
         block_label_len = label_blocks[i].shape[-1]
         pad_num = inp_max_len - block_inp_len
         if pad_num > 0:
-            input_ids_blocks[i] = pad_block(input_ids_blocks[i], torch.ones((block_bsz, pad_num)) * pad_token_id)
-            attention_mask_blocks[i] = pad_block(attention_mask_blocks[i], torch.zeros((block_bsz, pad_num)))
+            input_ids_blocks[i] = pad_block(
+                input_ids_blocks[i], torch.ones((block_bsz, pad_num)) * pad_token_id
+            )
+            attention_mask_blocks[i] = pad_block(
+                attention_mask_blocks[i], torch.zeros((block_bsz, pad_num))
+            )
         label_pad_num = label_max_len - block_label_len
         if label_pad_num > 0:
-            label_blocks[i] = pad_block(label_blocks[i], torch.ones((block_bsz, label_pad_num)) * -100)
+            label_blocks[i] = pad_block(
+                label_blocks[i], torch.ones((block_bsz, label_pad_num)) * -100
+            )
 
     return {
         "input_ids": torch.cat(input_ids_blocks, dim=0).long(),
