@@ -173,9 +173,6 @@ class BNBAccelerationPlugin(AccelerationPlugin):
 
         # some assertions
         assert peft_config is not None, "need peft_config to install PEFT adapters"
-        assert (
-            model.dtype == torch.float16 or train_args.fp16
-        ), "need to run in fp16 mixed precision or load model in fp16"
 
         # requires a custom prepare because the stock one in peft will introduce
         # extraneous casting
