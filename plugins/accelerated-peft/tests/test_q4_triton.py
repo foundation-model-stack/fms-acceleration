@@ -24,8 +24,8 @@ os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 import unittest  # noqa: E402
 
 # Third Party
-from gptqmodel import Backend, GPTQModel  # noqa: E402
-from gptqmodel.nn_modules.qlinear.qlinear_tritonv2 import (  # noqa: E402
+from fms_acceleration_peft.gptqmodel import Backend, GPTQModel  # noqa: E402
+from fms_acceleration_peft.gptqmodel.nn_modules.qlinear.qlinear_tritonv2 import (  # noqa: E402
     QuantLinear as TritonV2QuantLinear,
 )
 from transformers import AutoTokenizer  # noqa: E402

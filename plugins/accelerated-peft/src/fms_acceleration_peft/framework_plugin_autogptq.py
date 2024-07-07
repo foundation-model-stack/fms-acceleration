@@ -60,17 +60,17 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
         # Third Party
         if self.use_external_lib:
             # Third Party
-            from auto_gptq import (
-                AutoGPTQForCausalLM as GPTQModel,  # pylint: disable=import-outside-toplevel,import-error
+            from auto_gptq import ( # pylint: disable=import-outside-toplevel,import-error
+                AutoGPTQForCausalLM as GPTQModel,
             )
-            from auto_gptq import BaseQuantizeConfig as QuantizeConfig
+            from auto_gptq import BaseQuantizeConfig as QuantizeConfig # pylint: disable=import-outside-toplevel,import-error
             from auto_gptq.nn_modules.qlinear.qlinear_tritonv2 import (  # pylint: disable=import-outside-toplevel,import-error
                 QuantLinear,
             )
         else:
-            from .gptqmodel import GPTQModel, QuantizeConfig
-            from .gptqmodel.utils import Backend
-            from .gptqmodel.nn_modules.qlinear.qlinear_tritonv2 import (
+            from .gptqmodel import GPTQModel, QuantizeConfig # pylint: disable=import-outside-toplevel,import-error
+            from .gptqmodel.utils import Backend # pylint: disable=import-outside-toplevel,import-error
+            from .gptqmodel.nn_modules.qlinear.qlinear_tritonv2 import ( # pylint: disable=import-outside-toplevel,import-error
                 QuantLinear,
             )
         # Local
@@ -149,11 +149,12 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
                 )
 
                 # NOTE: need to set the device map as below as we want to use AutoGPTQ for training.
-                # For low_cpu_mem_usage = True, we have to set the device map to load checkpoints to "cpu"
-                # to avoid gpu consumption before train
+                # For low_cpu_mem_usage = True, we have to set the device map to load checkpoints
+                # to "cpu" to avoid gpu consumption before train
                 # This approach will divert consumption to cpu memory,
                 # a better approach would be to load the checkpoints to meta device
-                # QLoRA is currently implemented by the former approach and will encounter the same issue.
+                # QLoRA is currently implemented by the former approach and
+                # will encounter the same issue.
                 # see https://github.com/huggingface/transformers/pull/25107#issuecomment-2134833262
 
                 kwargs["device_map"] = {
@@ -263,7 +264,7 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
             )
         else:
             # Local
-            from .gptqmodel.utils.peft import get_gptq_peft_model
+            from .gptqmodel.utils.peft import get_gptq_peft_model # pylint: disable=import-outside-toplevel,import-error
 
         (peft_config,) = modifiable_args  # unpack modifiable args
 
@@ -295,7 +296,8 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
             # 2. GPTQLoraModel._replace_module to replace the existing Linear with the LoraLinear.
             #    Also move to device (which may depend on how base layer is implemented)
 
-            # NOTE: GPTQLoraModel inherits from LoraModel, and the _create_new_module method is called
+            # NOTE: GPTQLoraModel inherits from LoraModel,
+            # and the _create_new_module method is called
             # on the parent. Hence _create_new_module is patched on the parent
 
             # FIXME:

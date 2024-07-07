@@ -25,7 +25,7 @@ import os  # noqa: E402
 import unittest  # noqa: E402
 
 # Third Party
-from gptqmodel import Backend, GPTQModel  # noqa: E402
+from fms_acceleration_peft.gptqmodel import Backend, GPTQModel  # noqa: E402
 from transformers import AutoTokenizer  # noqa: E402
 import torch  # noqa: E402
 import torch.utils.benchmark as benchmark  # noqa: E402
