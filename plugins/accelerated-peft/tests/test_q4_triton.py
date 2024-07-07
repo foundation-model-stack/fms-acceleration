@@ -55,7 +55,7 @@ class TestsQ4Triton(unittest.TestCase):
         else:
             raise ValueError("Did not find a tritonv2 linear layer")
 
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
 
         inp = tokenizer(prompt, return_tensors="pt").to("cuda:0")
 
@@ -101,7 +101,7 @@ class TestsQ4Triton(unittest.TestCase):
         else:
             raise ValueError("Did not find a tritonv2 linear layer")
 
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=True)
 
         inp = tokenizer(prompt, return_tensors="pt").to(device)
 

@@ -6,3 +6,8 @@ accelerate >= 0.29
 
 # bitsandbytes for the BNB plugin
 bitsandbytes
+
+# Used to manage the thread limit in functions for converting old 
+# GPTQ models to new GPTQ model format that support symmetrical=False
+# https://github.com/AutoGPTQ/AutoGPTQ/pull/640
+threadpoolctl

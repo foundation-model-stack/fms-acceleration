@@ -219,7 +219,7 @@ def test_quantizing_pretrained_model_outputs_match(
     calibration_dataset = get_wikitext2(tokenizer, num_samples=128, seqlen=128)
     quant_config_kwargs = {
         "bits": 4,
-        "group_size": -1,
+        "group_size": 64,
         "desc_act": True,
         "damp_percent": 0.1,
         "static_groups": False,
@@ -286,13 +286,13 @@ def test_quantizing_pretrained_model_outputs_match(
     # Measure the distribution error with KD Loss
     # flatten as a single batch bs*seqlen
     # since batchmean sums the loss and averages on dim=0
-    loss_fn = torch.nn.KLDivLoss(reduction="batchmean")
+    loss_fn = torch.nn.KLDivLoss(reduction="sum")
     # input should be a distribution in the log space
     input = torch.nn.functional.log_softmax(refactored_logits, dim=-1)
-    input = torch.flatten(input, start_dim=0, end_dim=1)
+    input = input.view(BS*SEQLEN, -1)
     # target must be prob distribution
     target = torch.nn.functional.softmax(original_logits, dim=-1)
-    target = torch.flatten(target, start_dim=0, end_dim=1)
+    target = target.view(BS*SEQLEN, -1)
     error = loss_fn(input, target)
     assert error.lt(
         LOSS_TOLERANCE
