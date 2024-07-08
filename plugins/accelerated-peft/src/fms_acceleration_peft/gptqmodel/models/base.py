@@ -779,7 +779,7 @@ class BaseGPTQModel(nn.Module):
         quantize_config: QuantizeConfig,
         max_memory: Optional[dict] = None,
         trust_remote_code: bool = False,
-        torch_dtype: [str | torch.dtype] = "auto",
+        torch_dtype: Union[str, torch.dtype] = "auto",
         **model_init_kwargs,
     ):
         """load un-quantized pretrained model to cpu"""
@@ -880,7 +880,7 @@ class BaseGPTQModel(nn.Module):
         device: Optional[Union[str, int]] = None,
         low_cpu_mem_usage: bool = False,
         backend: Backend = Backend.AUTO,
-        torch_dtype: [str | torch.dtype] = "auto",
+        torch_dtype: Union[str, torch.dtype] = "auto",
         use_cuda_fp16: bool = True,
         quantize_config: Optional[QuantizeConfig] = None,
         model_basename: Optional[str] = None,

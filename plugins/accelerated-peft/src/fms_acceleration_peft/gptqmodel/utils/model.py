@@ -15,7 +15,7 @@
 ###############################################################################
 # Standard
 from logging import getLogger
-from typing import List, Optional
+from typing import List, Optional, Union
 import functools
 import hashlib
 import json
@@ -79,13 +79,13 @@ def recurse_setattr(module, name, value):
         recurse_setattr(getattr(module, name), rest, value)
 
 
-def get_device(obj: torch.Tensor | nn.Module):
+def get_device(obj: Union[torch.Tensor, nn.Module]):
     if isinstance(obj, torch.Tensor):
         return obj.device
     return next(obj.parameters()).device
 
 
-def move_to(obj: torch.Tensor | nn.Module, device: torch.device):
+def move_to(obj: Union[torch.Tensor, nn.Module], device: torch.device):
     if get_device(obj) != device:
         obj = obj.to(device)
     return obj

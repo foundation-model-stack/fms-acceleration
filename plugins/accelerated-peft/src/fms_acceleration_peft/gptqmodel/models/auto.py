@@ -91,7 +91,7 @@ class GPTQModel:
         device: Optional[Union[str, int]] = None,
         backend: Backend = Backend.AUTO,
         use_cuda_fp16: bool = True,
-        quantize_config: Optional[QuantizeConfig | Dict] = None,
+        quantize_config: Optional[Union[QuantizeConfig, Dict]] = None,
         model_basename: Optional[str] = None,
         use_safetensors: bool = True,
         trust_remote_code: bool = False,

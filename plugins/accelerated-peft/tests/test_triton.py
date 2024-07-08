@@ -25,10 +25,14 @@ import os  # noqa: E402
 import unittest  # noqa: E402
 
 # Third Party
-from fms_acceleration_peft.gptqmodel import Backend, GPTQModel  # noqa: E402
 from transformers import AutoTokenizer  # noqa: E402
 import torch  # noqa: E402
 import torch.utils.benchmark as benchmark  # noqa: E402
+
+CUDA_AVAILABLE = False
+if torch.cuda.is_available():
+    from fms_acceleration_peft.gptqmodel import Backend, GPTQModel  # noqa: E402
+    CUDA_AVAILABLE = True    
 
 MODEL_ID = "TheBloke/Llama-7B-GPTQ"
 DATASET_ID = "timdettmers/openassistant-guanaco"
@@ -94,6 +98,10 @@ def get_model_and_tokenizer(
 
 
 class TestTriton(unittest.TestCase):
+    @unittest.skipIf(
+        CUDA_AVAILABLE is False,
+        "Only runs if there is a cuda device available",
+    )
     def test_triton_qlinear(self):
         ref_model, _ = get_model_and_tokenizer(
             model_id=MODEL_ID,

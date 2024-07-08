@@ -24,17 +24,25 @@ os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
 import unittest  # noqa: E402
 
 # Third Party
-from fms_acceleration_peft.gptqmodel import Backend, GPTQModel  # noqa: E402
-from fms_acceleration_peft.gptqmodel.nn_modules.qlinear.qlinear_tritonv2 import (  # noqa: E402
-    QuantLinear as TritonV2QuantLinear,
-)
 from transformers import AutoTokenizer  # noqa: E402
 import torch  # noqa: E402
 
+CUDA_AVAILABLE = False
+if torch.cuda.is_available():
+    from fms_acceleration_peft.gptqmodel import Backend, GPTQModel  # noqa: E402
+    from fms_acceleration_peft.gptqmodel.nn_modules.qlinear.qlinear_tritonv2 import (  # noqa: E402
+        QuantLinear as TritonV2QuantLinear,
+    )
+    CUDA_AVAILABLE = True
+
+
 GENERATE_EVAL_SIZE = 100
 
-
 class TestsQ4Triton(unittest.TestCase):
+    @unittest.skipIf(
+        CUDA_AVAILABLE is False,
+        "Only runs if there is a cuda device available",
+    )
     def test_generation_desc_act_false(self):
         prompt = "I am in Paris and"
 
@@ -79,6 +87,10 @@ class TestsQ4Triton(unittest.TestCase):
             predicted_text[:GENERATE_EVAL_SIZE], reference_output[:GENERATE_EVAL_SIZE]
         )
 
+    @unittest.skipIf(
+        CUDA_AVAILABLE is False,
+        "Only runs if there is a cuda device available",
+    )
     def test_generation_desc_act_true(self):
         prompt = "I am in Paris and"
         device = torch.device("cuda:0")
