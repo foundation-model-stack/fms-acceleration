@@ -32,7 +32,6 @@ def build_hugginface_padding_free_collator(
             "input_ids": input_ids,
             "labels": labels,
             "position_ids": position_ids,
-            # "num_loss_counted_tokens": num_loss_counted_tokens,
         }
         if per_token_loss:
             data["num_loss_counted_tokens"] = num_loss_counted_tokens

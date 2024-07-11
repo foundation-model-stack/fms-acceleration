@@ -23,9 +23,6 @@ from accelerate import Accelerator
 from transformers.utils import logging
 import torch
 
-from .dataloader import patch_multipack_dataloader, get_multipack_dataloader
-from .loss import patch_loss_via_accmulate
-
 # want to use the transformers logger, but a bit of pain
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 logger.setLevel(logging._get_default_logging_level())
@@ -48,21 +45,19 @@ def log_patch_summary(
         logging_func(line)
 
 
-class FastAttentionAccelerationPlugin(AccelerationPlugin):
+class PaddingFreeAccelerationPlugin(AccelerationPlugin):
 
 
     def __init__(self, configurations: Dict[str, Dict]):
         super().__init__(configurations)
 
+        # the fast attention requires knowledge about the 
+        # data collator.
+        # - currently we do not have a data collator specific plugin
+        # - so it requires knowledge about the dataloader
         self._method = self._check_config_and_maybe_check_values(
-            key="training.fast_attention.padding_free.method",
-            values=["huggingface"],
-        )
-        self._loss = self._check_config_and_maybe_check_values(
-            key="training.fast_attention.loss",
-        )
-        self._multipack = self._check_config_and_maybe_check_values(
-            key="training.fast_attention.multipack",
+            key="training.attention.padding_free.method",
+            values=["huggingface-injected"],
         )
 
     @property
@@ -75,26 +70,9 @@ class FastAttentionAccelerationPlugin(AccelerationPlugin):
         train_args: TrainingArguments,
         modifiable_args: Tuple[LoraConfig],
     ):
-        # gaurded import 
 
-        effective_batch_size = self._multipack["effective_batch_size"]
-        max_batch_len = self._multipack["max_number_tokens"]
-        num_bins = 1
-        if torch.distributed.is_initialized():
-            num_bins = torch.distributed.get_world_size()
-
-        # FIXME: assume I can get it from here
-        data_path = train_args.data_path
-        self._train_loader, self._grad_accum = get_multipack_dataloader(
-            data_path, num_bins,
-            effective_batch_size, max_batch_len, 
-        )
-
-        train_args.__dict__['gradient_accumulation_steps'] = self._grad_accum
-        train_args.__dict__['per_gpu_train_batch_size'] = (
-            effective_batch_size // self._grad_accum // num_bins
-        )
-
+        # NOTE: currently self._method is not used
+        # NOTE: in future, self._method should be passed into the patcher
         from .model_patcher import (  # pylint: disable=import-outside-toplevel
             patch_model,
         )
@@ -110,40 +88,13 @@ class FastAttentionAccelerationPlugin(AccelerationPlugin):
         # log the patch summary
         if accelerator is not None and accelerator.is_main_process:
             log_patch_summary(logging_func=logger.info)
-            # log_patch_summary(logging_func=print)
 
-        max_batch_len = self._multipack["max_number_tokens"]
-        per_token_loss = self._loss["token_averaged_loss"]
-
-        # FIXME: 
-        if torch.distributed.is_initialized():
-            from torch.distributed.fsdp import MixedPrecision
-            accelerator.state.fsdp_plugin.set_auto_wrap_policy(model)
-            accelerator.state.fsdp_plugin.mixed_precision_policy = MixedPrecision(
-                param_dtype=torch.bfloat16,
-                reduce_dtype=torch.bfloat16,
-                buffer_dtype=torch.bfloat16,
-            )
-
-        # use FSDP checkpointing
-        # accelerator.state.fsdp_plugin.activation_checkpointing = train_args.gradient_checkpointing
-        accelerator.native_amp = False # defer to FSDP AMP
-
-        patch_multipack_dataloader(
-            accelerator, self._train_loader, 
-            format=self._method,
-            per_token_loss=per_token_loss,
-            max_batch_len=max_batch_len,
-        )
-
-        if per_token_loss:
-            patch_loss_via_accmulate(accelerator)
         return []
 
 # register
 AccelerationPlugin.register_plugin(
-    FastAttentionAccelerationPlugin,
+    PaddingFreeAccelerationPlugin,
     configuration_and_paths=[
-        "training.fast_attention",
+        "training.attention.padding_free",
     ],
 )
