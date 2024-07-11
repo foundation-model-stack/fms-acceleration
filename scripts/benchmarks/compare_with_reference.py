@@ -23,7 +23,15 @@ DEFAULT_INDICES = [
     "num_gpus",
     "per_device_train_batch_size",
 ]
-DEFAULT_OUTLIERS_DF_COLUMN_NAMES = ["scenario", *DEFAULT_INDICES, "reference", "new"]
+
+DEFAULT_IGNORED_COLUMNS = [
+    "epoch",
+    "train_runtime",
+    "train_steps_per_second",
+    "train_samples_per_second",
+    "mem_nvidia_mem_reserved",
+]
+
 DEFAULT_REFERENCE_FILEPATH = "scripts/benchmarks/refs/a100_80gb.csv"
 BENCHMARK_FILENAME = "benchmarks.csv"
 
@@ -36,7 +44,7 @@ def plot_chart(ax, x, y, title, xlabel, ylabel):
     ax.axline((0, 0), slope=1)
 
 
-def compare_results(df, ref, plot_columns, num_columns=2, threshold_ratio=0.1):
+def compare_results(df, ref, plot_columns, threshold_ratio=0.1):
     num_plots = len(plot_columns)
 
     charts = []
@@ -68,24 +76,45 @@ def compare_results(df, ref, plot_columns, num_columns=2, threshold_ratio=0.1):
             [column, *outlier, ref_series[outlier].item(), df_series[outlier].item()]
             for outlier in outliers
         ]
-    return total_outliers, charts
+    outliers_df = pd.DataFrame(
+        total_outliers, columns=["scenario", *df.index.names, "reference", "new"]
+    )
+    return outliers_df, outliers, charts
 
 
 def read_df(file_path, indices, plot_columns):
     df = pd.read_csv(file_path)
     df.set_index(indices, inplace=True)
-    df = df[plot_columns]
-    return df
+    # all other columns not for plotting or explicitly ignored are hyperparameters
+    argument_columns = [
+        col
+        for col in df.columns
+        if col not in (DEFAULT_IGNORED_COLUMNS + DEFAULT_PLOT_COLUMNS)
+    ]
+    return df[plot_columns], df[argument_columns]
 
 
-def main(result_dir, reference_benchmark_filepath, plot_columns):
-    ref = read_df(reference_benchmark_filepath, DEFAULT_INDICES, plot_columns)
-    df = read_df(
-        os.path.join(result_dir, BENCHMARK_FILENAME), DEFAULT_INDICES, plot_columns
+def main(
+    result_dir, reference_benchmark_filepath, plot_columns, threshold_ratio, indices
+):
+    ref, args_ref = read_df(reference_benchmark_filepath, indices, plot_columns)
+    df, args_df = read_df(
+        os.path.join(result_dir, BENCHMARK_FILENAME), indices, plot_columns
     )
-    total_outliers, charts = compare_results(df, ref, plot_columns, threshold_ratio=0.1)
-    outliers_df = pd.DataFrame(total_outliers, columns=DEFAULT_OUTLIERS_DF_COLUMN_NAMES)
-    outliers_df.to_csv(os.path.join(result_dir, "outliers.csv"), index=None)
+    # Analyse between both sets of results and retrieve outliers
+    outliers_df, outliers, charts = compare_results(
+        df, ref, plot_columns, threshold_ratio=threshold_ratio
+    )
+    # Find arguments that are different between ref and new
+    # to highlight as possible cause of anomaly
+    diff = args_df.compare(args_ref, align_axis=1).rename(
+        columns={"self": "new", "other": "ref"}, level=-1
+    )
+    diff = diff[diff.index.isin([outlier for outlier in outliers])]
+    outliers_df = outliers_df.set_index(indices).merge(
+        diff, left_index=True, right_index=True
+    )
+    outliers_df.to_csv(os.path.join(result_dir, "outliers.csv"))
     for chart, filename in charts:
         chart.figure.savefig(os.path.join(result_dir, filename))
 
@@ -100,12 +129,18 @@ if __name__ == "__main__":
         default="benchmark_outputs",
         help="benchmark result directory to use for comparison",
     )
-
     parser.add_argument(
         "--reference_benchmark_filepath",
         default="scripts/benchmarks/refs/a100_80gb.csv",
         help="file path of the csv to compare on",
     )
+    parser.add_argument(
+        "--threshold_ratio",
+        default=0.1,
+        help="the acceptable threshold percentage difference from the reference value.",
+    )
+
+    parser.add_argument("--indices", default=DEFAULT_INDICES, nargs="+")
 
     parser.add_argument("--plot_columns", default=DEFAULT_PLOT_COLUMNS, nargs="+")
 
@@ -114,4 +149,6 @@ if __name__ == "__main__":
         result_dir=args.result_dir,
         reference_benchmark_filepath=args.reference_benchmark_filepath,
         plot_columns=args.plot_columns,
+        threshold_ratio=args.threshold_ratio,
+        indices=args.indices,
     )
