@@ -110,7 +110,10 @@ def dequant_kernel_248(
     zeros = zeros & maxq
 
     # Dequantize
-    zeros = zeros + 1
+    # None if using local gptqpackage, official autogptq should have an offset value
+    if getattr(qzeros_ptr, "offset", None) is not None:
+        zeros = zeros + qzeros_ptr.offset
+
     weights = weights - zeros
     weights = weights.to(tl.float32)
     weights = scales * weights
