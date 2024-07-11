@@ -22,12 +22,24 @@ from transformers import TrainingArguments
 from accelerate import Accelerator
 import torch
 
-from .dataloader import patch_multipack_dataloader, get_multipack_dataloader
+from torch.utils.data import DataLoader
+
+from types import MethodType
+
 from .framework_plugin_loss import KEY_ACROSS_GPUS
+
+from .multipack import (
+    build_hugginface_padding_free_collator,
+    find_packing_max_batch_len_and_grad_accum, 
+    MultipackDistributedBatchSampler, TokenDataset
+)
 
 class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
 
-    def __init__(self, configurations: Dict[str, Dict]):
+    def __init__(
+        self, configurations: Dict[str, Dict], 
+        seed: int = 42,
+    ):
         super().__init__(configurations)
 
         multipack = self._check_config_and_maybe_check_values(
@@ -53,11 +65,25 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
             key="training.attention",
         )
 
+        self._seed = seed 
+        self._collate_fn = None
+        self._padding_free = False
+        self._pad_token_id = None
         if "padding_free" in attention:
+            self._padding_free = True
+
             attention = attention["padding_free"]
             assert attention["method"] == "huggingface-injected", \
                 "only supported HF injected padding free"
-            self._method = "huggingface"
+
+            self._collate_fn = build_hugginface_padding_free_collator(
+                per_token_loss=self._per_token_loss,
+                MAX_BATCH_LEN=self._max_batch_len
+            )
+        else:
+            # NOTE: need to get this from somewhere
+            assert self._pad_token_id is not None, \
+                "need to get pad token id"
 
     @property
     def requires_agumentation(self):
@@ -70,38 +96,96 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
         modifiable_args: Tuple[LoraConfig],
     ):
 
-        num_bins = 1
-        if torch.distributed.is_initialized():
-            num_bins = torch.distributed.get_world_size()
-
-        # FIXME: assume I can get it from here
-        data_path = train_args.data_path
-        self._train_loader, self._grad_accum = get_multipack_dataloader(
-            data_path, num_bins,
-            self._effective_batch_size, self._max_batch_len, 
-        )
-
-        # train_args is a dataclass, so needs to be updated this way
-        train_args.__dict__['gradient_accumulation_steps'] = self._grad_accum
-        train_args.__dict__['per_gpu_train_batch_size'] = (
-            self._effective_batch_size // self._grad_accum // num_bins
-        )
-
+        # take a pointer to train args
+        self._train_args = train_args
         return model, modifiable_args
 
     def get_callbacks_and_ready_for_train(
         self, model: torch.nn.Module = None, accelerator: Accelerator=None
     ):
-
         # patch the multipack dataloader on the accelerator
-        patch_multipack_dataloader(
-            accelerator, self._train_loader, 
-            format=self._method,
-            per_token_loss=self._per_token_loss,
-            max_batch_len=self._max_batch_len,
-        )
-
+        self._patch_multipack_dataloader(accelerator)
         return []
+
+    def _patch_multipack_dataloader(
+        self,
+        accelerator: Accelerator,
+        num_workers: int = 8,
+    ):
+
+        rank, num_bins = 0, 1
+        if torch.distributed.is_initialized():
+            num_bins = torch.distributed.get_world_size()
+            rank = torch.distributed.get_rank()
+
+        collate_fn = self._collate_fn
+        train_args = self._train_args
+        seed = self._seed
+        effective_batch_size = self._effective_batch_size
+        max_batch_len = self._max_batch_len
+        is_padding = not self._padding_free
+        pad_token_id = self._pad_token_id
+        _old_prepare = accelerator.prepare
+        def prepare(self, *args, device_placement=None):
+
+            if len(args) > 1 or not isinstance(args[0], DataLoader):
+                return _old_prepare(*args, device_placement=device_placement)
+
+            old_dataloader = args[0]
+
+            # get dataset and compute lengths
+            # NOTE: better to let one process do it
+            dataset = TokenDataset(old_dataloader.dataset)
+
+            # compute packing
+            packing_max_batch_len, grad_accum = find_packing_max_batch_len_and_grad_accum(
+                num_gpus=num_bins,
+                avg_sample_len=dataset.get_lengths().mean(),
+                effective_batch_size=effective_batch_size,
+                max_batch_len_per_gpu=max_batch_len,
+                is_padding=is_padding,
+                dataset=dataset,
+                pad_id=pad_token_id, # should be used only in padding
+                seed=seed,
+            )
+
+            # unfortunately this update is late, so the following will not
+            # be properly updated. But maybe it will have little effect
+            # - trainer._train_batch_size 
+            # - trainer.state.train_batch_size
+            # NOTE: as such I think it does not work with max_steps > 0 anymore
+
+            # update the train args
+            # train_args is a dataclass, so needs to be updated this way
+            train_args.__dict__['gradient_accumulation_steps'] = grad_accum
+            train_args.__dict__['per_gpu_train_batch_size'] = (
+                effective_batch_size // grad_accum // num_bins
+            )
+
+            # have to update the accelerator gradient state also
+            # - because the train args update is late
+            accelerator.gradient_state.plugin_kwargs['num_steps'] = grad_accum
+
+            sampler = MultipackDistributedBatchSampler(
+                batch_max_length=packing_max_batch_len,
+                lengths=dataset.get_lengths(),
+                num_replicas=num_bins,
+                rank=rank,
+                seed=seed,
+                padding=is_padding,
+            )
+
+            return DataLoader(
+                dataset,
+                batch_sampler=sampler,
+                num_workers=num_workers,
+                collate_fn=collate_fn,
+            )
+
+        # FIXME: move this somewhere
+        accelerator.even_batches = False
+        accelerator.prepare = MethodType(prepare, accelerator)
+
 
 # register
 AccelerationPlugin.register_plugin(
