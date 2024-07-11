@@ -13,7 +13,9 @@
 # limitations under the License.
 
 # Local
-from .framework_plugin_fast_attention import FastAttentionAccelerationPlugin
+from .framework_plugin_loss import LossAccelerationPlugin
+from .framework_plugin_multipack import MultipackDataloaderAccelerationPlugin
+from .framework_plugin_padding_free import PaddingFreeAccelerationPlugin
 
 from .model_patcher import ModelPatcher
 

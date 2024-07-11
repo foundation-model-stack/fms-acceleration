@@ -69,7 +69,8 @@ def get_relevant_configuration_sections(configuration: Dict) -> Dict:
             _cfg = relevant_config
             while n > 1:
                 p = path.pop(0)
-                _cfg[p] = {}
+                if p not in _cfg:
+                    _cfg[p] = {}
                 _cfg = _cfg[p]
                 n -= 1
 
@@ -164,7 +165,7 @@ class AccelerationPlugin:
             if t not in values:
                 raise AccelerationPluginConfigError(
                     f"{self.__class__.__name__}: Value at '{key}' was '{t}'. "
-                    "Not found in expected set '{values}'."
+                    f"Not found in expected set '{values}'."
                 )
         else:
             # if nothing to check against, we still want to ensure its a valid
