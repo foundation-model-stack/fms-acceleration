@@ -34,7 +34,7 @@ DEFAULT_IGNORED_COLUMNS = [
 
 DEFAULT_REFERENCE_FILEPATH = "scripts/benchmarks/refs/a100_80gb.csv"
 BENCHMARK_FILENAME = "benchmarks.csv"
-
+OUTLIERS_FILENAME = "outliers.csv"
 
 def plot_chart(ax, x, y, title, xlabel, ylabel):
     ax.scatter(x, y, s=10)
@@ -114,7 +114,7 @@ def main(
     outliers_df = outliers_df.set_index(indices).merge(
         diff, left_index=True, right_index=True
     )
-    outliers_df.to_csv(os.path.join(result_dir, "outliers.csv"))
+    outliers_df.to_csv(os.path.join(result_dir, OUTLIERS_FILENAME))
     for chart, filename in charts:
         chart.figure.savefig(os.path.join(result_dir, filename))
 
@@ -137,7 +137,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--threshold_ratio",
         default=0.1,
-        help="the acceptable threshold percentage difference from the reference value.",
+        help="the acceptable relative difference from the reference value.",
     )
 
     parser.add_argument("--indices", default=DEFAULT_INDICES, nargs="+")
