@@ -71,6 +71,34 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
         modifiable_args: Tuple[LoraConfig],
     ):
 
+        # guarded
+        from .model_patcher import (
+            ModelPatcher,
+            ModelPatcherRule,
+            ModelPatcherTrigger,
+        )
+        from .flash_attn import build_fa_forward
+        from transformers.models.llama.modeling_llama import LlamaFlashAttention2
+        from functools import partial
+
+        # TODO: have a generic version of this rule
+        # - do regex on RMSNorm class name
+        # - check on the tensors required for fast_rms_layernorm
+        ModelPatcher.register(
+            ModelPatcherRule(
+                rule_id="llama-pad-free",
+                trigger=ModelPatcherTrigger(check=LlamaFlashAttention2),
+                forward_builder=partial(build_fa_forward, causal=True),
+            ),
+        )
+
+        return model, modifiable_args
+
+    def get_callbacks_and_ready_for_train(
+        self, model: torch.nn.Module = None, accelerator: Accelerator=None
+    ):
+
+        # NOTE: this needs to be moved to framework
         # NOTE: currently self._method is not used
         # NOTE: in future, self._method should be passed into the patcher
         from .model_patcher import (  # pylint: disable=import-outside-toplevel
@@ -78,11 +106,6 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
         )
         model = patch_model(model)
 
-        return model, modifiable_args
-
-    def get_callbacks_and_ready_for_train(
-        self, model: torch.nn.Module = None, accelerator: Accelerator=None
-    ):
         # if this is moved to framework, it can be handled as the same way as
         # log_initialization_message
         # log the patch summary

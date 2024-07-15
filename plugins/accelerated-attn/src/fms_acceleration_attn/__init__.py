@@ -16,6 +16,7 @@
 from .framework_plugin_loss import LossAccelerationPlugin
 from .framework_plugin_multipack import MultipackDataloaderAccelerationPlugin
 from .framework_plugin_padding_free import PaddingFreeAccelerationPlugin
+from .framework_plugin_mlp_dropout import MLPDropoutAccelerationPlugin
 
 from .model_patcher import ModelPatcher
 
