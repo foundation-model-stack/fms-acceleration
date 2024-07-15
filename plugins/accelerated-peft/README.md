@@ -25,3 +25,7 @@ Plugin | Description | Depends | Loading | Augmentation | Callbacks
     ```
     pip install git+https://github.com/AutoGPTQ/AutoGPTQ.git
     ```
+- The plugin was tested with commit id `ea829c7bbe83561c2b1de26795b6592992373ef7`, 
+    ```
+    pip install git+https://github.com/AutoGPTQ/AutoGPTQ.git@ea829c7bbe83561c2b1de26795b6592992373ef7
+    ```

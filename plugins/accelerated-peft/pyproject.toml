@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fms-acceleration-peft"
-version = '0.0.1'
+version = '0.1.0'
 description = "FMS Acceleration for PeFT"
 authors = [
   {name = "Fabian Lim", email = "flim@sg.ibm.com"},
@@ -26,7 +26,6 @@ classifiers=[
 
 [project.optional-dependencies]
 flash-attn = ["flash-attn"]
-auto_gptq = ["auto_gptq @ git+https://github.com/AutoGPTQ/AutoGPTQ.git@ea829c7bbe83561c2b1de26795b6592992373ef7"] # known working commitid
 
 [tool.hatch.metadata.hooks.requirements_txt]
 files = ["requirements.txt"]
