@@ -21,6 +21,7 @@ from peft import LoraConfig
 from transformers import TrainingArguments
 from accelerate import Accelerator
 import torch
+from transformers.utils import logging
 
 from torch.utils.data import DataLoader
 
@@ -33,6 +34,11 @@ from .multipack import (
     find_packing_max_batch_len_and_grad_accum, 
     MultipackDistributedBatchSampler, TokenDataset
 )
+
+# want to use the transformers logger, but a bit of pain
+logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
+logger.setLevel(logging._get_default_logging_level())
+logger.addHandler(logging._default_handler)
 
 class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
 
@@ -126,6 +132,7 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
         is_padding = not self._padding_free
         pad_token_id = self._pad_token_id
         _old_prepare = accelerator.prepare
+
         def prepare(self, *args, device_placement=None):
 
             if len(args) > 1 or not isinstance(args[0], DataLoader):
@@ -158,9 +165,21 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
             # update the train args
             # train_args is a dataclass, so needs to be updated this way
             train_args.__dict__['gradient_accumulation_steps'] = grad_accum
-            train_args.__dict__['per_gpu_train_batch_size'] = (
-                effective_batch_size // grad_accum // num_bins
-            )
+            batch_size_per_device = effective_batch_size // grad_accum // num_bins
+            train_args.__dict__['per_gpu_train_batch_size'] = batch_size_per_device
+
+            # some logging
+            if rank == 0:
+                logger.info("********************* Multipack Dataloader **********************")
+                logger.info( "  Training with multipack so batch size has been adjusted.")
+                logger.info(f"  effective_batch_size   : {effective_batch_size}")
+                logger.info(f"  max_batch_len (target) : {max_batch_len}")
+                logger.info(f"  max_batch_len (actual) : {packing_max_batch_len}")
+                logger.info(f"  padding_free           : {not is_padding}")
+                logger.info(f"  grad_accum             : {grad_accum}")
+                logger.info(f"  batch_size (per device): {batch_size_per_device}")
+                if is_padding:
+                    logger.info(f"  pad_token_id        : {pad_token_id}")
 
             # have to update the accelerator gradient state also
             # - because the train args update is late

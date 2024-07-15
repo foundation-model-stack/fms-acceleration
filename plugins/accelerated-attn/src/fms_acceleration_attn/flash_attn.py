@@ -72,22 +72,3 @@ def build_fa_forward(
 
     # return the forward
     return forward
-
-from .model_patcher import (
-    ModelPatcher,
-    ModelPatcherRule,
-    ModelPatcherTrigger,
-)
-from transformers.models.llama.modeling_llama import LlamaFlashAttention2
-from functools import partial
-
-# TODO: have a generic version of this rule
-# - do regex on RMSNorm class name
-# - check on the tensors required for fast_rms_layernorm
-ModelPatcher.register(
-    ModelPatcherRule(
-        rule_id="llama-pad-free",
-        trigger=ModelPatcherTrigger(check=LlamaFlashAttention2),
-        forward_builder=partial(build_fa_forward, causal=True),
-    ),
-)
