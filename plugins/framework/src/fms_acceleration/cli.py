@@ -58,8 +58,8 @@ def install_plugin(
         ]
     )
 
-    #Reference from https://github.com/pypa/pip/blob/main/src/pip/_internal/cli/status_codes.py
-    if response>0:
+    # Reference from https://github.com/pypa/pip/blob/main/src/pip/_internal/cli/status_codes.py
+    if response > 0:
         print("PyPi installation failed. Falling back to installation from Github.")
 
         if pkg_name.startswith(PLUGIN_PREFIX):
