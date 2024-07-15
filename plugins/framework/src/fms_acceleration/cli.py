@@ -49,17 +49,29 @@ def install_plugin(
         pipmain(["install", *args, pkg_name])
         return
 
-    if pkg_name.startswith(PLUGIN_PREFIX):
-        pkg_name = pkg_name.replace(PLUGIN_PREFIX, "")
-
     # otherwise should be an internet install
-    pipmain(
+    response = pipmain(
         [
             "install",
             *args,
-            f"git+https://{GITHUB_URL}#subdirectory=plugins/accelerated-{pkg_name}",
+            pkg_name,
         ]
     )
+
+    #Reference from https://github.com/pypa/pip/blob/main/src/pip/_internal/cli/status_codes.py
+    if response>0:
+        print("PyPi installation failed. Falling back to installation from Github.")
+
+        if pkg_name.startswith(PLUGIN_PREFIX):
+            pkg_name = pkg_name.replace(PLUGIN_PREFIX, "")
+
+        pipmain(
+            [
+                "install",
+                *args,
+                f"git+https://{GITHUB_URL}#subdirectory=plugins/accelerated-{pkg_name}",
+            ]
+        )
 
 
 def list_plugins():
