@@ -26,6 +26,10 @@ from fms_acceleration.utils import (
     update_configuration_contents,
 )
 import pytest
+from unittest.mock import patch
+
+MODEL_NAME = "TheBloke/TinyLlama-1.1B-Chat-v0.3-GPTQ"
+LOCAL_AUTOGPTQ_PREFIX = "fms_acceleration_peft.gptqmodel"
 
 # instantiate_fromwork will handle registering and activating AutoGPTQAccelerationPlugin
 
@@ -86,6 +90,39 @@ def test_configure_gptq_plugin():
 
         e.match(f"AutoGPTQAccelerationPlugin: Value at '{key}'")
 
+    def autogptq_unavailable(package_name: str):
+        if package_name == "auto_gptq":
+            return False
+        return True
+
+    # - Test that error is thrown when use_external_lib is True but no package found.
+    use_external_lib_key = "peft.quantization.auto_gptq.use_external_lib"
+    # should raise assertion error when package not available
+    with pytest.raises(AssertionError) as e:
+        with patch(
+                    "transformers.utils.import_utils."
+                    "_is_package_available",
+                    autogptq_unavailable,
+        ):
+            with instantiate_framework(
+                update_configuration_contents(
+                    read_configuration(CONFIG_PATH_AUTO_GPTQ), use_external_lib_key, True
+                ),
+                require_packages_check=False,
+            ) as framework:
+                pass
+
+    # - Test that gptqmodel is used when use_external_lib is False
+    with instantiate_framework(
+        update_configuration_contents(
+            read_configuration(CONFIG_PATH_AUTO_GPTQ), use_external_lib_key, False
+        ),
+        require_packages_check=False,
+    ) as framework:
+        model = framework.model_loader(MODEL_NAME)
+        base_module_name = model.model.model.layers[0].self_attn.q_proj.__module__
+        assert base_module_name.startswith(LOCAL_AUTOGPTQ_PREFIX), '''
+        use_external_lib=False, but local autogptq package not used by model'''
 
 # We do not enable the skip since this test does not actually require the packages
 # installed

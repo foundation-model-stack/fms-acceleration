@@ -19,9 +19,18 @@ Plugin | Description | Depends | Loading | Augmentation | Callbacks
 ## Known Issues
 
 - Models with sliding windows (e.g., Mistral, Mixtral) will have [memory and throughout issues](https://github.com/huggingface/transformers/issues/30461).
-- GPTQ-LORA sometimes observed to have `nan` grad norms in the begining of training, but training proceeds well otherwise.
+- GPTQ-LORA sometimes observed to have `nan` grad norms in the begining of training, but training pr.
 - `low_cpu_mem_usage` temporarily disabled for AutoGPTQ until bug with `make_sure_no_tensor_in_meta_device` is resolved.
-- Requires nightly [AutoGPTQ](https://github.com/AutoGPTQ/AutoGPTQ) until package `> 0.7.1` becomes available
+- The legacy implementation of GPTQ-LORA uses an external AutoGPTQ package, you must ensure the package is installed
     ```
-    pip install git+https://github.com/AutoGPTQ/AutoGPTQ.git
+    pip install git+https://github.com/AutoGPTQ/AutoGPTQ.git@ea829c7bbe83561c2b1de26795b6592992373ef7
     ```
+- To construct the plugin with the legacy implementation that uses an external AutoGPTQ package, in the configuration object that is passed to the plugin - set `use_external_lib = True` (default is set to False to use the local AutoGPTQ package)
+```
+    peft:
+    quantization: 
+        auto_gptq:
+        kernel: triton_v2
+        from_quantized: True
+        use_external_lib: True
+```

@@ -63,11 +63,14 @@ def load_autogptq_plugin_model(
         {
             "peft": {
                 "quantization": {
-                    "auto_gptq": {"kernel": "triton_v2", "from_quantized": True}
+                    "auto_gptq": {
+                        "kernel": "triton_v2", 
+                        "from_quantized": True, 
+                        "use_external_lib": use_external_lib,
+                        }
                 }
             }
         },
-        use_external_lib=use_external_lib,
     )
 
     class TrainArgs:
