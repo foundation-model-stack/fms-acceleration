@@ -28,7 +28,6 @@ from peft import LoraConfig, prepare_model_for_kbit_training
 from peft.tuners.lora.model import LoraModel
 from transformers import AutoModelForCausalLM, TrainingArguments
 from transformers.modeling_utils import is_fsdp_enabled
-from transformers.utils.import_utils import _is_package_available
 import torch
 import torch.distributed
 
@@ -53,6 +52,7 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
         )
 
         if self.use_external_lib:
+            from transformers.utils.import_utils import _is_package_available # pylint: disable=import-outside-toplevel
             assert (
                 _is_package_available("auto_gptq") is True
             ), "Unable to use external library, auto_gptq module not found. \

@@ -29,7 +29,6 @@ import pytest
 from unittest.mock import patch
 
 MODEL_NAME = "TheBloke/TinyLlama-1.1B-Chat-v0.3-GPTQ"
-LOCAL_AUTOGPTQ_PREFIX = "fms_acceleration_peft.gptqmodel"
 
 # instantiate_fromwork will handle registering and activating AutoGPTQAccelerationPlugin
 
@@ -90,15 +89,17 @@ def test_configure_gptq_plugin():
 
         e.match(f"AutoGPTQAccelerationPlugin: Value at '{key}'")
 
+def test_autogptq_loading():
     def autogptq_unavailable(package_name: str):
-        if package_name == "auto_gptq":
-            return False
-        return True
+        return False
 
     # - Test that error is thrown when use_external_lib is True but no package found.
-    use_external_lib_key = "peft.quantization.auto_gptq.use_external_lib"
-    # should raise assertion error when package not available
-    with pytest.raises(AssertionError) as e:
+    with pytest.raises(
+        AssertionError,
+        match = "Unable to use external library, auto_gptq module not found. \
+                Refer to README for installation instructions \
+                as a specific version might be required."
+    ):
         with patch(
                     "transformers.utils.import_utils."
                     "_is_package_available",
@@ -106,22 +107,26 @@ def test_configure_gptq_plugin():
         ):
             with instantiate_framework(
                 update_configuration_contents(
-                    read_configuration(CONFIG_PATH_AUTO_GPTQ), use_external_lib_key, True
+                    read_configuration(CONFIG_PATH_AUTO_GPTQ),
+                    "peft.quantization.auto_gptq.use_external_lib",
+                    True,
                 ),
                 require_packages_check=False,
             ) as framework:
                 pass
 
     # - Test that gptqmodel is used when use_external_lib is False
+    from fms_acceleration_peft.gptqmodel.nn_modules.qlinear.qlinear_tritonv2 import QuantLinear # pylint: disable=import-outside-toplevel
     with instantiate_framework(
         update_configuration_contents(
-            read_configuration(CONFIG_PATH_AUTO_GPTQ), use_external_lib_key, False
+            read_configuration(CONFIG_PATH_AUTO_GPTQ),
+            "peft.quantization.auto_gptq.use_external_lib",
+            False,
         ),
         require_packages_check=False,
     ) as framework:
         model = framework.model_loader(MODEL_NAME)
-        base_module_name = model.model.model.layers[0].self_attn.q_proj.__module__
-        assert base_module_name.startswith(LOCAL_AUTOGPTQ_PREFIX), '''
+        assert any(isinstance(mod, QuantLinear) for mod in model.modules()), '''
         use_external_lib=False, but local autogptq package not used by model'''
 
 # We do not enable the skip since this test does not actually require the packages
