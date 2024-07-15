@@ -19,19 +19,21 @@ def prepare_fa2_from_position_ids(query, key, value, position_ids, query_length)
     return (query, key, value, indices_q, (cu_seq_lens, cu_seq_lens), (max_length, max_length))
 
 # we can replace with the model patcher eventually
-from transformers.models.llama.modeling_llama import LlamaFlashAttention2
 def build_fa_forward(
-    attention: torch.nn.Module, causal: bool = True,
+    attention: torch.nn.Module, causal: bool = True, dropout: float = .1
 ):
     # assert not hasattr(self, '_position_ids'), "cannot patch fa attention"
 
     position_ids: torch.Tensor = None
     old_forward = attention.forward
+    attention.dropout = torch.nn.Dropout(p=dropout)
 
     def forward(self, *args, **kwargs):
         nonlocal position_ids
         position_ids = kwargs['position_ids']
-        return old_forward(*args, **kwargs)
+        out, *others = old_forward(*args, **kwargs)
+        out = self.dropout(out)
+        return out, *others
 
     def _flash_attention_forward(
         self, query_states, key_states, value_states, attention_mask, query_length, dropout=0.0, softmax_scale=None
