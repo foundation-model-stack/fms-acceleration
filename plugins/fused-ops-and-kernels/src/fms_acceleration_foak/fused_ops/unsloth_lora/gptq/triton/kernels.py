@@ -111,6 +111,7 @@ def dequant_kernel_248(
 
     # Dequantize
     # None if using local gptqpackage, official autogptq should have an offset value
+    # Triton compiler throws an NameError for function `hasattr`
     if getattr(qzeros_ptr, "offset", None) is not None:
         zeros = zeros + qzeros_ptr.offset
 
