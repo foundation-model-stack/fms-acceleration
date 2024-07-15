@@ -98,6 +98,9 @@ def get_lora_parameters(proj):
     base_layer = proj.base_layer if hasattr(proj, "base_layer") else proj
     qstate = extract_gptq_state(base_layer)
 
+    if base_layer.__module__.startswith("auto_gptq"):
+        setattr(qstate.qzeros, "offset", 1)
+
     if not hasattr(proj, "disable_adapters") or proj.disable_adapters or proj.merged:
         return qstate, None, None, None, None
 

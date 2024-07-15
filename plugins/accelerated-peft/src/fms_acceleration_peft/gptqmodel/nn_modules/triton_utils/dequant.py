@@ -1,43 +1,26 @@
-# taken from 
-# https://github.com/jeromeku/unsloth/commit/
-# 2839d390ef3bb318904289bfb9a7751a782c4e44
-
+###############################################################################
+# Adapted from https://github.com/ModelCloud/GPTQModel
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+###############################################################################
+# Standard
 import itertools
-from logging import getLogger
 
+# Third Party
+from torch.cuda.amp import custom_bwd, custom_fwd
 import torch
 import triton
 import triton.language as tl
-
-logger = getLogger(__name__)
-
-
-def dequant_ref(qstate):
-    # assert bits == 4, "Only 4-bit quantization is supported"
-    qweight, scales, qzeros, wf, g_idx, bits = (
-        qstate.qweight,
-        qstate.scales,
-        qstate.qzeros,
-        qstate.wf,
-        qstate.g_idx,
-        qstate.bits,
-    )
-
-    zeros = torch.bitwise_right_shift(
-        torch.unsqueeze(qzeros, 2).expand(-1, -1, 32 // bits), wf.unsqueeze(0)
-    ).to(torch.int16 if bits == 8 else torch.int8)
-    zeros = torch.bitwise_and(zeros, (2**bits) - 1)
-
-    zeros = zeros + 1
-    zeros = zeros.reshape(scales.shape)
-
-    weights = torch.bitwise_right_shift(
-        torch.unsqueeze(qweight, 1).expand(-1, 32 // bits, -1), wf.unsqueeze(-1)
-    ).to(torch.int16 if bits == 8 else torch.int8)
-    weights = torch.bitwise_and(weights, (2**bits) - 1)
-    weights = weights.reshape(weights.shape[0] * weights.shape[1], weights.shape[2])
-    weights = scales[g_idx] * (weights - zeros[g_idx])
-    return weights
 
 
 def make_dequant_configs(block_sizes, num_warps):
@@ -63,7 +46,7 @@ def dequant_kernel_248(
     bits: tl.constexpr,
     outfeatures: tl.constexpr,
     num_groups: tl.constexpr,
-    X_BLOCK: tl.constexpr = 1024,
+    X_BLOCK: tl.constexpr,
 ):
     # Block indexing
     xoffset = tl.program_id(0) * X_BLOCK
@@ -110,11 +93,6 @@ def dequant_kernel_248(
     zeros = zeros & maxq
 
     # Dequantize
-    # None if using local gptqpackage, official autogptq should have an offset value
-    # Triton compiler throws an NameError for function `hasattr`
-    if getattr(qzeros_ptr, "offset", None) is not None:
-        zeros = zeros + qzeros_ptr.offset
-
     weights = weights - zeros
     weights = weights.to(tl.float32)
     weights = scales * weights
@@ -123,12 +101,10 @@ def dequant_kernel_248(
 
 
 def dequant248(qweight, scales, qzeros, g_idx, bits, maxq=None):
-    """Launcher for triton dequant kernel
-    Only valid for bits = 2, 4, 8
-
+    """
+    Launcher for triton dequant kernel.  Only valid for bits = 2, 4, 8
     """
 
-    assert bits in [2, 4, 8], "Only 2, 4, 8-bit GPTQ quantization is supported"
     num_groups = scales.shape[0]
     outfeatures = scales.shape[1]
     infeatures = g_idx.shape[0]
@@ -136,7 +112,7 @@ def dequant248(qweight, scales, qzeros, g_idx, bits, maxq=None):
     out = torch.empty((infeatures, outfeatures), device="cuda", dtype=torch.float16)
     numels = out.numel()
     maxq = 2**bits - 1 if maxq is None else maxq
-    grid = lambda meta: (triton.cdiv(numels, meta["X_BLOCK"]),)
+    grid = lambda meta: (triton.cdiv(numels, meta["X_BLOCK"]),)  # noqa: E731
 
     dequant_kernel_248[grid](
         g_idx,
@@ -151,3 +127,35 @@ def dequant248(qweight, scales, qzeros, g_idx, bits, maxq=None):
         num_groups=num_groups,
     )
     return out
+
+
+def quant_matmul_248(
+    input, qweight, scales, qzeros, g_idx, bits, maxq=None, transpose=False
+):
+    W = dequant248(qweight, scales, qzeros, g_idx, bits, maxq=maxq)
+    if transpose:
+        return input @ W.t()
+    return input @ W
+
+
+class QuantLinearFunction(torch.autograd.Function):
+    @staticmethod
+    @custom_fwd
+    def forward(ctx, input, qweight, scales, qzeros, g_idx, bits, maxq):
+        output = quant_matmul_248(input, qweight, scales, qzeros, g_idx, bits, maxq)
+        ctx.save_for_backward(qweight, scales, qzeros, g_idx)
+        ctx.bits, ctx.maxq = bits, maxq
+        return output
+
+    @staticmethod
+    @custom_bwd
+    def backward(ctx, grad_output):
+        qweight, scales, qzeros, g_idx = ctx.saved_tensors
+        bits, maxq = ctx.bits, ctx.maxq
+        grad_input = None
+
+        if ctx.needs_input_grad[0]:
+            grad_input = quant_matmul_248(
+                grad_output, qweight, scales, qzeros, g_idx, bits, maxq, transpose=True
+            )
+        return grad_input, None, None, None, None, None, None

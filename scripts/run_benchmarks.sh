@@ -137,3 +137,5 @@ PYTHONPATH=. \
         'error_messages' \
         'acceleration_framework_config_file'
 
+PYTHONPATH=. \
+    python $WORKING_DIR/compare_with_reference.py --result_dir $RESULT_DIR
