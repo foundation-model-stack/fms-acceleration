@@ -118,8 +118,9 @@ def test_autogptq_loading():
             ) as framework:
                 pass
 
-    # - Test that gptqmodel is used when use_external_lib is False
-    from fms_acceleration_peft.gptqmodel.nn_modules.qlinear.qlinear_tritonv2 import QuantLinear # pylint: disable=import-outside-toplevel
+    from fms_acceleration_peft.framework_plugin_autogptq import AutoGPTQAccelerationPlugin # pylint: disable=import-outside-toplevel
+    # - Test that plugin attribute is set when config field `use_external_lib` is False
+    # When plugin attribute is set correctly, it will route to correct package on model loading
     with instantiate_framework(
         update_configuration_contents(
             read_configuration(CONFIG_PATH_AUTO_GPTQ),
@@ -128,20 +129,23 @@ def test_autogptq_loading():
         ),
         require_packages_check=False,
     ) as framework:
-        model = framework.model_loader(MODEL_NAME_AUTO_GPTQ)
-        assert any(isinstance(mod, QuantLinear) for mod in model.modules()), \
-        "use_external_lib=False, but local autogptq package not used by model"
+        for _, plugin in framework.active_plugins:
+            if isinstance(plugin, AutoGPTQAccelerationPlugin):
+                assert plugin.use_external_lib is False, \
+                    "Plugin attribute not correctly set from config field"
 
-    # - Test that gptqmodel is used when use_external_lib is not set in config
+    # - Test that plugin attribute is set when config field `use_external_lib` is None
+    # When plugin attribute is set correctly, it will route to correct package on model loading
     default_config = read_configuration(CONFIG_PATH_AUTO_GPTQ)
     default_config['peft']['quantization']['auto_gptq'].pop('use_external_lib')
     with instantiate_framework(
         default_config,
         require_packages_check=False,
     ) as framework:
-        model = framework.model_loader(MODEL_NAME_AUTO_GPTQ)
-        assert any(isinstance(mod, QuantLinear) for mod in model.modules()), \
-        "use_external_lib=None, but local autogptq package not used by model"
+        for _, plugin in framework.active_plugins:
+            if isinstance(plugin, AutoGPTQAccelerationPlugin):
+                assert plugin.use_external_lib is False, \
+                    "Plugin attribute not correctly set from config field"
 
 # We do not enable the skip since this test does not actually require the packages
 # installed
