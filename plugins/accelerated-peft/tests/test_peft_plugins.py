@@ -28,7 +28,7 @@ from fms_acceleration.utils import (
 import pytest
 from unittest.mock import patch
 
-MODEL_NAME = "TheBloke/TinyLlama-1.1B-Chat-v0.3-GPTQ"
+MODEL_NAME_AUTO_GPTQ = "TheBloke/TinyLlama-1.1B-Chat-v0.3-GPTQ"
 
 # instantiate_fromwork will handle registering and activating AutoGPTQAccelerationPlugin
 
@@ -94,6 +94,9 @@ def test_autogptq_loading():
         return False
 
     # - Test that error is thrown when use_external_lib is True but no package found.
+    # 1. mock import function `_is_package_available` to return autogptq not available
+    # 2. instantiate the framework with the plugin
+    # 3. check when using external package and it is not available, an AssertionError is thrown
     with pytest.raises(
         AssertionError,
         match = "Unable to use external library, auto_gptq module not found. \
@@ -125,9 +128,20 @@ def test_autogptq_loading():
         ),
         require_packages_check=False,
     ) as framework:
-        model = framework.model_loader(MODEL_NAME)
-        assert any(isinstance(mod, QuantLinear) for mod in model.modules()), '''
-        use_external_lib=False, but local autogptq package not used by model'''
+        model = framework.model_loader(MODEL_NAME_AUTO_GPTQ)
+        assert any(isinstance(mod, QuantLinear) for mod in model.modules()), \
+        "use_external_lib=False, but local autogptq package not used by model"
+
+    # - Test that gptqmodel is used when use_external_lib is not set in config
+    default_config = read_configuration(CONFIG_PATH_AUTO_GPTQ)
+    default_config['peft']['quantization']['auto_gptq'].pop('use_external_lib')
+    with instantiate_framework(
+        default_config,
+        require_packages_check=False,
+    ) as framework:
+        model = framework.model_loader(MODEL_NAME_AUTO_GPTQ)
+        assert any(isinstance(mod, QuantLinear) for mod in model.modules()), \
+        "use_external_lib=False, but local autogptq package not used by model"
 
 # We do not enable the skip since this test does not actually require the packages
 # installed

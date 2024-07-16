@@ -16,21 +16,33 @@ Plugin | Description | Depends | Loading | Augmentation | Callbacks
 - `triton_v2` kernels are not yet properly integrated into huggingface optimum.
 - `triton_v2` kernels are [the only 4bit kernels that work for training](https://github.com/AutoGPTQ/AutoGPTQ/issues/633).
 
+## GPTQ-LORA's AutoGPTQ - Current Implementation vs Legacy Implementation
+
+GPTQ-LORA depends on an AutoGPTQ backend to run. There are 2 backend options
+
+1. Current Implementation
+    - This is an extracted local subset from [ModelCloud's](https://github.com/ModelCloud/GPTQModel) refactored fork.
+    - It removes redundant code to simplify build and installation of the plugin
+2. Legacy Implementation
+    - This requires building the package from the official AutoGPTQ repository
+    - To replicate this implementation, follow the installation below
+
+        - The legacy implementation of GPTQ-LORA uses an external AutoGPTQ package, you must ensure the specific commit is installed
+            ```
+            pip install git+https://github.com/AutoGPTQ/AutoGPTQ.git@ea829c7bbe83561c2b1de26795b6592992373ef7
+            ```
+        - To construct the plugin, in the configuration object that is passed to the plugin - set `use_external_lib: True` (otherwise defaults to use the local AutoGPTQ package)
+        ```
+            peft:
+            quantization: 
+                auto_gptq:
+                kernel: triton_v2
+                from_quantized: True
+                use_external_lib: True
+        ```
+
 ## Known Issues
 
 - Models with sliding windows (e.g., Mistral, Mixtral) will have [memory and throughout issues](https://github.com/huggingface/transformers/issues/30461).
-- GPTQ-LORA sometimes observed to have `nan` grad norms in the begining of training, but training pr.
+- GPTQ-LORA sometimes observed to have `nan` grad norms in the begining of training, but training proceeds well otherwise.
 - `low_cpu_mem_usage` temporarily disabled for AutoGPTQ until bug with `make_sure_no_tensor_in_meta_device` is resolved.
-- The legacy implementation of GPTQ-LORA uses an external AutoGPTQ package, you must ensure the package is installed
-    ```
-    pip install git+https://github.com/AutoGPTQ/AutoGPTQ.git@ea829c7bbe83561c2b1de26795b6592992373ef7
-    ```
-- To construct the plugin with the legacy implementation that uses an external AutoGPTQ package, in the configuration object that is passed to the plugin - set `use_external_lib = True` (default is set to False to use the local AutoGPTQ package)
-```
-    peft:
-    quantization: 
-        auto_gptq:
-        kernel: triton_v2
-        from_quantized: True
-        use_external_lib: True
-```
