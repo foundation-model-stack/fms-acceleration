@@ -28,7 +28,6 @@ from peft import LoraConfig, prepare_model_for_kbit_training
 from peft.tuners.lora.model import LoraModel
 from transformers import AutoModelForCausalLM, TrainingArguments
 from transformers.modeling_utils import is_fsdp_enabled
-from transformers.utils.import_utils import _is_package_available
 import torch
 import torch.distributed
 
@@ -37,7 +36,7 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
 
     require_packages = []
 
-    def __init__(self, configurations: Dict[str, Dict], use_external_lib: bool = False):
+    def __init__(self, configurations: Dict[str, Dict]):
         super().__init__(configurations)
 
         # just do checking, nothing must to configure at this point
@@ -48,12 +47,21 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
         self._check_config_equal(
             key="peft.quantization.auto_gptq.from_quantized", value=True
         )
-        self.use_external_lib = use_external_lib
+        self.use_external_lib = self._check_config_and_maybe_check_values(
+            key="peft.quantization.auto_gptq.use_external_lib",
+            values=[True, False],
+            default=False,
+        )
 
         if self.use_external_lib:
+            from transformers.utils.import_utils import _is_package_available # pylint: disable=import-outside-toplevel
             assert (
                 _is_package_available("auto_gptq") is True
-            ), "Unable to use external library, autogptq module not found."
+            ),  (
+               "Unable to use external library, auto_gptq module not found. "
+                "Refer to README for installation instructions  "
+                "as a specific version might be required."
+            )
 
     def model_loader(self, model_name: str, **kwargs):
         # guarded imports

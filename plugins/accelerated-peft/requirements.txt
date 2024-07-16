@@ -10,4 +10,6 @@ bitsandbytes
 # Used to manage the thread limit in functions for converting old 
 # GPTQ models to new GPTQ model format that support symmetrical=False
 # https://github.com/AutoGPTQ/AutoGPTQ/pull/640
-threadpoolctl
+threadpoolctl >= 3.5.0
+
+datasets >= 2.20.0

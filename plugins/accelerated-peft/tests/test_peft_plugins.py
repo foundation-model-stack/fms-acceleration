@@ -26,6 +26,9 @@ from fms_acceleration.utils import (
     update_configuration_contents,
 )
 import pytest
+from unittest.mock import patch
+
+MODEL_NAME_AUTO_GPTQ = "TheBloke/TinyLlama-1.1B-Chat-v0.3-GPTQ"
 
 # instantiate_fromwork will handle registering and activating AutoGPTQAccelerationPlugin
 
@@ -86,6 +89,63 @@ def test_configure_gptq_plugin():
 
         e.match(f"AutoGPTQAccelerationPlugin: Value at '{key}'")
 
+def test_autogptq_loading():
+    "Test for correctness of autogptq loading logic"
+    def autogptq_unavailable(package_name: str):
+        return False
+
+    # - Test that error is thrown when use_external_lib is True but no package found.
+    # 1. mock import function `_is_package_available` to return autogptq not available
+    # 2. instantiate the framework with the plugin
+    # 3. check when using external package and it is not available, an AssertionError is thrown
+    with pytest.raises(
+        AssertionError,
+        match = "Unable to use external library, auto_gptq module not found. "
+        "Refer to README for installation instructions  as a specific version might be required."
+    ):
+        with patch(
+                    "transformers.utils.import_utils."
+                    "_is_package_available",
+                    autogptq_unavailable,
+        ):
+            with instantiate_framework(
+                update_configuration_contents(
+                    read_configuration(CONFIG_PATH_AUTO_GPTQ),
+                    "peft.quantization.auto_gptq.use_external_lib",
+                    True,
+                ),
+                require_packages_check=False,
+            ) as framework:
+                pass
+
+    from fms_acceleration_peft.framework_plugin_autogptq import AutoGPTQAccelerationPlugin # pylint: disable=import-outside-toplevel
+    # - Test that plugin attribute is set when config field `use_external_lib` is False
+    # When plugin attribute is set correctly, it will route to correct package on model loading
+    with instantiate_framework(
+        update_configuration_contents(
+            read_configuration(CONFIG_PATH_AUTO_GPTQ),
+            "peft.quantization.auto_gptq.use_external_lib",
+            False,
+        ),
+        require_packages_check=False,
+    ) as framework:
+        for _, plugin in framework.active_plugins:
+            if isinstance(plugin, AutoGPTQAccelerationPlugin):
+                assert plugin.use_external_lib is False, \
+                    "Plugin attribute not correctly set from config field"
+
+    # - Test that plugin attribute is set when config field `use_external_lib` is None
+    # When plugin attribute is set correctly, it will route to correct package on model loading
+    default_config = read_configuration(CONFIG_PATH_AUTO_GPTQ)
+    default_config['peft']['quantization']['auto_gptq'].pop('use_external_lib')
+    with instantiate_framework(
+        default_config,
+        require_packages_check=False,
+    ) as framework:
+        for _, plugin in framework.active_plugins:
+            if isinstance(plugin, AutoGPTQAccelerationPlugin):
+                assert plugin.use_external_lib is False, \
+                    "Plugin attribute not correctly set from config field"
 
 # We do not enable the skip since this test does not actually require the packages
 # installed

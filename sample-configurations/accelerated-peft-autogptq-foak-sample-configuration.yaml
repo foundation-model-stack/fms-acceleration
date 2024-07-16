@@ -22,6 +22,11 @@ plugins:
           # If true, then will already expect quantized checkpoint 
           # passed into TrainingArguments.model_name_or_path
         from_quantized: true
+
+          # Setting to false, will create GPTQ-LORA using the local autogptq package.
+          # if true, will create legacy implementation of GPTQ-LORA using external 
+          # `auto_gptq`. Refer to README for installation instructions
+        use_external_lib: false
       fused_ops_and_kernels:
 
         # load unsloth optimizations for these 4bit base layer weights.

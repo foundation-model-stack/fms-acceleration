@@ -148,7 +148,9 @@ class AccelerationPlugin:
     ):
         return []
 
-    def _check_config_and_maybe_check_values(self, key: str, values: List[Any] = None):
+    def _check_config_and_maybe_check_values(
+        self, key: str, values: List[Any] = None, default: Any = None
+    ):
         t = _trace_key_path(self.configurations, key)
 
         if values is not None:  # if there is something to check against
@@ -162,17 +164,22 @@ class AccelerationPlugin:
                 t = list(t.keys())[0]  # otherwise take the first value
 
             if t not in values:
-                raise AccelerationPluginConfigError(
-                    f"{self.__class__.__name__}: Value at '{key}' was '{t}'. "
-                    "Not found in expected set '{values}'."
-                )
+                if default is None:
+                    raise AccelerationPluginConfigError(
+                        f"{self.__class__.__name__}: Value at '{key}' was '{t}'. "
+                        f"Not found in expected set '{values}'."
+                    )
+                # otherwise if there is a default, then take it
+                t = default
         else:
-            # if nothing to check against, we still want to ensure its a valid
-            # configuration key
+            # if nothing to check against, and no default, we still
+            # need to ensure its a valid configuration key
             if t is None:
-                raise AccelerationPluginConfigError(
-                    f"{self.__class__.__name__}: '{key}' was not a valid configuration config"
-                )
+                if default is None:
+                    raise AccelerationPluginConfigError(
+                        f"{self.__class__.__name__}: '{key}' was not a valid configuration config"
+                    )
+                t = default
 
         return t
 

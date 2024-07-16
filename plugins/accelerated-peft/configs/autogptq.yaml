@@ -17,3 +17,8 @@ peft:
       # If true, then will already expect quantized checkpoint 
       # passed into TrainingArguments.model_name_or_path
       from_quantized: True
+
+      # Setting to false, will create GPTQ-LORA using the local autogptq package.
+      # if true, will create legacy implementation of GPTQ-LORA using external 
+      # `auto_gptq`. Refer to README for installation instructions
+      use_external_lib: False
