@@ -60,6 +60,17 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
             values=["huggingface-injected"],
         )
 
+        self._dropout_method = self._check_config_and_maybe_check_values(
+            key="training.attention.padding_free.dropout_method",
+            values=["none", "residual"],
+            default="none"
+        )
+
+        self._dropout_p = self._check_config_and_maybe_check_values(
+            key="training.attention.padding_free.dropout_value",
+            default=.0,
+        )
+
     @property
     def requires_agumentation(self):
         return True
@@ -86,9 +97,18 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
         # - check on the tensors required for fast_rms_layernorm
         ModelPatcher.register(
             ModelPatcherRule(
-                rule_id="llama-pad-free",
+                rule_id=(
+                    "llama-pad-free" if self._dropout_method == 'none'
+                    else f"llama-pad-free-dropout-{self._dropout_method}-{self._dropout_p}"
+                ),
                 trigger=ModelPatcherTrigger(check=LlamaFlashAttention2),
-                forward_builder=partial(build_fa_forward, causal=True),
+                forward_builder=partial(
+                    build_fa_forward, causal=True,
+                    dropout=(
+                        self._dropout_p if self._dropout_method != 'none'
+                        else None
+                    )
+                ),
             ),
         )
 

@@ -20,7 +20,6 @@ from fms_acceleration import AccelerationPlugin
 from peft import LoraConfig
 from transformers import TrainingArguments
 import torch
-from types import MethodType
 
 # this will produce a dropout on the MLP forward
 def build_mlp_dropout_forward(
@@ -81,7 +80,7 @@ class MLPDropoutAccelerationPlugin(AccelerationPlugin):
         # - check on the tensors required for fast_rms_layernorm
         ModelPatcher.register(
             ModelPatcherRule(
-                rule_id="llama-mlp-dropout",
+                rule_id=f"llama-mlp-dropout-{self._p}",
                 trigger=ModelPatcherTrigger(check=LlamaMLP),
                 forward_builder_args=['dropout'],
                 forward_builder=build_mlp_dropout_forward,

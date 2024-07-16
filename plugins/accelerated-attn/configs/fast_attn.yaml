@@ -23,6 +23,9 @@ training:
     padding_free: 
       method: "huggingface-injected"
 
+      dropout_method: "residual"
+      dropout_value: 0.1
+
   mlp: 
     dropout: 
       method: "residual"
