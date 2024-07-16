@@ -57,9 +57,11 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
             from transformers.utils.import_utils import _is_package_available # pylint: disable=import-outside-toplevel
             assert (
                 _is_package_available("auto_gptq") is True
-            ), "Unable to use external library, auto_gptq module not found. \
-                Refer to README for installation instructions \
-                as a specific version might be required."
+            ),  (
+               "Unable to use external library, auto_gptq module not found. "
+                "Refer to README for installation instructions  "
+                "as a specific version might be required."
+            )
 
     def model_loader(self, model_name: str, **kwargs):
         # guarded imports
