@@ -20,19 +20,21 @@ def prepare_fa2_from_position_ids(query, key, value, position_ids, query_length)
 
 # we can replace with the model patcher eventually
 def build_fa_forward(
-    attention: torch.nn.Module, causal: bool = True, dropout: float = .1
+    attention: torch.nn.Module, causal: bool = True, dropout: float = None 
 ):
     # assert not hasattr(self, '_position_ids'), "cannot patch fa attention"
 
     position_ids: torch.Tensor = None
     old_forward = attention.forward
-    attention.dropout = torch.nn.Dropout(p=dropout)
+    if dropout is not None:
+        attention.dropout = torch.nn.Dropout(p=dropout)
 
     def forward(self, *args, **kwargs):
         nonlocal position_ids
         position_ids = kwargs['position_ids']
         out, *others = old_forward(*args, **kwargs)
-        out = self.dropout(out)
+        if dropout is not None:
+            out = self.dropout(out)
         return out, *others
 
     def _flash_attention_forward(
