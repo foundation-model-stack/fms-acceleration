@@ -169,9 +169,8 @@ class AccelerationPlugin:
                         f"{self.__class__.__name__}: Value at '{key}' was '{t}'. "
                         f"Not found in expected set '{values}'."
                     )
-                else:
-                    # otherwise if there is a default, then take it
-                    t = default
+                # otherwise if there is a default, then take it
+                t = default
         else:
             # if nothing to check against, and no default, we still
             # need to ensure its a valid configuration key
@@ -180,9 +179,7 @@ class AccelerationPlugin:
                     raise AccelerationPluginConfigError(
                         f"{self.__class__.__name__}: '{key}' was not a valid configuration config"
                     )
-                else:
-                    # otherwise if there is a default, then take it
-                    t = default
+                t = default
 
         return t
 

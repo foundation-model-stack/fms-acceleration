@@ -48,7 +48,7 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
             key="peft.quantization.auto_gptq.from_quantized", value=True
         )
         self.use_external_lib = self._check_config_and_maybe_check_values(
-            key="peft.quantization.auto_gptq.use_external_lib", 
+            key="peft.quantization.auto_gptq.use_external_lib",
             values=[True, False],
             default=False,
         )

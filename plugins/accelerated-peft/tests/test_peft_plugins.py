@@ -90,6 +90,7 @@ def test_configure_gptq_plugin():
         e.match(f"AutoGPTQAccelerationPlugin: Value at '{key}'")
 
 def test_autogptq_loading():
+    "Test for correctness of autogptq loading logic"
     def autogptq_unavailable(package_name: str):
         return False
 
@@ -99,9 +100,8 @@ def test_autogptq_loading():
     # 3. check when using external package and it is not available, an AssertionError is thrown
     with pytest.raises(
         AssertionError,
-        match = "Unable to use external library, auto_gptq module not found. \
-                Refer to README for installation instructions \
-                as a specific version might be required."
+        match = "Unable to use external library, auto_gptq module not found. "
+        "Refer to README for installation instructions  as a specific version might be required."
     ):
         with patch(
                     "transformers.utils.import_utils."
@@ -141,7 +141,7 @@ def test_autogptq_loading():
     ) as framework:
         model = framework.model_loader(MODEL_NAME_AUTO_GPTQ)
         assert any(isinstance(mod, QuantLinear) for mod in model.modules()), \
-        "use_external_lib=False, but local autogptq package not used by model"
+        "use_external_lib=None, but local autogptq package not used by model"
 
 # We do not enable the skip since this test does not actually require the packages
 # installed
