@@ -40,7 +40,7 @@ def log_patch_summary(
     # this is a guarded import, because the model rule registration
     # does not need to be loaded unless patch_model is required
     # Local
-    from .models.model_patcher import (  # pylint: disable=import-outside-toplevel
+    from fms_acceleration.model_patcher import (  # pylint: disable=import-outside-toplevel
         patch_model_summary,
     )
 
@@ -135,14 +135,9 @@ class FastQuantizedPeftAccelerationPlugin(AccelerationPlugin):
             model.dtype == torch.float16 and train_args.fp16
         ), "need to run in fp16 mixed precision or load model in fp16"
 
-        # this is a guarded import, because the model rule registration
-        # does not need to be loaded unless patch_model is required
-        # Local
-        from .models.model_patcher import (  # pylint: disable=import-outside-toplevel
-            patch_model,
-        )
-
-        model = patch_model(model, base_type=self._base_layer)
+        # wrapper function to register foak patches
+        from fms_acceleration_foak.models import load_foak_patches
+        load_foak_patches(base_type = self._base_layer)
         return model, modifiable_args
 
     def get_callbacks_and_ready_for_train(

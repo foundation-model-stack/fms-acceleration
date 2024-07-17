@@ -11,7 +11,7 @@ import pytest  # pylint: disable=import-error
 import torch
 
 # First Party
-from fms_acceleration_foak.models.model_patcher import patch_model
+from fms_acceleration.model_patcher import patch_model
 
 BNB = "bitsandbytes"
 GPTQ = "auto_gptq"
@@ -119,7 +119,7 @@ def model_inputs(seed: int = 42, device: torch.device = "cuda"):
                     0,
                     10000,  # most models should have more than 10K
                     (bs, seq_len),
-                    dtype=torch.int,
+                    dtype=torch.long,
                     device=device,
                 ),
                 None,  # dont pass in position ids for now

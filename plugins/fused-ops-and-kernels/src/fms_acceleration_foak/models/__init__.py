@@ -13,12 +13,15 @@
 # limitations under the License.
 
 # Local
-from .model_patcher import ModelPatcher
+from fms_acceleration.model_patcher import ModelPatcher
+from functools import partial
 
 PATCHES = [".models.llama", ".models.mistral", ".models.mixtral"]
 PLUGIN_PREFIX = "fms_acceleration_foak"
 
 # TODO: remove the need for the prefix
-ModelPatcher.load_patches(
-    [f"{PLUGIN_PREFIX}{postfix}" for postfix in PATCHES],
-)
+def load_foak_patches(base_type):
+    ModelPatcher.load_patches(
+        [f"{PLUGIN_PREFIX}{postfix}" for postfix in PATCHES],
+    )
+    ModelPatcher.patch = partial(ModelPatcher.patch, base_type=base_type)

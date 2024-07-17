@@ -146,6 +146,9 @@ class AccelerationPlugin:
     def get_callbacks_and_ready_for_train(
         self, model: torch.nn.Module = None, accelerator: Accelerator = None
     ):
+        # Finally apply all registered patches to the model
+        from .model_patcher import ModelPatcher
+        ModelPatcher.patch(model)
         return []
 
     def _check_config_and_maybe_check_values(
