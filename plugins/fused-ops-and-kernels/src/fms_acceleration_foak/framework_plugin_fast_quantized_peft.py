@@ -21,32 +21,8 @@ from fms_acceleration import AccelerationPlugin
 from peft import LoraConfig
 from peft.tuners.lora.layer import LoraLayer
 from transformers import TrainingArguments
-from transformers.utils import logging
 import torch
 import torch.distributed as dist
-
-# want to use the transformers logger, but a bit of pain
-logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-logger.setLevel(logging._get_default_logging_level())
-logger.addHandler(logging._default_handler)
-
-
-def log_patch_summary(
-    logging_func: Callable = None,
-):
-    if logging_func is None:
-        logging_func = print
-
-    # this is a guarded import, because the model rule registration
-    # does not need to be loaded unless patch_model is required
-    # Local
-    from fms_acceleration.model_patcher import (  # pylint: disable=import-outside-toplevel
-        patch_model_summary,
-    )
-
-    for line in patch_model_summary().split("\n"):
-        logging_func(line)
-
 
 # consider moving this somewhere else later
 def lora_adapters_switch_ddp_from_fsdp(modules, fsdp_plugin):
@@ -143,12 +119,6 @@ class FastQuantizedPeftAccelerationPlugin(AccelerationPlugin):
     def get_callbacks_and_ready_for_train(
         self, model: torch.nn.Module = None, accelerator=None
     ):
-
-        # if this is moved to framework, it can be handled as the same way as
-        # log_initialization_message
-        # log the patch summary
-        if accelerator is not None and accelerator.is_main_process:
-            log_patch_summary(logging_func=logger.info)
 
         callbacks = []
         if (

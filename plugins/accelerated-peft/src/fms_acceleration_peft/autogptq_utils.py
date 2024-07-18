@@ -56,7 +56,7 @@ def load_fsdp_gptq_patch(target_module, torch_dtype):
     # Register patch
     ModelPatcher.register(
         ModelPatcherRule(
-            rule_id="autogptq_distributed_tensors_as_parameters",
+            rule_id="autogptq_patch_tensors_as_float_parameters",
             trigger=ModelPatcherTrigger(check=target_module),
             forward_builder = build_patch_to_view_tensor_to_parameter_for_fsdp_gptq,
             forward_builder_args=["torch_dtype"],
