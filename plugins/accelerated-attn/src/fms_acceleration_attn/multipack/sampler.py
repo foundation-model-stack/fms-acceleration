@@ -33,9 +33,6 @@ import numba
 import numpy as np
 import torch.distributed as dist
 
-# First Party
-from instructlab.training.utils import make_collate_fn
-
 
 def guess_starting_avg_padding(base_avg, goal, num_gpus, grad_accum, sorted_lengths):
     """
@@ -88,7 +85,6 @@ def simulate_buckets(
         (base_avg + addition) * ((goal / num_gpus) / grad_accum)
     )
 
-    collate_fn = make_collate_fn(pad_id, is_granite=False, max_batch_len=max_batch_len)
     rank = int(os.environ["RANK"])
     world_size = int(os.environ["WORLD_SIZE"])
 
@@ -100,11 +96,12 @@ def simulate_buckets(
         seed=seed,
         padding=True,
     )
+    # NOTE: removed the collate_fn here, as it should not be
+    # required just to take the length
     simulation_loader = DataLoader(
         dataset,
         batch_sampler=sampler,
         num_workers=8,
-        collate_fn=collate_fn,
     )
 
     avg_ebs = len(dataset) / len(simulation_loader)
