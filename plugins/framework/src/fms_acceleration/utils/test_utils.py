@@ -21,6 +21,7 @@ from tempfile import NamedTemporaryFile
 from typing import Any, Callable, Dict, List, Set, Tuple, Type
 
 # Third Party
+from torch.nn import CrossEntropyLoss
 import torch
 import yaml
 
@@ -180,3 +181,13 @@ def dummy_augmentation(self, model, train_args, modifiable_args):
 def dummy_custom_loader(self, model_name, **kwargs):
     "dummy custom loader returning dummy model"
     return create_noop_model_with_archs(archs=["DummyModel"])  #
+
+
+class DummyModule(torch.nn.Module):
+    def __init__(self, hidden_size, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.linear = torch.nn.Linear(hidden_size, hidden_size)
+        self.loss_fn = CrossEntropyLoss()
+
+    def forward(self, X):
+        return self.linear(X)

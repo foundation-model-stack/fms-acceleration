@@ -147,7 +147,7 @@ class AccelerationPlugin:
         self, model: torch.nn.Module = None, accelerator: Accelerator = None
     ):
         # Finally apply all registered patches to the model
-        from .model_patcher import ModelPatcher
+        from .model_patcher import ModelPatcher # pylint: disable=import-outside-toplevel
         ModelPatcher.patch(model)
         return []
 

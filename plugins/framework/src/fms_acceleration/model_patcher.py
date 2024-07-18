@@ -27,7 +27,7 @@ import torch
 # ------------------------ helpers -----------------------
 
 
-def _patch_target_module(
+def patch_target_module(
     to_patch: str,
     replace_with: Any,
     target_module: str = None,
@@ -310,7 +310,7 @@ class ModelPatcher:
         # handle those with reload first
         for rule in _with_reload + _no_reload:
             _target, _object, _reload = rule.import_and_maybe_reload
-            _patch_target_module(_target, _object, _reload)
+            patch_target_module(_target, _object, _reload)
             ModelPatcher.history.append(
                 ModelPatcherHistory(
                     instance=id(model),

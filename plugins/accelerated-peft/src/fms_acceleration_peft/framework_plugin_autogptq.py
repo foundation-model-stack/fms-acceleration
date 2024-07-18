@@ -24,7 +24,7 @@ import os
 
 # Third Party
 from fms_acceleration import AccelerationPlugin
-from fms_acceleration.model_patcher import _patch_target_module
+from fms_acceleration.model_patcher import patch_target_module
 from peft import LoraConfig, prepare_model_for_kbit_training
 from peft.tuners.lora.model import LoraModel
 from transformers import AutoModelForCausalLM, TrainingArguments
@@ -143,7 +143,7 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
 
                 # We patch `make_sure_no_tensor_in_meta_device`
                 # from autogptq to avoid errors on models without bias
-                _patch_target_module(
+                patch_target_module(
                     to_patch="auto_gptq.modeling._utils.make_sure_no_tensor_in_meta_device",
                     replace_with=make_sure_no_tensor_in_meta_device,
                     target_module="auto_gptq.modeling._base",
