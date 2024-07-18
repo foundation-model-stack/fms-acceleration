@@ -20,6 +20,7 @@ from fms_acceleration import AccelerationPlugin
 from peft import LoraConfig
 from transformers import TrainingArguments
 from accelerate import Accelerator
+# from accelerate.data_loader import DataLoaderShard
 import torch
 from transformers.utils import logging
 
@@ -184,6 +185,11 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
             # have to update the accelerator gradient state also
             # - because the train args update is late
             accelerator.gradient_state.plugin_kwargs['num_steps'] = grad_accum
+            if accelerator.state.deepspeed_plugin:
+                ds_config = accelerator.state.deepspeed_plugin.hf_ds_config.config
+                ds_config['gradient_accumulation_steps'] = grad_accum
+                ds_config['train_micro_batch_size_per_gpu'] = batch_size_per_device
+                ds_config['train_batch_size'] = batch_size_per_device * grad_accum * train_args.world_size
 
             sampler = MultipackDistributedBatchSampler(
                 batch_max_length=packing_max_batch_len,
@@ -194,12 +200,26 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
                 padding=is_padding,
             )
 
-            return DataLoader(
+            # wanted to use this but its abit annoying, 
+            # from accelerate.data_loader import DataLoaderShard
+            # - so will just patch for now, but lets have a better
+            #   solution later
+
+            dataloader = DataLoader(
                 dataset,
                 batch_sampler=sampler,
                 num_workers=num_workers,
                 collate_fn=collate_fn,
             )
+
+            # patch a set epoch function to delegate the call to the 
+            # batch_sampler
+            def _set_epoch(self, epoch: int):
+                self.batch_sampler.set_epoch(epoch)
+
+            dataloader.set_epoch = MethodType(_set_epoch, dataloader)
+
+            return dataloader
 
         # FIXME: move this somewhere
         accelerator.even_batches = False
