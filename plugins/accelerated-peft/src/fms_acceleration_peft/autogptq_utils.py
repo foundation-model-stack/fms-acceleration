@@ -52,7 +52,7 @@ def build_patch_to_view_tensor_to_parameter_for_fsdp_gptq(
         torch_dtype=torch.int32,  # patch it back to
     )
 
-def load_fsdp_gptq_patch(target_module, torch_dtype):
+def register_tensors_as_parameters_patch_rule(target_module, torch_dtype):
     # Register patch
     ModelPatcher.register(
         ModelPatcherRule(

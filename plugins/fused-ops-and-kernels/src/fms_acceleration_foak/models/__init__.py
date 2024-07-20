@@ -20,7 +20,7 @@ PATCHES = [".models.llama", ".models.mistral", ".models.mixtral"]
 PLUGIN_PREFIX = "fms_acceleration_foak"
 
 # TODO: remove the need for the prefix
-def load_foak_patches(base_type):
+def register_foak_model_patch_rules(base_type):
     ModelPatcher.load_patches(
         [f"{PLUGIN_PREFIX}{postfix}" for postfix in PATCHES],
     )

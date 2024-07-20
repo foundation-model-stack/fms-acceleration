@@ -161,11 +161,11 @@ class ModelPatcherRule:
     ] = None
 
     def __post_init__(self):
-        if (
-            self.forward is not None
-            and self.forward_builder is not None
-            and self.import_and_maybe_reload is not None
-        ):
+        if sum([
+            self.forward is not None,
+            self.forward_builder is not None,
+            self.import_and_maybe_reload is not None,
+        ])>1:
             raise ValueError(
                 f"Rule '{self.rule_id}' must only have only one of forward, "
                 "foward builder, or import_and_maybe_reload, specified."
@@ -305,7 +305,7 @@ class ModelPatcher:
                 elif _target.startswith(module_path):
                     _no_reload.append(rule)
 
-        assert len(_with_reload) <= 1, "cannot have have at most one rule with reload"
+        assert len(_with_reload) <= 1, "can only have at most one rule with reload"
 
         # handle those with reload first
         for rule in _with_reload + _no_reload:

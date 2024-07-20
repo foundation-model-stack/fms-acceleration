@@ -112,8 +112,8 @@ class FastQuantizedPeftAccelerationPlugin(AccelerationPlugin):
         ), "need to run in fp16 mixed precision or load model in fp16"
 
         # wrapper function to register foak patches
-        from fms_acceleration_foak.models import load_foak_patches
-        load_foak_patches(base_type = self._base_layer)
+        from fms_acceleration_foak.models import register_foak_model_patch_rules
+        register_foak_model_patch_rules(base_type = self._base_layer)
         return model, modifiable_args
 
     def get_callbacks_and_ready_for_train(

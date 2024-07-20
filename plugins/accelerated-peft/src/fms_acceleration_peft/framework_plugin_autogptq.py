@@ -195,8 +195,11 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
             and os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true"
         ):
             # register FSDP patch
-            from .autogptq_utils import load_fsdp_gptq_patch
-            load_fsdp_gptq_patch(target_module = QuantLinear, torch_dtype = torch_dtype)
+            from .autogptq_utils import register_tensors_as_parameters_patch_rule
+            register_tensors_as_parameters_patch_rule(
+                target_module=QuantLinear, 
+                torch_dtype=torch_dtype,
+            )
 
             # replace
             AutoModelForCausalLM.from_config = _old_from_config
