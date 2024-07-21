@@ -19,41 +19,22 @@ from typing import Dict, Tuple
 from fms_acceleration import AccelerationPlugin
 from peft import LoraConfig
 from transformers import TrainingArguments
-import torch
 
-# this will produce a dropout on the forward
-def build_dropout_forward(
-    module: torch.nn.Module, 
-    dropout: float = 0.1,
-):
-    module.dropout = torch.nn.Dropout(p=dropout)
-    old_forward = module.forward
+from .framework_plugin_mlp_dropout import build_dropout_forward
 
-    def forward(self, *args, **kwargs):
-        out = old_forward(*args, **kwargs)
-        out = self.dropout(out)
-        return out 
-        
-    # do this replace
-    return forward
-
-class MLPDropoutAccelerationPlugin(AccelerationPlugin):
+class EmbeddingDropoutAccelerationPlugin(AccelerationPlugin):
 
 
     def __init__(self, configurations: Dict[str, Dict]):
         super().__init__(configurations)
 
-        # the fast attention requires knowledge about the 
-        # data collator.
-        # - currently we do not have a data collator specific plugin
-        # - so it requires knowledge about the dataloader
         self._method = self._check_config_and_maybe_check_values(
-            key="training.mlp.dropout.method",
-            values=["residual"],
+            key="training.embedding.dropout.method",
+            values=["inputs"],
         )
 
         self._p = self._check_config_and_maybe_check_values(
-            key="training.mlp.dropout.value",
+            key="training.embedding.dropout.value",
         )
 
     @property
@@ -73,15 +54,15 @@ class MLPDropoutAccelerationPlugin(AccelerationPlugin):
             ModelPatcherRule,
             ModelPatcherTrigger,
         )
-        from transformers.models.llama.modeling_llama import LlamaMLP
+        from torch.nn import Embedding
 
         # TODO: have a generic version of this rule
         # - do regex on RMSNorm class name
         # - check on the tensors required for fast_rms_layernorm
         ModelPatcher.register(
             ModelPatcherRule(
-                rule_id=f"llama-mlp-dropout-{self._p}",
-                trigger=ModelPatcherTrigger(check=LlamaMLP),
+                rule_id=f"embedding-dropout-{self._p}",
+                trigger=ModelPatcherTrigger(check=Embedding),
                 forward_builder_args=['dropout'],
                 forward_builder=build_dropout_forward,
             ),
@@ -91,8 +72,8 @@ class MLPDropoutAccelerationPlugin(AccelerationPlugin):
 
 # register
 AccelerationPlugin.register_plugin(
-    MLPDropoutAccelerationPlugin,
+    EmbeddingDropoutAccelerationPlugin,
     configuration_and_paths=[
-        "training.mlp.dropout",
+        "training.embedding.dropout",
     ],
 )
