@@ -30,3 +30,8 @@ training:
     dropout: 
       method: "residual"
       value: 0.1
+
+  embedding: 
+    dropout: 
+      method: "inputs"
+      value: 0.1
