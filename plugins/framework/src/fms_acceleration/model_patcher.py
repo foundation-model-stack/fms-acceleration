@@ -88,7 +88,7 @@ class ModelPatcherTrigger:
     def is_triggered(
         self,
         module: torch.nn.Module,
-        module_name: str,
+        module_name: str = None,
     ):
         "Check if trigger returns truthful."
 
@@ -111,12 +111,28 @@ class ModelPatcherTrigger:
         return False
 
     def __post_init__(self):
+        # Ensure `check` type conforms to accepted argument type, 
+        # technically Module is also a callable
+        assert isinstance(self.check, torch.nn.Module) or callable(self.check), \
+            "`check` arg type needs to be torch.nn.Module or Callable"
 
+        # if type is not specified, can infer from check argument as either Module or Callable
         if self.type is None:
             if inspect.isclass(self.check) and issubclass(self.check, torch.nn.Module):
                 self.type = ModelPatcherTriggerType.module
             else:
                 self.type = ModelPatcherTriggerType.callable
+        else:
+            # if type is specified, ensure `check` type conforms to the specified enum
+            if self.type==ModelPatcherTriggerType.module:
+                assert self.check is torch.nn.Module, \
+                    "type argument passed but `check` argument does not match type specified"
+            elif self.type==ModelPatcherTriggerType.callable:
+                # ensure that it is not a torch.nn.Module but still a callable
+                assert self.check is not torch.nn.Module and callable(self.check), \
+                    "type argument passed but `check` argument does not match type specified"
+            else:
+                raise NotImplementedError("Invalid ModelPatcherTriggerType")
 
 
 # type for model forward
@@ -471,7 +487,7 @@ def patch_model_summary():
 
 
 def combine_triggers(*triggers: ModelPatcherTrigger, logic: str = "OR"):
-    assert logic == "OR", "only OR logic implemented for combining triggers"
+    assert logic in ["AND", "OR"], "Only `AND`, `OR` logic implemented for combining triggers"
 
     # NOTE: this can be probably simplified
     def _or_logic(*args, **kwargs):
@@ -480,7 +496,17 @@ def combine_triggers(*triggers: ModelPatcherTrigger, logic: str = "OR"):
                 return True
         return False
 
-    return ModelPatcherTrigger(check=_or_logic)
+    def _and_logic(*args, **kwargs):
+        for trig in triggers:
+            if trig.check(*args, **kwargs) is False:
+                return False
+        return True
+
+    _logic = _or_logic
+    if logic == "AND":
+        _logic = _and_logic
+
+    return ModelPatcherTrigger(check=_logic)
 
 
 def combine_functions(*funcs: Callable, logic: str = "APPEND"):

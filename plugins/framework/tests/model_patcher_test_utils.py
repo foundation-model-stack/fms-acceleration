@@ -1,18 +1,12 @@
 import torch
+from typing import Dict, Any
 
-UNPATCHED_RESPONSE = 0
-PATCHED_RESPONSE = 1
-
-class DummyAttribute(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, *args, **kwargs):
-        return UNPATCHED_RESPONSE
-
-class PatchedAttribute(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, *args, **kwargs):
-        return PATCHED_RESPONSE
+def create_dummy_module_with_output_functions(
+    class_name: str,
+    outputs: Dict[str, Any] = None,
+    instantiate = False,
+):
+    cls = type(class_name, (torch.nn.Module,), outputs)
+    if instantiate:
+        return cls()
+    return cls

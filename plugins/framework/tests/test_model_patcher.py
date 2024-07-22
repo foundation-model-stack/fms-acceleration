@@ -26,22 +26,22 @@ from fms_acceleration.model_patcher import (
     ModelPatcherTrigger,
     patch_target_module,
     ModelPatcherTriggerType,
+    ModelPatcherHistory,
+    combine_functions,
+    combine_triggers,
 )
-from .model_patcher_test_utils import (
-    PatchedAttribute,
-    DummyAttribute,
-    PATCHED_RESPONSE,
-    UNPATCHED_RESPONSE,
+from .model_patcher_test_utils import (    
+    create_dummy_module_with_output_functions,
 )
-from fms_acceleration.utils.test_utils import instantiate_model_patcher, read_configuration
+from fms_acceleration.utils.test_utils import instantiate_model_patcher
 
-class DummyModule(torch.nn.Module):
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        self.dummy_attribute = DummyAttribute()
+def returns_false(*args, **kwargs):
+    "falsy function"
+    return False
 
-    def forward(self, *args, **kwargs):
-        return UNPATCHED_RESPONSE
+def returns_true(*args, **kwargs):
+    "truthy function"
+    return True
 
 DUMMY_RULE_ID = "test_patch"
 
@@ -50,222 +50,171 @@ def model_inputs(seed: int = 42):
     torch.manual_seed(seed)
     return torch.rand(1, 32)
 
+# | ------------------ Test ModelPatcherHistory ----------------------- |
+def test_mp_history_constructs_successfully():
+    "Test that model patcher trigger constructs correctly"
+    model = torch.nn.Module()
+    assert ModelPatcherHistory(
+        instance=id(model),
+        cls=model.__class__.__name__,
+        parent_cls="",
+        module_name="",
+        parent_module_name="",
+        rule_id=DUMMY_RULE_ID,
+    )
+
 # | ------------------ Test ModelPatcherTrigger ----------------------- |
 
-def test_mp_trigger_constructs_successfully():
-    "Test that model patcher trigger constructs correctly"
-    # Test Module Argument Construction
-    trigger = ModelPatcherTrigger(check=DummyAttribute)
+def test_mp_trigger_constructs_with_check_arg_only():
+    "Test construction of trigger with check argument"
+    # Test that error is raised when check is not of accepted type
+    with pytest.raises(
+        AssertionError,
+        match = "`check` arg type needs to be torch.nn.Module or Callable"
+    ):
+        ModelPatcherTrigger(check=None)
+
+    # Test module trigger type is correctly inferred from check
+    trigger = ModelPatcherTrigger(check=torch.nn.Module)
     assert trigger and trigger.type == ModelPatcherTriggerType.module, \
         "Trigger Construction with Module Failed"
 
-    # Test Callable Argument Constructionn
-    trigger = ModelPatcherTrigger(check=lambda module: True)
+    # Test callable trigger type is correctly inferred from check
+    trigger = ModelPatcherTrigger(check=returns_true)
     assert trigger and trigger.type == ModelPatcherTriggerType.callable, \
         "Trigger Construction with Callable Failed"
+
+def test_mp_trigger_constructs_with_check_and_trigger_type_args():
+    "Test construction of trigger with check and type arguments"
+    # check that trigger constructs successfully as check conforms to specified type
+    assert ModelPatcherTrigger(
+        check=torch.nn.Module,
+        type=ModelPatcherTriggerType.module,
+    )
+
+    assert ModelPatcherTrigger(
+        check=returns_true,
+        type=ModelPatcherTriggerType.callable,
+    )
+
+    # Ensure an error is raised when check does not conform to type
+    with pytest.raises(
+        AssertionError,
+        match = "type argument passed but `check` argument does not match type specified",
+    ):
+        ModelPatcherTrigger(
+            check=returns_true,
+            type=ModelPatcherTriggerType.module,
+        )
+
+    # Ensure an error is raised when check does not conform to type
+    with pytest.raises(
+        AssertionError,
+        match = "type argument passed but `check` argument does not match type specified",
+    ):
+        ModelPatcherTrigger(
+            check=torch.nn.Module,
+            type=ModelPatcherTriggerType.callable,
+        )
+
+    # Ensure error is raised when improper trigger type is passed
+    with pytest.raises(
+        NotImplementedError,
+        match = "Invalid ModelPatcherTriggerType",
+    ):
+        ModelPatcherTrigger(
+            check=torch.nn.Module,
+            type=int,
+        )
+
+def test_mp_trigger_constructs_with_all_specified_args():
+    "Test construction of trigger with check, type and module_name arguments"
+    # check that trigger constructs
+    assert ModelPatcherTrigger(
+        check=torch.nn.Module,
+        type=ModelPatcherTriggerType.module,
+        module_name = "UnpatchedSubmodule"
+    )
+    assert ModelPatcherTrigger(
+        check= returns_true,
+        type=ModelPatcherTriggerType.callable,
+        module_name = "UnpatchedSubmodule"
+    )
 
 def test_mp_trigger_returns_correct_response():
     "Test for correctnness of trigger behaviour"
 
-    # Scenario 1: MP Trigger must follow callable response output
-    for result in [True, False]:
-        assert ModelPatcherTrigger(check=lambda module: result).is_triggered(
-            DummyAttribute(),
-            DummyAttribute.__name__
-        ) == result, "Trigger output doesn't match with Callable output"
+    # Scenario 1: 
+    # if check is a Callable, is_triggered result must be equal to the boolean output of check
+    assert ModelPatcherTrigger(check=returns_true).is_triggered(
+        torch.nn.Module(),
+    ) == returns_true()
 
-    # Scenario 2: MP Trigger checks module correctly
-    trigger = ModelPatcherTrigger(check=DummyAttribute)
-    # test that it returns false if not an instance
-    for mod, result in [(DummyAttribute, True), (PatchedAttribute, False)]:
-        assert trigger.is_triggered(mod(), mod.__name__) == result, \
-        "Trigger output must be instance of check argument"
+    assert ModelPatcherTrigger(check=returns_false).is_triggered(
+        torch.nn.Module(),
+    ) == returns_false()
 
-    # Scenario 3: MP Trigger checks for module name correctly
-    for _check in [DummyAttribute, lambda module: True]:
-        # set same `module_name` in Trigger regardless of check argument
-        module_name = ModelPatcherTrigger(check=_check, module_name=DummyAttribute.__name__)
-        # ensure that output is false as long as module name doesn't match
-        assert module_name.is_triggered(DummyAttribute(), PatchedAttribute.__name__) == False, \
-            "`Trigger.module_name` exist, module name passed should not match"
+    # Scenario 2:
+    # Ensure return True, if the module passed in `is_triggered` is an instance
+    # of ModelPatcherTrigger.check
+    assert ModelPatcherTrigger(check=torch.nn.Module).is_triggered(
+        torch.nn.Module(),
+    ) is True
 
-# | ------------------ Test ModelPatcherRule ----------------------- |
+    # Ensure returns False, if the module passed in `is_triggered` is not an instance
+    # of ModelPatcherTrigger.check
+    assert ModelPatcherTrigger(check=torch.nn.Module).is_triggered(
+        returns_true,
+    ) is False
 
-# Test patching standalone functions
-def test_standalone_import_and_reload_function_replaces_indirect_module(model_inputs): # pylint: disable=redefined-outer-name
-    "Test patching of standalone file functions"
-    # 1. Take an arbitrary downstream module
-    # 2. replace with a patched module
-    # 3. check that the downstream module produces a patched response
-    patch_target_module(
-        "tests.model_patcher_test_utils.DummyAttribute",
-        PatchedAttribute,
-        "tests.test_model_patcher"
+    # Scenario 3:
+    # Static check to ensure additional module_name constraint is checked when
+    # ModelPatcherTrigger.module_name is specified
+    trigger = ModelPatcherTrigger(check=torch.nn.Module, module_name="dummy.module.class")
+    # ensure returns false if additional constraint fails
+    assert trigger.is_triggered(torch.nn.Module(), "wrong.module.class") is False
+    # ensure returns `ModelPatcherTrigger.check` if additional constraint passes
+    assert trigger.is_triggered(torch.nn.Module(), "dummy.module.class") is True
+
+def test_correct_output_combine_mp_triggers():
+    # test OR case should pass if one trigger is true
+    combined_trigger = combine_triggers(
+        ModelPatcherTrigger(check=returns_false),
+        ModelPatcherTrigger(check=returns_true),
+        logic = "OR",
     )
-    # First Party
-    assert DummyModule().dummy_attribute(model_inputs) == PATCHED_RESPONSE, "Failed to patch standalone function"
+    assert combined_trigger.is_triggered(torch.nn.Module()) is True, \
+        "OR logic test should pass if there is a single True"
+    combined_trigger = combine_triggers(
+        ModelPatcherTrigger(check=returns_false),
+        ModelPatcherTrigger(check=returns_false),
+        logic = "OR",
+    )
+    assert combined_trigger.is_triggered(torch.nn.Module()) is False, \
+        "OR logic test should fail if there is no True trigger"
 
-def test_mp_registers_only_one_unique_rule():
-    "Test MP register method raises assertion when 2 rules with same id are registered"
-    with pytest.raises(
-        AssertionError
-    ):   
-        with instantiate_model_patcher():
-            for i in range(2):
-                ModelPatcher.register(
-                    ModelPatcherRule(rule_id=DUMMY_RULE_ID)
-                )
-
-def test_mp_rule_constructs_successfully():
-    "Ensure MP rule is throws appropriate error when wrong argument combinations are passed"
-    # Test empty mp rule construction
-    assert ModelPatcherRule(rule_id=DUMMY_RULE_ID), "Empty MP Rule construction failed"
-
-    # Test mp rule construction raises with multiple arguments
-    with pytest.raises(
-        ValueError, 
-        match="must only have only one of forward, " \
-        "foward builder, or import_and_maybe_reload, specified."
-    ):
-        ModelPatcherRule(
-            rule_id=DUMMY_RULE_ID,
-            forward=lambda self, X: X,
-            import_and_maybe_reload=(),
-            forward_builder=lambda self, X: X,
+    # test AND case should fail if one trigger is false
+    combined_trigger = combine_triggers(
+            ModelPatcherTrigger(check=returns_false),
+            ModelPatcherTrigger(check=returns_true),
+            logic = "AND",
         )
-
-    # Test mp rule construction raises with trigger and import_and_reload
-    with pytest.raises(
-        ValueError, 
-        match="has import_and_maybe_reload specified, " \
-        "and trigger must be None."
-    ):
-        ModelPatcherRule(
-            rule_id=DUMMY_RULE_ID,
-            trigger=ModelPatcherTrigger(check=None),
-            import_and_maybe_reload=(),
+    assert combined_trigger.is_triggered(torch.nn.Module()) is False, \
+        "AND logic test should fail if there is a single False"
+    combined_trigger = combine_triggers(
+            ModelPatcherTrigger(check=returns_true),
+            ModelPatcherTrigger(check=returns_true),
+            logic = "AND",
         )
+    assert combined_trigger.is_triggered(torch.nn.Module()) is True, \
+        "AND logic test should pass if there is no False trigger"
 
-    with pytest.raises(
-        ValueError, 
-        match="has forward_builder_args but no " \
-        "forward_builder."
-    ):
-        ModelPatcherRule(
-            rule_id=DUMMY_RULE_ID,
-            forward_builder_args=[]
-        )
-
-def test_mp_rule_patches_forward(model_inputs): # pylint: disable=redefined-outer-name
-    "Test model patcher replaces the forward function with a dummy forward"
-    # 1. Register rule and specify a trigger on target module for the rule to be applied
-    # 2. Patch model
-    # 3. check target module's forward function and dummy patch produces similar outputs
-    with instantiate_model_patcher():
-        model = DummyModule()
-        rule = ModelPatcherRule(
-            rule_id=DUMMY_RULE_ID,
-            trigger=ModelPatcherTrigger(check=DummyModule),
-            forward=lambda self, X: PATCHED_RESPONSE,
-        )
-        ModelPatcher.register(rule)
-        ModelPatcher.patch(model)
-        assert model(model_inputs) == PATCHED_RESPONSE, "Failed to patch forward function"
-
-# Test patching of model attribute
-def test_mp_rule_import_and_reload_patches_downstream_module(): # pylint: disable=redefined-outer-name
-    "Test patching an imported module indirectly managed by other modules using import_and_reload"
-    # 1. Register rule targeting downstream module and specify target to reload with patch applied
-    # 2. Patch model
-    # 3. check patched module now exist in model
-    with instantiate_model_patcher():
-        model = DummyModule()
-        ModelPatcher.register(
-            ModelPatcherRule(
-                rule_id=DUMMY_RULE_ID,
-                import_and_maybe_reload=(
-                    "tests.model_patcher_test_utils.DummyAttribute",
-                    PatchedAttribute,
-                    "tests.test_model_patcher",
-                ),
-            )
-        )
-        ModelPatcher.patch(model)
-
-        assert isinstance(
-            DummyModule().dummy_attribute, PatchedAttribute
-        ), "Failed to patch attribute with import and reload"
-
-    # Test that assertion thrown when multiple rules try to reload the same target
     with pytest.raises(
         AssertionError,
-        match="can only have at most one rule with reload"
+        match = "Only `AND`, `OR` logic implemented for combining triggers",
     ):
-        with instantiate_model_patcher():
-            model = DummyModule()
-            for i in range(2):
-                ModelPatcher.register(
-                    ModelPatcherRule(
-                        rule_id=DUMMY_RULE_ID+str(i),
-                        import_and_maybe_reload=(
-                            "tests.model_patcher_test_utils.DummyAttribute",
-                            PatchedAttribute,
-                            "tests.test_model_patcher",
-                        ),
-                    )
-                )
-            ModelPatcher.patch(model)
-
-            assert isinstance(
-                DummyModule().dummy_attribute, PatchedAttribute
-            ), "Failed to patch attribute with import and reload"
-
-
-def test_mp_rule_patches_forward_with_builder_and_args(model_inputs): # pylint: disable=redefined-outer-name
-    "Test model patcher replaces forward using forward builder"
-
-    dummy_builder_args = {
-        "dummy_arg_1": 1,
-        "dummy_arg_2": 2,
-        "dummy_arg_3": 3,
-    }
-
-    spy = {
-        "forward_builder_calls": 0
-    }
-
-    model = DummyModule()
-    def dummy_forward_builder(module, **kwargs):
-        assert kwargs == dummy_builder_args, "Builder arguments not passed to forward builder"
-        # spy on function here
-        spy["forward_builder_calls"] += 1
-        return lambda self, X: PATCHED_RESPONSE
-
-    with instantiate_model_patcher():
-        ModelPatcher.register(
-            ModelPatcherRule(
-                rule_id=DUMMY_RULE_ID,
-                trigger=ModelPatcherTrigger(check=DummyModule),
-                forward_builder=dummy_forward_builder,
-                forward_builder_args=[*dummy_builder_args.keys()],
-            )
+        combine_triggers(
+            ModelPatcherTrigger(check=returns_false),
+            ModelPatcherTrigger(check=returns_true),
+            logic = "NOR",
         )
-        ModelPatcher.patch(model, **dummy_builder_args)
-        assert spy["forward_builder_calls"] > 0 and model(model_inputs) == PATCHED_RESPONSE, \
-            "Failed to patch forward function with forward building feature"
-
-# |----------------------- MP Summary ------------------- |
-
-def test_mp_summary_prints_log_message_of_patches_applied():
-    "test summary function prints"
-    pass
-
-
-
-# |----------------------- MP load_patches ------------------- |
-
-def test_load_patches_import_libraries():
-    "Test the function that imports packages."
-    "Used in MP when package imports trigger MP Rule registration"
-    ModelPatcher.load_patches([])
-    pass
