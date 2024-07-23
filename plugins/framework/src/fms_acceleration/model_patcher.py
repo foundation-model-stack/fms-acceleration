@@ -31,6 +31,7 @@ def patch_target_module(
     to_patch: str,
     replace_with: Any,
     target_module: str = None,
+    force_target_module_check: bool = True,
 ):
     to_patch = to_patch.split(".")
     assert len(to_patch) > 1, "must have an object to patch"
@@ -42,6 +43,11 @@ def patch_target_module(
     setattr(source, obj_name_to_patch, replace_with)
 
     if target_module is not None:
+        # if target module is a parent package of to_patch, 
+        # it will reload the old object over the patch
+        if force_target_module_check:
+            assert target_module not in to_patch, \
+                "argument target_module cannot have same root path as to_patch"
         # reload and this should get the patched object
         target_module = importlib.import_module(target_module)
         importlib.reload(target_module)
@@ -195,6 +201,14 @@ class ModelPatcherRule:
                 f"Rule '{self.rule_id}' has forward_builder_args but no "
                 "forward_builder."
             )
+
+        # if self.import_and_maybe_reload is not None and self.import_and_maybe_reload[2] in self.import_and_maybe_reload[0]:
+        #     raise ValueError(
+        #         f"Rule '{self.rule_id}' import_and_maybe_reload specified has argument 3 in the same path "
+        #         "as argument 1. The path to reload has to be different from object to be patched."
+        #     )
+
+
 
 
 # helpful to keep a history of all patching that has been done
