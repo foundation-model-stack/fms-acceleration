@@ -74,7 +74,7 @@ class ModelPatcherTrigger:
 
     # the trigger operation
     check: Union[
-        torch.nn.Module,  # trigger on isinstance
+        Type[torch.nn.Module],  # trigger on isinstance
         Callable[[torch.nn.Module], bool],  # trigger on callable
     ]
 
@@ -87,7 +87,7 @@ class ModelPatcherTrigger:
 
     def is_triggered(
         self,
-        module: Type[torch.nn.Module],
+        module: torch.nn.Module,
         module_name: str = None,
     ):
         "Check if trigger returns truthful."
@@ -488,13 +488,13 @@ def combine_triggers(*triggers: ModelPatcherTrigger, logic: str = "OR"):
     # NOTE: this can be probably simplified
     def _or_logic(*args, **kwargs):
         for trig in triggers:
-            if trig.is_triggered(*args, **kwargs) is True:
+            if trig.is_triggered(*args, **kwargs):
                 return True
         return False
 
     def _and_logic(*args, **kwargs):
         for trig in triggers:
-            if trig.is_triggered(*args, **kwargs) is False:
+            if not trig.is_triggered(*args, **kwargs):
                 return False
         return True
 
