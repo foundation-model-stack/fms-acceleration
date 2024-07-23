@@ -1,12 +1,10 @@
 import torch
-from typing import Dict, Any
+from typing import Dict, Any, Type
 
-def create_dummy_module_with_output_functions(
+def create_dummy_module(
     class_name: str,
-    outputs: Dict[str, Any] = None,
-    instantiate = False,
+    namespaces: Dict[str, Any] = {},
+    parent_class: Type = torch.nn.Module
 ):
-    cls = type(class_name, (torch.nn.Module,), outputs)
-    if instantiate:
-        return cls()
+    cls = type(class_name, (parent_class,), namespaces)
     return cls

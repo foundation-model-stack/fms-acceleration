@@ -87,7 +87,7 @@ class ModelPatcherTrigger:
 
     def is_triggered(
         self,
-        module: torch.nn.Module,
+        module: Type[torch.nn.Module],
         module_name: str = None,
     ):
         "Check if trigger returns truthful."
@@ -111,28 +111,25 @@ class ModelPatcherTrigger:
         return False
 
     def __post_init__(self):
-        # Ensure `check` type conforms to accepted argument type, 
-        # technically Module is also a callable
-        assert isinstance(self.check, torch.nn.Module) or callable(self.check), \
-            "`check` arg type needs to be torch.nn.Module or Callable"
-
-        # if type is not specified, can infer from check argument as either Module or Callable
-        if self.type is None:
-            if inspect.isclass(self.check) and issubclass(self.check, torch.nn.Module):
+        # if check is a module
+        if inspect.isclass(self.check) and issubclass(self.check, torch.nn.Module):
+            if self.type is None:
                 self.type = ModelPatcherTriggerType.module
             else:
+                # ensure check conforms with self.type
+                assert self.type == ModelPatcherTriggerType.module, \
+                    "type argument passed but `check` argument does not match type specified"
+        # if check is a callable
+        elif callable(self.check):
+            if self.type is None:
                 self.type = ModelPatcherTriggerType.callable
-        else:
-            # if type is specified, ensure `check` type conforms to the specified enum
-            if self.type==ModelPatcherTriggerType.module:
-                assert self.check is torch.nn.Module, \
-                    "type argument passed but `check` argument does not match type specified"
-            elif self.type==ModelPatcherTriggerType.callable:
-                # ensure that it is not a torch.nn.Module but still a callable
-                assert self.check is not torch.nn.Module and callable(self.check), \
-                    "type argument passed but `check` argument does not match type specified"
             else:
-                raise NotImplementedError("Invalid ModelPatcherTriggerType")
+                # ensure check conforms with self.type
+                assert self.type == ModelPatcherTriggerType.callable, \
+                    "type argument passed but `check` argument does not match type specified"
+        else:
+            raise TypeError("check argument needs to be torch.nn.Module or Callable")
+
 
 
 # type for model forward
@@ -476,7 +473,6 @@ class ModelPatcher:
 
 # ------------------------ function -----------------------
 
-
 def patch_model(model: torch.nn.Module, **kwargs):
     ModelPatcher.patch(model, **kwargs)
     return model
@@ -492,13 +488,13 @@ def combine_triggers(*triggers: ModelPatcherTrigger, logic: str = "OR"):
     # NOTE: this can be probably simplified
     def _or_logic(*args, **kwargs):
         for trig in triggers:
-            if trig.check(*args, **kwargs):
+            if trig.is_triggered(*args, **kwargs) is True:
                 return True
         return False
 
     def _and_logic(*args, **kwargs):
         for trig in triggers:
-            if trig.check(*args, **kwargs) is False:
+            if trig.is_triggered(*args, **kwargs) is False:
                 return False
         return True
 
@@ -507,7 +503,6 @@ def combine_triggers(*triggers: ModelPatcherTrigger, logic: str = "OR"):
         _logic = _and_logic
 
     return ModelPatcherTrigger(check=_logic)
-
 
 def combine_functions(*funcs: Callable, logic: str = "APPEND"):
     assert logic == "APPEND", "only APPEND logic implemented for combining functions"
