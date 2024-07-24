@@ -5,31 +5,40 @@ import importlib
 from contextlib import contextmanager
 from typing import Dict, Any, Type
 
-ROOT = 'tests/model_patcher_fixtures'
-PATHS = []
-for root, dirs, files in os.walk(ROOT):
+ROOT = 'tests.model_patcher_fixtures'
+MODULE_PATHS = []
+for root, dirs, files in os.walk(ROOT.replace('.', os.path.sep)):
     for f in files:
         filename, ext = os.path.splitext(f)
         if ext != ".py":
             continue
         if filename != '__init__':
-            PATHS.append(os.path.join(root, f.replace(".py", "")))
+            p = os.path.join(root, filename)
         else:
-            PATHS.append(root)
+            p = root
+
+        MODULE_PATHS.append(p.replace(os.path.sep, '.'))
 
 @contextmanager
-def manipulate_test_module_fixures():
+def isolate_test_module_fixtures():
     old_mod = {
-        k: sys.modules[k.replace("/", ".")] for k in PATHS
+        k: sys.modules[k] for k in MODULE_PATHS
     }
-    try:
-        yield
-    finally:
-        # sort keys of descending length, to load children 1st
-        sorted_keys = sorted(old_mod.keys(), key=len, reverse=True)
-        for key in sorted_keys:
-            # Unclear why but needs a reload, to be investigated later
-            importlib.reload(old_mod[key])
+    yield
+
+    # Reload only reloads the speicified module, but makes not attempt to reload
+    # the imports of that module. 
+    # - i.e., This moeans that if and import had been changed
+    #         then the reload will take the changed import. 
+    # - i.e., This also means that the individuals must be reloaded seperatedly
+    #            for a complete reset.
+    #     
+    # Therefore, we need to reload ALL Modules in opposite tree order, meaning that
+    # the children must be reloaded before their parent
+
+    for key in sorted(old_mod.keys(), key=len, reverse=True):
+        # Unclear why but needs a reload, to be investigated later
+        importlib.reload(old_mod[key])
 
 
 def create_module_class(
@@ -37,5 +46,4 @@ def create_module_class(
     namespaces: Dict[str, Any] = {},
     parent_class: Type = torch.nn.Module
 ):
-    cls = type(class_name, (parent_class,), namespaces)
-    return cls
+    return type(class_name, (parent_class,), namespaces)
