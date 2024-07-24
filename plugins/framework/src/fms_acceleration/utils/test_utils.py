@@ -186,7 +186,5 @@ def instantiate_model_patcher():
     from fms_acceleration.model_patcher import ModelPatcher
     old_registrations = ModelPatcher.rules
     ModelPatcher.rules = {}
-    try:
-        yield 
-    finally:
-        ModelPatcher.rules = old_registrations
+    yield 
+    ModelPatcher.rules = old_registrations

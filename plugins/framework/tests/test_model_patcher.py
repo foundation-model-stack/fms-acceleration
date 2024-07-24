@@ -32,9 +32,7 @@ from fms_acceleration.model_patcher import (
 )
 
 from .model_patcher_test_utils import create_module_class, isolate_test_module_fixtures
-from .model_patcher_fixtures import module1
-from .model_patcher_fixtures import module2
-from fms_acceleration.utils.test_utils import instantiate_model_patcher
+from .model_patcher_fixtures import module1, module2, module4
 
 MOD_CLS_A = create_module_class("MOD_CLS_A")
 MOD_SUBCLS_A = create_module_class("MOD_SUBCLS_A", parent_class=MOD_CLS_A)
@@ -279,6 +277,12 @@ def test_patch_target_module_replaces_module_or_function_correctly():
                         - attribute: mod_1_function
         - module2:
             - Module2Class:
+
+        - module4:
+            - Module4Class:
+                - attribute: mod_1_function
+
+
     """
 
     PatchedModuleClass = create_module_class(
@@ -378,5 +382,3 @@ def test_patch_target_module_replaces_module_or_function_correctly():
             "tests.model_patcher_fixtures.module1.module3.module3_1",
         )
         assert module1.module3.Module3Class().attribute() == "patched_mod_function"
-
-

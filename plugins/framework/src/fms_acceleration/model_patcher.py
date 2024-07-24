@@ -19,6 +19,7 @@ from types import MethodType
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union
 import importlib
 import inspect
+import warnings
 
 # Third Party
 import pandas as pd
@@ -268,6 +269,8 @@ class ModelPatcher:
 
     @staticmethod
     def did_rule_trigger(module: torch.nn.Module, module_name: str):
+        
+        active_rule_name, active_rule = None, None        
         for name, rule in ModelPatcher.rules.items():
 
             # if there is no trigger
@@ -275,9 +278,18 @@ class ModelPatcher:
                 continue
 
             if rule.trigger.is_triggered(module, module_name):
-                return name, rule
+                # if active rule, assign the the current rule as active
+                if active_rule is None:
+                    active_rule_name = name
+                    active_rule = rule
+                # otherwise, if there is already an active rule, raise warning
+                # that subsequent compatible forward rules will be ignored for simple forward patches
+                # forwardbuilders are handled when they are decomposed into new simple forward rules              
+                elif rule.forward is not None:
+                    warnings.warn(f"rule {rule.rule_id} is ignored on {module_name} as an earlier rule {active_rule.rule_id} has been applied")
+                    #raise Exception(f"rule {rule.rule_id} is ignored on {module_name} as an earlier rule has been applied")
 
-        return None, None
+        return active_rule_name, active_rule
 
     @staticmethod
     def _import_and_reload(model: torch.nn.Module):
@@ -326,7 +338,18 @@ class ModelPatcher:
                 elif _target.startswith(module_path):
                     _no_reload.append(rule)
 
-        assert len(_with_reload) <= 1, "can only have at most one rule with reload"
+        # If there are multiple reload targets, 
+        # ensure that their paths do not conflict as reloading same module might reset patches
+        if len(_with_reload)>1:
+            # sort ascending target path length
+            _with_reload = sorted(_with_reload, key=lambda _rule: len(_rule.import_and_maybe_reload[2]), reverse=False)
+            for rule_s in _with_reload:
+                for rule_l in _with_reload[1:]:
+                    # if target paths in rule s is a prefix of rule l, raise an error
+                    _, _, _path_s = rule_s.import_and_maybe_reload
+                    _, _, _path_l = rule_l.import_and_maybe_reload
+                    assert not _path_l.startswith(_path_s), \
+                        f"Attempting to reload same path `{_path_s}` multiple times in {rule_s.rule_id} and {rule_l.rule_id}"
 
         # handle those with reload first
         for rule in _with_reload + _no_reload:
@@ -444,6 +467,15 @@ class ModelPatcher:
     def patch(model: torch.nn.Module, **kwargs):
         # NOTE: for a set of rules, this patch function should be called
         # only once. We do not have any checks for this at the moment
+
+        # 1. Iterate over all ModelPatcher rules
+        # 2. For import_and_maybe_reload rules, an assertion 
+        #    is currently thrown if there are multiple reloads
+        # 3. For _patch_forwards, ensure that the trigger check 
+        #    module or callable function is unique across all rules
+        #    otherwise, an assertion is thrown as it could patch the 
+        #    forwards over previous patches
+
         try:
             ModelPatcher._import_and_reload(model.get_base_model())
         except AttributeError:
