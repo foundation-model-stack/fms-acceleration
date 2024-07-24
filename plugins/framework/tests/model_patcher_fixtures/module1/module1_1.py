@@ -5,4 +5,4 @@ class Module1Class:
         self.attribute = Module2Class()
 
 def mod_1_function():
-    return 1
+    return "unpatched_mod_function"

@@ -31,7 +31,7 @@ from fms_acceleration.model_patcher import (
     combine_triggers,
 )
 
-from .model_patcher_test_utils import create_module_class
+from .model_patcher_test_utils import create_module_class, manipulate_test_module_fixures
 from .model_patcher_fixtures import module1
 from .model_patcher_fixtures import module2
 from fms_acceleration.utils.test_utils import instantiate_model_patcher
@@ -300,16 +300,20 @@ def test_patch_target_module_replaces_module_or_function_correctly():
     """
     Test patching of standalone file functions
 
-    Fixture Structure:
-    model_patcher_fixtures
-        __init__.py
-        module1
-            __init__.py
-            module1_1.py
-            module3
-                __init__.py
-                module3_1.py
-        module2.py
+    Fixtures Class Structure
+
+    model_patcher_fixtures:
+        - module1:
+            - module1_1:
+                - Module2Class:
+                    - attribute: Module2Class
+                - mod_1_function
+            - module3:
+                - module3_1
+                    - Module3Class:
+                        - attribute: mod_1_function
+        - module2:
+            - Module2Class:
     """
 
     PatchedModuleClass = create_module_class(
@@ -322,43 +326,50 @@ def test_patch_target_module_replaces_module_or_function_correctly():
     # S1 - module1_1 has function mod_1_function
     # 1. Replace module1_1.mod_1_function with new function
     # 2. Ensure patch_target_module replaces with a new function
-    patch_target_module(
-        "tests.model_patcher_fixtures.module1.module1_1.mod_1_function",
-        patched_mod_function,
-        "tests.model_patcher_fixtures.module1",
-        force_target_module_check=False,
-    )
-    assert module1.mod_1_function() == patched_mod_function()
+    with manipulate_test_module_fixures():
+        patch_target_module(
+            "tests.model_patcher_fixtures.module1.module1_1.mod_1_function",
+            patched_mod_function,
+            "tests.model_patcher_fixtures.module1",
+        )
+        assert module1.mod_1_function() == "patched_mod_function"
+
+    # test patches are reset outside the context manager
+    assert module1.mod_1_function() == "unpatched_mod_function"
 
     # S2 - module1_1.Module1Class has an attribute module2.Module2Class
     # 1. Replace Module2Class with new class and reload module1_1
     # 2. Ensure patch_target_module replaces the attribute with a new attr class
-    patch_target_module(
-        "tests.model_patcher_fixtures.module2.Module2Class",
-        PatchedModuleClass,
-        "tests.model_patcher_fixtures.module1.module1_1"
-    )
-    assert isinstance(module1.Module1Class().attribute, PatchedModuleClass)
+
+    # tests.model_patcher_fixtures.module1 won't work as child module1_1 has been cached
+    with manipulate_test_module_fixures():
+        patch_target_module(
+            "tests.model_patcher_fixtures.module2.Module2Class",
+            PatchedModuleClass,
+            "tests.model_patcher_fixtures.module1.module1_1"
+        )
+        assert isinstance(module1.Module1Class().attribute, PatchedModuleClass)
 
     # S3 - module1.module3.module3_1 is a submodule of module1
     # 1. Replace module1.module3.module3_1.Module3Class with a new class
     # 2. Show that reloading module1 does not replace the class
-    patch_target_module(
-        "tests.model_patcher_fixtures.module1.module3.module3_1.Module3Class",
-        PatchedModuleClass,
-        "tests.model_patcher_fixtures.module1",
-        force_target_module_check=False,
-    )
-    assert not isinstance(module1.module3.Module3Class(), PatchedModuleClass)
+    with manipulate_test_module_fixures():
+        patch_target_module(
+            "tests.model_patcher_fixtures.module1.module3.module3_1.Module3Class",
+            PatchedModuleClass,
+            "tests.model_patcher_fixtures.module1",
+        )
+        assert not isinstance(module1.module3.Module3Class(), PatchedModuleClass)
 
     # S4 - module1.module3 submodule has a dependency on parent module1.mod_1_function
     # 1. Replace the module1.module1_1.mod_1_function with a new function
     # 2. Ensure the function is replaced after reloading module1.module3 submodule
-    patch_target_module(
-        "tests.model_patcher_fixtures.module1.module1_1.mod_1_function",
-        patched_mod_function,
-        "tests.model_patcher_fixtures.module1.module3.module3_1",
-    )
-    assert module1.module3.Module3Class().attribute() == patched_mod_function()
+    with manipulate_test_module_fixures():
+        patch_target_module(
+            "tests.model_patcher_fixtures.module1.module1_1.mod_1_function",
+            patched_mod_function,
+            "tests.model_patcher_fixtures.module1.module3.module3_1",
+        )
+        assert module1.module3.Module3Class().attribute() == patched_mod_function()
 
 
