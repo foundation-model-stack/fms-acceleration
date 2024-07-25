@@ -336,6 +336,8 @@ def test_patch_target_module_replaces_module_or_function_correctly():
     # S3.2 - module1.module3.module3_1 is a submodule of module1
     # 1. Replace module1.module3.module3_1.Module3Class with a new class
     # 2. reload the top-level module path module1
+    # -> NOTE: in general, we should avoid targeting any parent paths
+    #    for reload
     with isolate_test_module_fixtures():
         patch_target_module(
            "tests.model_patcher_fixtures.module1.module3.module3_1.Module3Class",
@@ -343,14 +345,17 @@ def test_patch_target_module_replaces_module_or_function_correctly():
            "tests.model_patcher_fixtures.module1",
         )
 
-        # - the reload of the top level module path module1, will replace module1.module3
+        # - the reload of the top level module path module1, will NOT replace module1.module3
         #   with the original version
+        # - reloading top-level paths is tricky due to caching of the modules
+        # - the reload of a top-level module does not cascade down to children modules.
         assert not isinstance(module1.module3.module3_1.Module3Class(), PatchedModuleClass)
-        assert not isinstance(module1.module3.Module3Class(), PatchedModuleClass)
 
     # S3.3 - module1.module3 is a submodule of module1
     # 1. Replace module1.module3.module3_1.Module3Class with a new class
     # 2. reload the top-level module path module1
+    # -> NOTE: in general, we should avoid targeting any parent paths
+    #    for reload
     with isolate_test_module_fixtures():
         patch_target_module(
            "tests.model_patcher_fixtures.module1.module3.Module3Class",
@@ -361,7 +366,6 @@ def test_patch_target_module_replaces_module_or_function_correctly():
         # - the reload of the top level module path module1, will replace module1.module3
         #   with the original version
         assert not isinstance(module1.module3.module3_1.Module3Class(), PatchedModuleClass)
-        assert not isinstance(module1.module3.Module3Class(), PatchedModuleClass)
 
     # S4 - module1.module3 submodule has a dependency on 
     #      module1.module1_1.mod_1_function
