@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # Standard
-from typing import Callable, Dict, Tuple
+from typing import Dict, Tuple
 
 # Third Party
 from accelerate.utils import set_module_tensor_to_device
@@ -23,6 +23,7 @@ from peft.tuners.lora.layer import LoraLayer
 from transformers import TrainingArguments
 import torch
 import torch.distributed as dist
+from fms_acceleration_foak.models import register_foak_model_patch_rules
 
 # consider moving this somewhere else later
 def lora_adapters_switch_ddp_from_fsdp(modules, fsdp_plugin):
@@ -112,7 +113,6 @@ class FastQuantizedPeftAccelerationPlugin(AccelerationPlugin):
         ), "need to run in fp16 mixed precision or load model in fp16"
 
         # wrapper function to register foak patches
-        from fms_acceleration_foak.models import register_foak_model_patch_rules
         register_foak_model_patch_rules(base_type = self._base_layer)
         return model, modifiable_args
 

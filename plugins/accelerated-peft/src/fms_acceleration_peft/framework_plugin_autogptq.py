@@ -32,6 +32,8 @@ from transformers.modeling_utils import is_fsdp_enabled
 import torch
 import torch.distributed
 
+# Local
+from .autogptq_utils import register_tensors_as_parameters_patch_rule
 
 class AutoGPTQAccelerationPlugin(AccelerationPlugin):
 
@@ -195,9 +197,8 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
             and os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true"
         ):
             # register FSDP patch
-            from .autogptq_utils import register_tensors_as_parameters_patch_rule
             register_tensors_as_parameters_patch_rule(
-                target_module=QuantLinear, 
+                target_module=QuantLinear,
                 torch_dtype=torch_dtype,
             )
 

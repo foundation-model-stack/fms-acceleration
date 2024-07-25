@@ -27,6 +27,7 @@ dependencies = [
   "transformers<4.40",
   "peft",
   "accelerate",
+  "pandas",
 ]
 
 [tool.hatch.build.targets.wheel]
