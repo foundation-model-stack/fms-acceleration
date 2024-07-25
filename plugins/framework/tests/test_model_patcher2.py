@@ -8,10 +8,7 @@ from fms_acceleration.model_patcher import (
     ModelPatcherRule,
     ModelPatcherTrigger,
     patch_target_module,
-    ModelPatcherTriggerType,
-    ModelPatcherHistory,
     combine_functions,
-    combine_triggers,
 )
 
 from .model_patcher_test_utils import create_module_class, isolate_test_module_fixtures
@@ -21,8 +18,11 @@ from fms_acceleration.utils.test_utils import instantiate_model_patcher
 from .test_model_patcher import DUMMY_RULE_ID
 
 #Test patching of model attribute
-def test_simple_forward_rule_with_mp_replaces_old_forward(): # pylint: disable=redefined-outer-name
+def test_simple_forward_rule_with_mp_replaces_old_forward():
     """
+    Ensure that a child submodule forward function
+    is patched with a new forward function
+
     model_patcher_fixtures:
         - module1:
             - module1_1:
@@ -38,7 +38,14 @@ def test_simple_forward_rule_with_mp_replaces_old_forward(): # pylint: disable=r
 
         - module4:
             - Module4Class(torch.nn.Module):
-                - attribute: mod_1_function
+                - attribute: Module5Class
+            - module4_1
+                - mod_4_function
+            - module5:
+                - module5_1
+                    - Module5Class
+                    - module_5_function
+
     """
 
     def patched_forward_function(X):
@@ -68,6 +75,15 @@ def test_simple_forward_rule_with_mp_replaces_old_forward(): # pylint: disable=r
             assert model.submodule_1.forward() == "patched_forward_function"
 
 def test_import_and_maybe_reload_rule_with_mp_replaces_old_attribute():
+    """
+    Module4Class has an attribute from Module5Class,
+    ensure that patching Module5Class with a PatchedModuleClass,
+    replaces the old attribute in Module4Class
+
+    Module4Class(torch.nn.Module):
+        - attribute: Module5Class
+
+    """
     # 1. Register rule replacing module5.module5_1.Module5Class with a patched_mod_function
     #    reload_target is test.model_patcher.fixtures.module4
     # 2. Patch module4.Module4Class with ModelPatcher
@@ -75,7 +91,6 @@ def test_import_and_maybe_reload_rule_with_mp_replaces_old_attribute():
     PatchedModuleClass = create_module_class(
         "PatchedModClass",
     )
-
 
     with isolate_test_module_fixtures():
         with instantiate_model_patcher():
@@ -93,9 +108,6 @@ def test_import_and_maybe_reload_rule_with_mp_replaces_old_attribute():
             ModelPatcher.patch(model)
             assert isinstance(module4.Module4Class().attribute, PatchedModuleClass)
 
-# TODO forward builder test
-
-
 def test_mp_throws_error_with_multiple_reloads_on_same_target():
     """
     Simulate a case where two rules attempt to reload on the same target prefix
@@ -104,7 +116,7 @@ def test_mp_throws_error_with_multiple_reloads_on_same_target():
         - Rule 1 target path 1: x.y.z
         - Rule 2 target path 2: x.y
 
-    this might reverse the patch on Rule 1 and needs to be caught
+    this MIGHT reverse the patch on Rule 1 and needs to be prevented
 
     model_patcher_fixtures:
         - module1:
@@ -121,7 +133,7 @@ def test_mp_throws_error_with_multiple_reloads_on_same_target():
 
         - module4:
             - Module4Class(torch.nn.Module):
-                - attribute: mod_1_function
+                - attribute: Module5Class
             - module4_1
                 - mod_4_function
             - module5:
@@ -138,7 +150,7 @@ def test_mp_throws_error_with_multiple_reloads_on_same_target():
     def patched_mod_function():
         return "patched_mod_function"
 
-    # Demonstrate that the 2nd patch overwrites the 1st patch if the reload module paths are the same
+    # Demonstrate how the 2nd patch overwrites the 1st patch if the reload module paths are the same
     with isolate_test_module_fixtures():
         # 1st patch on a function
         patch_target_module(
@@ -159,7 +171,8 @@ def test_mp_throws_error_with_multiple_reloads_on_same_target():
         assert isinstance(module4.module5.Module5Class(), PatchedModuleClass)
         assert module4.module5.mod_5_function() == "unpatched_mod_function"
 
-    # Ensure that an assertion is raised if target paths share the same root path
+    # Ensure that an assertion is raised if target paths
+    # are a prefixes of another longer target path
     with pytest.raises(
         AssertionError,
     ):
@@ -192,21 +205,22 @@ def test_mp_throws_error_with_multiple_reloads_on_same_target():
                     )
                 )
 
-                # while ModelPatcher is patching different objects, repeated reloads on same path is risky
-                # since module4 is a parent of module5, reloading module4 again might affect the previous patch.
-                # To prevent this we throw an exception if the shorter target path is a prefix of the
+                # while there are occasions repeated reloads along the same target path prefix work,
+                # it is risky and not guaranteed to work for all cases.
+                # To prevent the risk of any of the patches conflicting,
+                # we throw an exception if a shorter target path is a prefix of another
                 # longer target path
                 ModelPatcher.patch(model)
-
 
 def test_mp_throws_warning_with_multiple_patches():
     """
     Ensure for each module, only one forward patch is implemented on it.
-    The patch implementation checks if there are multiple forward patch rules that are applied to the module,
-    only the 1st forward patch rule is applied, the others will be ignored and a warning will be raised
+    The patch implementation checks if there are multiple forward patch rules
+    that are applied to the module, only the 1st forward patch rule is applied,
+    the others will be ignored and a warning will be raised
 
-    In the case of a list of new rules generated by `forwardbuilder`, it will be handled similarly since
-    it decomposes to multiple single forward patch rules downstream.
+    In the case of a list of new rules generated by `forward_builder`, it will be
+    handled similarly since it decomposes to multiple single forward patch rules downstream.
     """
     with pytest.warns(
         UserWarning,
@@ -217,7 +231,8 @@ def test_mp_throws_warning_with_multiple_patches():
                 # 2. Create a submodule to patch on
                 # 3. Create 1st rule to patch submodule forward function
                 # 4. Create 2nd rule to patch submodule forward function again
-                # 5. Throws warning that any subsequent forward patches after the 1st patch is ignored
+                # 5. Throws warning that any subsequent forward patches after
+                #    the 1st patch is ignored
 
                 model = module4.Module4Class()
                 SubModule1 = create_module_class(
@@ -242,4 +257,73 @@ def test_mp_throws_warning_with_multiple_patches():
                 )
                 ModelPatcher.patch(model)
 
-    # TODO test on forward builder cases
+
+def test_forward_builder_rule_with_mp_replaces_old_forward():
+    """
+    Ensure that patching a model with a rule using forward_builder argument will
+    replace the children module forwards
+    """
+    def is_module_type_B(module):
+        if hasattr(module, "B"):
+            return True
+        return False
+
+    def is_module_type_C(module):
+        if hasattr(module, "C"):
+            return True
+        return False
+
+    def patched_forward_function(X):
+        return "patched_forward_function"
+
+    with isolate_test_module_fixtures():
+        with instantiate_model_patcher():
+            # 1. Create Model and 3 different child submodules
+            # 2. Create the forward builder function to produce a list of
+            # (trigger obj, patched forwards) for each child module in model
+            # 3. Create rule on model class to patch the submodules using a forward_builder function
+            # 4. Ensure all submodule forwards are patched
+
+            SubModule1 = create_module_class(
+                "SubModule1", namespaces={"forward": lambda X: "unpatched_forward_function"}
+            )
+            SubModule1A = create_module_class(
+                "SubModule1A", parent_class=SubModule1, namespaces={"A": "attributeA"}
+            )
+            SubModule1B = create_module_class(
+                "SubModule1B", parent_class=SubModule1, namespaces={"B": "attributeB"}
+            )
+            SubModule2 = create_module_class(
+                "SubModule2", 
+                namespaces={"C": "attributeC", "forward": lambda X: "unpatched_forward_function"}
+            )
+
+            model = module4.module5.Module5Class()
+            model.add_module("submodule_1A", SubModule1A())
+            model.add_module("submodule_1B", SubModule1B())
+            model.add_module("submodule_2", SubModule2())
+
+            # Function to create different triggers for different submodules
+            def build_list_of_triggers(
+                module,
+            ):
+                return [
+                    (ModelPatcherTrigger(check=SubModule1A), patched_forward_function),
+                    (ModelPatcherTrigger(check=is_module_type_B), patched_forward_function),
+                    (ModelPatcherTrigger(check=is_module_type_C), patched_forward_function),
+                ]   
+
+            ModelPatcher.register(
+                ModelPatcherRule(
+                    rule_id=DUMMY_RULE_ID,
+                    trigger=ModelPatcherTrigger(check=module4.module5.Module5Class),
+                    forward_builder=build_list_of_triggers,
+                    )
+            )
+
+            ModelPatcher.patch(model)
+
+            for _, mod in model.named_children():
+                if hasattr(mod, "forward"):
+                    assert mod.forward() == "patched_forward_function"
+
