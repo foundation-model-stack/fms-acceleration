@@ -183,8 +183,8 @@ def dummy_custom_loader(self, model_name, **kwargs):
 
 @contextmanager
 def instantiate_model_patcher():
-    from fms_acceleration.model_patcher import ModelPatcher
+    from fms_acceleration.model_patcher import ModelPatcher # pylint: disable=import-outside-toplevel
     old_registrations = ModelPatcher.rules
     ModelPatcher.rules = {}
-    yield 
+    yield
     ModelPatcher.rules = old_registrations

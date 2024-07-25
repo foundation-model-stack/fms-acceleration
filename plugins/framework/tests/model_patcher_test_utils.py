@@ -22,17 +22,17 @@ for root, dirs, files in os.walk(ROOT.replace('.', os.path.sep)):
 @contextmanager
 def isolate_test_module_fixtures():
     old_mod = {
-        k: sys.modules[k] for k in MODULE_PATHS
+        k: sys.modules[k] for k in MODULE_PATHS if k in sys.modules
     }
     yield
 
     # Reload only reloads the speicified module, but makes not attempt to reload
-    # the imports of that module. 
+    # the imports of that module.
     # - i.e., This moeans that if and import had been changed
-    #         then the reload will take the changed import. 
+    #         then the reload will take the changed import.
     # - i.e., This also means that the individuals must be reloaded seperatedly
     #            for a complete reset.
-    #     
+    #
     # Therefore, we need to reload ALL Modules in opposite tree order, meaning that
     # the children must be reloaded before their parent
 
@@ -43,7 +43,9 @@ def isolate_test_module_fixtures():
 
 def create_module_class(
     class_name: str,
-    namespaces: Dict[str, Any] = {},
+    namespaces: Dict[str, Any] = None,
     parent_class: Type = torch.nn.Module
 ):
+    if namespaces is None:
+        namespaces = {}
     return type(class_name, (parent_class,), namespaces)

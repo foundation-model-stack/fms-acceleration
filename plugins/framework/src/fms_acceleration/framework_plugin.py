@@ -21,10 +21,9 @@ import sys
 # Third Party
 from accelerate import Accelerator
 from peft import LoraConfig
+from transformers.utils import logging
 from transformers import TrainingArguments
 import torch
-
-from transformers.utils import logging
 
 # want to use the transformers logger, but a bit of pain
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name

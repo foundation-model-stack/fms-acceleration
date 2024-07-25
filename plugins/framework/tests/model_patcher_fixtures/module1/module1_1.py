@@ -6,3 +6,4 @@ class Module1Class:
 
 def mod_1_function():
     return "unpatched_mod_function"
+    

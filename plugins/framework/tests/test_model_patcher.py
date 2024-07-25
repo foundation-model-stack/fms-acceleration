@@ -21,18 +21,15 @@ import torch
 
 # First Party
 from fms_acceleration.model_patcher import (
-    ModelPatcher,
     ModelPatcherRule,
     ModelPatcherTrigger,
     patch_target_module,
     ModelPatcherTriggerType,
-    ModelPatcherHistory,
-    combine_functions,
     combine_triggers,
 )
 
 from .model_patcher_test_utils import create_module_class, isolate_test_module_fixtures
-from .model_patcher_fixtures import module1, module2, module4
+from .model_patcher_fixtures import module1
 
 MOD_CLS_A = create_module_class("MOD_CLS_A")
 MOD_SUBCLS_A = create_module_class("MOD_SUBCLS_A", parent_class=MOD_CLS_A)
@@ -119,7 +116,8 @@ def test_mp_trigger_correctly_triggers():
 
     # Scenario 1:
     # if check is a Callable, is_triggered result must be equal to the boolean output of check
-    # 1. create function to check that returns true if module has attribute `attr_1`, otherwise return False
+    # 1. create function to check that returns true if module has attribute `attr_1`,
+    # otherwise return False
     # 2. create trigger that checks the above function
     # 3. create a subclass of module_A and ensure is_triggered returns True
     # 4. create a module_B and ensure is_triggered returns False
@@ -201,7 +199,12 @@ def test_mp_trigger_correctly_triggers():
         (AssertionError, "Only `AND`, `OR` logic implemented for combining triggers")
     ],
 ])
-def test_combine_mp_triggers_produces_correct_output(target_module, trigger_checks, logic, expected_result):
+def test_combine_mp_triggers_produces_correct_output(
+    target_module,
+    trigger_checks,
+    logic,
+    expected_result
+):
     triggers = [ModelPatcherTrigger(check=check) for check in trigger_checks]
 
     # if expected_result is a tuple of (Exception, Exception_message)
@@ -225,7 +228,7 @@ def test_mp_rule_raises_error_when_arguments_incorrectly_configured():
     "Ensure MP rule is throws appropriate error when wrong argument combinations are passed"
     # Test mp rule construction raises with multiple arguments
     with pytest.raises(
-        ValueError, 
+        ValueError,
         match="must only have only one of forward, " \
         "foward builder, or import_and_maybe_reload, specified."
     ):
@@ -238,7 +241,7 @@ def test_mp_rule_raises_error_when_arguments_incorrectly_configured():
 
     # Test mp rule construction raises with trigger and import_and_reload
     with pytest.raises(
-        ValueError, 
+        ValueError,
         match="has import_and_maybe_reload specified, " \
         "and trigger must be None."
     ):
@@ -248,9 +251,10 @@ def test_mp_rule_raises_error_when_arguments_incorrectly_configured():
             import_and_maybe_reload=(),
         )
 
-    # Test that rule construction raises if forward_builder_args are provided without a forward_builder
+    # Test that rule construction raises if forward_builder_args are provided
+    # without a forward_builder
     with pytest.raises(
-        ValueError, 
+        ValueError,
         match="has forward_builder_args but no " \
         "forward_builder."
     ):
@@ -371,7 +375,7 @@ def test_patch_target_module_replaces_module_or_function_correctly():
         #   with the original version
         assert not isinstance(module1.module3.module3_1.Module3Class(), PatchedModuleClass)
 
-    # S4 - module1.module3 submodule has a dependency on 
+    # S4 - module1.module3 submodule has a dependency on
     #      module1.module1_1.mod_1_function
     # 1. Replace the module1.module1_1.mod_1_function with a new function
     # 2. Ensure the target reloading of module1.module3 picks up the patched function

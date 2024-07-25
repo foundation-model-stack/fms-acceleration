@@ -1,6 +1,5 @@
 # Third Party
 import pytest  # pylint: disable=(import-error
-import torch
 
 # First Party
 from fms_acceleration.model_patcher import (
@@ -8,13 +7,11 @@ from fms_acceleration.model_patcher import (
     ModelPatcherRule,
     ModelPatcherTrigger,
     patch_target_module,
-    combine_functions,
 )
 
 from .model_patcher_test_utils import create_module_class, isolate_test_module_fixtures
-from .model_patcher_fixtures import module1, module2, module4
+from .model_patcher_fixtures import module4
 from fms_acceleration.utils.test_utils import instantiate_model_patcher
-
 from .test_model_patcher import DUMMY_RULE_ID
 
 #Test patching of model attribute
@@ -311,7 +308,7 @@ def test_forward_builder_rule_with_mp_replaces_old_forward():
                     (ModelPatcherTrigger(check=SubModule1A), patched_forward_function),
                     (ModelPatcherTrigger(check=is_module_type_B), patched_forward_function),
                     (ModelPatcherTrigger(check=is_module_type_C), patched_forward_function),
-                ]   
+                ]
 
             ModelPatcher.register(
                 ModelPatcherRule(
@@ -326,4 +323,3 @@ def test_forward_builder_rule_with_mp_replaces_old_forward():
             for _, mod in model.named_children():
                 if hasattr(mod, "forward"):
                     assert mod.forward() == "patched_forward_function"
-
