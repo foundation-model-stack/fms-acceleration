@@ -168,12 +168,13 @@ class AccelerationPlugin:
     def get_callbacks_and_ready_for_train(
         self, model: torch.nn.Module = None, accelerator: Accelerator = None
     ):
-        # Finally apply all registered patches to the model
         from .model_patcher import ModelPatcher # pylint: disable=import-outside-toplevel
-        ModelPatcher.patch(model)
+        if model is not None:
+            # Finally apply all registered patches to the model
+            ModelPatcher.patch(model)
 
         # if patching is done, print patch summary to logger
-        if len(ModelPatcher.history)>0:
+        if len(ModelPatcher.history) > 0:
             log_patch_summary(logging_func=logger.info)
 
         return []
