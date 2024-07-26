@@ -179,7 +179,7 @@ class ModelPatcherRule:
             self.forward is not None,
             self.forward_builder is not None,
             self.import_and_maybe_reload is not None,
-        ])>1:
+        ]) > 1:
             raise ValueError(
                 f"Rule '{self.rule_id}' must only have only one of forward, "
                 "foward builder, or import_and_maybe_reload, specified."

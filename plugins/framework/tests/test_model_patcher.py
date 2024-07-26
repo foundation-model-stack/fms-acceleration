@@ -12,262 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# SPDX-License-Identifier: Apache-2.0
-# https://spdx.dev/learn/handling-license-info/
-
 # Third Party
 import pytest  # pylint: disable=(import-error
-import torch
 
 # First Party
 from fms_acceleration.model_patcher import (
+    ModelPatcher,
     ModelPatcherRule,
     ModelPatcherTrigger,
     patch_target_module,
-    ModelPatcherTriggerType,
-    combine_triggers,
 )
 
 from .model_patcher_test_utils import create_module_class, isolate_test_module_fixtures
-from .model_patcher_fixtures import module1
+from .model_patcher_fixtures import module4
+from fms_acceleration.utils.test_utils import instantiate_model_patcher
+from .test_model_patcher_helpers import DUMMY_RULE_ID
 
-MOD_CLS_A = create_module_class("MOD_CLS_A")
-MOD_SUBCLS_A = create_module_class("MOD_SUBCLS_A", parent_class=MOD_CLS_A)
-MOD_CLS_B = create_module_class("MOD_CLS_B")
-
-def returns_false(*args, **kwargs):
-    "falsy function"
-    return False
-
-def returns_true(*args, **kwargs):
-    "truthy function"
-    return True
-
-DUMMY_RULE_ID = "test_patch"
-
-# | ------------------ Test ModelPatcherTrigger ----------------------- |
-
-def test_mp_trigger_constructs_with_check_arg_only():
-    "Test construction of trigger with check argument"
-    # Test that error is raised when check is not of accepted type
-    with pytest.raises(
-        TypeError,
-        match = "check argument needs to be torch.nn.Module or Callable"
-    ):
-        ModelPatcherTrigger(check=None)
-
-    # Test module trigger type is correctly inferred from check
-    trigger = ModelPatcherTrigger(check=torch.nn.Module)
-    assert trigger.type == ModelPatcherTriggerType.module
-
-    # Test callable trigger type is correctly inferred from check
-    trigger = ModelPatcherTrigger(check=returns_true)
-    assert trigger.type == ModelPatcherTriggerType.callable
-
-def test_mp_trigger_constructs_with_check_and_trigger_type_args():
-    "Test construction of trigger with check and type arguments"
-    # check that trigger constructs successfully as check conforms to specified type
-    ModelPatcherTrigger(
-        check=torch.nn.Module,
-        type=ModelPatcherTriggerType.module,
-    )
-
-    ModelPatcherTrigger(
-        check=returns_true,
-        type=ModelPatcherTriggerType.callable,
-    )
-
-    # Ensure an error is raised when check is callable but type is module
-    with pytest.raises(
-        AssertionError,
-        match = "type argument passed but `check` argument does not match type specified",
-    ):
-        ModelPatcherTrigger(
-            check=returns_true,
-            type=ModelPatcherTriggerType.module,
-        )
-
-    # Ensure an error is raised when check is module but type is callable
-    with pytest.raises(
-        AssertionError,
-        match = "type argument passed but `check` argument does not match type specified",
-    ):
-        ModelPatcherTrigger(
-            check=torch.nn.Module,
-            type=ModelPatcherTriggerType.callable,
-        )
-
-def test_mp_trigger_correctly_triggers():
-    "Test for correctnness of trigger behaviour"
-
-    ModClassA = create_module_class(
-        "ModClassA",
-        namespaces={"attr_1": None},
-    )
-
-    ModClassB = create_module_class(
-        "ModClassB",
-    )
-
-    ModSubClassA = create_module_class(
-        "ModSubClassA",
-        parent_class=ModClassA,
-    )
-
-    # Scenario 1:
-    # if check is a Callable, is_triggered result must be equal to the boolean output of check
-    # 1. create function to check that returns true if module has attribute `attr_1`,
-    # otherwise return False
-    # 2. create trigger that checks the above function
-    # 3. create a subclass of module_A and ensure is_triggered returns True
-    # 4. create a module_B and ensure is_triggered returns False
-    def check_module(module):
-        if hasattr(module, "attr_1"):
-            return True
-        return False
-
-    assert ModelPatcherTrigger(check=check_module).is_triggered(
-        ModClassA(),
-    ) is True
-
-    assert ModelPatcherTrigger(check=check_module).is_triggered(
-        ModClassB(),
-    ) is False
-
-    # Scenario 2:
-    # Ensure return True, if is not an instance of ModelPatcherTrigger.check
-    # 1. create trigger that checks for ModClassA
-    # 2. create an instance of ModClassA and check is_triggered returns True
-    # 3. create a subclass instance of ModClassA and check is_triggered returns True
-    # 4. create an instance of ModClassB and check is_triggered returns False
-    assert ModelPatcherTrigger(check=ModClassA).is_triggered(
-        ModClassA(),
-    ) is True
-
-    assert ModelPatcherTrigger(check=ModClassA).is_triggered(
-        ModSubClassA(),
-    ) is True
-
-    # Ensure returns False, if is not an instance of ModelPatcherTrigger.check
-    assert ModelPatcherTrigger(check=ModClassA).is_triggered(
-        ModClassB(),
-    ) is False
-
-    # Scenario 3:
-    # Static check to ensure additional constraint is checked
-    # 1. create an instance of ModClassA as model
-    # 2. register 2 submodules instances of ModClassB, Submodule_1 and SubModule_2
-    # 3. create a trigger that checks for an instance of module_B and `submodule_1` module name
-    # 4. for each module in model, ensure returns true if trigger detects module,
-    # otherwise it should return false
-
-    # Create model
-    model = ModClassA()
-    # register submodules
-    model.add_module("submodule_1", ModClassB())
-    model.add_module("submodule_2", ModClassB())
-    # create trigger with search criteria
-    trigger = ModelPatcherTrigger(check=ModClassB, module_name="submodule_1")
-    # iterate through modules in model
-    for name, module in model.named_modules():
-        if name == "submodule_1":
-            # assert that is_triggered returns true when module is found
-            assert trigger.is_triggered(module, name) is True
-        else:
-            # assert that is_triggered otherwise returns false
-            assert trigger.is_triggered(module, name) is False
-
-# Each test instance has
-#  - target_module,
-#  - tuple of trigger check arguments
-#  - a logic operator string
-#  - expected result as either a boolean or an error tuple
-# 1. Instantiate list of triggers from tuple of trigger check arguments
-# 2. construct a combined trigger given list of triggers and logic
-# 3. if expected_result is a tuple, ensure an error is raised upon constructing the trigger
-# 4. Otherwise, ensure that the combined_trigger returns the expected result on the target module
-@pytest.mark.parametrize(
-    "target_module,trigger_checks,logic,expected_result", [
-    [MOD_SUBCLS_A(), (returns_true, MOD_CLS_B), "OR", True],
-    [MOD_SUBCLS_A(), (MOD_CLS_B, returns_false), "OR", False],
-    [MOD_SUBCLS_A(), (MOD_CLS_A, returns_true), "OR", True],
-    [MOD_CLS_B(), (returns_false, MOD_CLS_A), "AND", False],
-    [MOD_CLS_B(), (MOD_CLS_B, returns_false), "AND", False],
-    [MOD_CLS_B(), (MOD_CLS_B, returns_true), "AND", True],
-    [
-        MOD_SUBCLS_A(), (MOD_CLS_B, MOD_CLS_A), "NOR",
-        (AssertionError, "Only `AND`, `OR` logic implemented for combining triggers")
-    ],
-])
-def test_combine_mp_triggers_produces_correct_output(
-    target_module,
-    trigger_checks,
-    logic,
-    expected_result
-):
-    triggers = [ModelPatcherTrigger(check=check) for check in trigger_checks]
-
-    # if expected_result is a tuple of (Exception, Exception_message)
-    if isinstance(expected_result, tuple):
-        with pytest.raises(
-            expected_result[0],
-            match=expected_result[1],
-        ):
-            combine_triggers(
-                *triggers,
-                logic=logic,
-            )
-    else: # otherwise ensure is_triggered output returns the expected_result
-        assert combine_triggers(
-            *triggers,
-            logic=logic,
-        ).is_triggered(target_module) is expected_result
-
-
-def test_mp_rule_raises_error_when_arguments_incorrectly_configured():
-    "Ensure MP rule is throws appropriate error when wrong argument combinations are passed"
-    # Test mp rule construction raises with multiple arguments
-    with pytest.raises(
-        ValueError,
-        match="must only have only one of forward, " \
-        "foward builder, or import_and_maybe_reload, specified."
-    ):
-        ModelPatcherRule(
-            rule_id=DUMMY_RULE_ID,
-            forward=lambda self, X: X,
-            import_and_maybe_reload=(),
-            forward_builder=lambda self, X: X,
-        )
-
-    # Test mp rule construction raises with trigger and import_and_reload
-    with pytest.raises(
-        ValueError,
-        match="has import_and_maybe_reload specified, " \
-        "and trigger must be None."
-    ):
-        ModelPatcherRule(
-            rule_id=DUMMY_RULE_ID,
-            trigger=ModelPatcherTrigger(check=torch.nn.Module),
-            import_and_maybe_reload=(),
-        )
-
-    # Test that rule construction raises if forward_builder_args are provided
-    # without a forward_builder
-    with pytest.raises(
-        ValueError,
-        match="has forward_builder_args but no " \
-        "forward_builder."
-    ):
-        ModelPatcherRule(
-            rule_id=DUMMY_RULE_ID,
-            forward_builder_args=[]
-        )
-
-def test_patch_target_module_replaces_module_or_function_correctly():
+#Test patching of model attribute
+def test_simple_forward_rule_with_mp_replaces_old_forward():
     """
-    Test patching of standalone file functions
-
-    Fixtures Class Structure
+    Ensure that a child submodule forward function
+    is patched with a new forward function
 
     model_patcher_fixtures:
         - module1:
@@ -283,106 +48,292 @@ def test_patch_target_module_replaces_module_or_function_correctly():
             - Module2Class:
 
         - module4:
-            - Module4Class:
-                - attribute: mod_1_function
+            - Module4Class(torch.nn.Module):
+                - attribute: Module5Class
+            - module4_1
+                - mod_4_function
+            - module5:
+                - module5_1
+                    - Module5Class
+                    - module_5_function
 
+    """
+
+    def patched_forward_function(X):
+        return "patched_forward_function"
+
+    # 1. Create an instance of Module4Class as model
+    # 2. Add a submodule to Module4Class
+    # 3. Create and register rule to patch forward of submodule class
+    # 4. Patch model
+    # 5. Ensure that model's submodule forward is replaced
+    with isolate_test_module_fixtures():
+        with instantiate_model_patcher():
+            model = module4.Module4Class()
+            SubModule1 = create_module_class(
+                "SubModule1", 
+                namespaces={"forward": lambda self: "unpatched_forward_function"}
+            )
+            model.add_module("submodule_1", SubModule1())
+            rule = ModelPatcherRule(
+                rule_id=DUMMY_RULE_ID,
+                trigger=ModelPatcherTrigger(check=SubModule1),
+                forward=patched_forward_function,
+            )
+            ModelPatcher.register(rule)
+            ModelPatcher.patch(model)
+
+            assert model.submodule_1.forward() == "patched_forward_function"
+
+def test_import_and_maybe_reload_rule_with_mp_replaces_old_attribute():
+    """
+    Module4Class has an attribute from Module5Class,
+    ensure that patching Module5Class with a PatchedModuleClass,
+    replaces the old attribute in Module4Class
+
+    Module4Class(torch.nn.Module):
+        - attribute: Module5Class
+
+    """
+    # 1. Register rule replacing module5.module5_1.Module5Class with a patched_mod_function
+    #    reload_target is test.model_patcher.fixtures.module4
+    # 2. Patch module4.Module4Class with ModelPatcher
+    # 3. check patched module exist in module4.Module4Class.attribute
+    PatchedModuleClass = create_module_class(
+        "PatchedModClass",
+    )
+
+    with isolate_test_module_fixtures():
+        with instantiate_model_patcher():
+            model = module4.Module4Class()
+            ModelPatcher.register(
+                ModelPatcherRule(
+                    rule_id=DUMMY_RULE_ID,
+                    import_and_maybe_reload=(
+                        "tests.model_patcher_fixtures.module4.module5.Module5Class",
+                        PatchedModuleClass,
+                        "tests.model_patcher_fixtures.module4",
+                    ),
+                )
+            )
+            ModelPatcher.patch(model)
+            assert isinstance(module4.Module4Class().attribute, PatchedModuleClass)
+
+def test_mp_throws_error_with_multiple_reloads_on_same_target():
+    """
+    Simulate a case where two rules attempt to reload on the same target prefix
+
+    example:
+        - Rule 1 target path 1: x.y.z
+        - Rule 2 target path 2: x.y
+
+    this MIGHT reverse the patch on Rule 1 and needs to be prevented
+
+    model_patcher_fixtures:
+        - module1:
+            - module1_1:
+                - Module2Class:
+                    - attribute: Module2Class
+                - mod_1_function
+            - module3:
+                - module3_1
+                    - Module3Class:
+                        - attribute: mod_1_function
+        - module2:
+            - Module2Class:
+
+        - module4:
+            - Module4Class(torch.nn.Module):
+                - attribute: Module5Class
+            - module4_1
+                - mod_4_function
+            - module5:
+                - module5_1
+                    - Module5Class
+                    - module_5_function
 
     """
 
     PatchedModuleClass = create_module_class(
-        "PatchedModClass",
+        "PatchedModuleClass",
     )
 
     def patched_mod_function():
         return "patched_mod_function"
 
-    # S1 - module1_1 has function mod_1_function
-    # 1. Replace module1_1.mod_1_function with new function
-    # 2. Ensure patch_target_module replaces with a new function
+    # Demonstrate how the 2nd patch overwrites the 1st patch if the reload module paths are the same
     with isolate_test_module_fixtures():
+        # 1st patch on a function
         patch_target_module(
-            "tests.model_patcher_fixtures.module1.module1_1.mod_1_function",
+            "tests.model_patcher_fixtures.module4.module5.module5_1.mod_5_function",
             patched_mod_function,
-            "tests.model_patcher_fixtures.module1",
+            "tests.model_patcher_fixtures.module4.module5",
         )
-        assert module1.mod_1_function() == "patched_mod_function"
 
-    # # test patches are reset outside the context manager
-    assert module1.mod_1_function() == "unpatched_mod_function"
+        assert module4.module5.mod_5_function() == "patched_mod_function"
 
-    # S2 - module1_1.Module1Class has an attribute module2.Module2Class
-    # 1. Replace Module2Class with new class and reload module1_1
-    # 2. Ensure patch_target_module replaces the attribute with a new attr class
-    with isolate_test_module_fixtures():
+        # 2nd patch on a class that has a target path that reloads module5 as well
         patch_target_module(
-            "tests.model_patcher_fixtures.module2.Module2Class",
+            "tests.model_patcher_fixtures.module4.module5.module5_1.Module5Class",
             PatchedModuleClass,
-            "tests.model_patcher_fixtures.module1.module1_1"
+            "tests.model_patcher_fixtures.module4.module5"
         )
-        assert isinstance(module1.Module1Class().attribute, PatchedModuleClass)
 
-    # check the the fixture isolation works
-    assert not isinstance(module1.Module1Class().attribute, PatchedModuleClass)
+        assert isinstance(module4.module5.Module5Class(), PatchedModuleClass)
+        assert module4.module5.mod_5_function() == "unpatched_mod_function"
 
-    # S3.1 - module1.module3.module3_1 is a submodule of module1
-    # 1. Replace module1.module3.module3_1.Module3Class with a new class
-    # 2. No target reploading
-    # - this test shows that a replacement only affects the EXACT PATH that was patched
+    # Ensure that an assertion is raised if target paths
+    # are a prefixes of another longer target path
+    with pytest.raises(
+        AssertionError,
+    ):
+        with isolate_test_module_fixtures():
+            with instantiate_model_patcher():
+                # 1. Initialize a model with module path tests.model_patcher_fixtures.module4
+                model = module4.Module4Class()
+
+                # 2. Simulate patching a function in module4.module5.module5_1
+                ModelPatcher.register(
+                    ModelPatcherRule(
+                        rule_id=f"{DUMMY_RULE_ID}.2",
+                        import_and_maybe_reload=(
+                            "tests.model_patcher_fixtures.module4.module5.module5_1.mod_5_function",
+                            patched_mod_function,
+                            "tests.model_patcher_fixtures.module4.module5.module5_1",
+                        ),
+                    )
+                )
+
+                # 3. Simulate patching a class in module4.module5.module5_1
+                ModelPatcher.register(
+                    ModelPatcherRule(
+                        rule_id=f"{DUMMY_RULE_ID}.1",
+                        import_and_maybe_reload=(
+                            "tests.model_patcher_fixtures.module4.module5.module5_1.Module5Class",
+                            PatchedModuleClass,
+                            "tests.model_patcher_fixtures.module4",
+                        ),
+                    )
+                )
+
+                # while there are occasions repeated reloads along the same target path prefix work,
+                # it is risky and not guaranteed to work for all cases.
+                # To prevent the risk of any of the patches conflicting,
+                # we throw an exception if a shorter target path is a prefix of another
+                # longer target path
+                ModelPatcher.patch(model)
+
+def test_mp_throws_warning_with_multiple_patches():
+    """
+    Ensure for each module, only one forward patch is implemented on it.
+    The patch implementation checks if there are multiple forward patch rules
+    that are applied to the module, only the 1st forward patch rule is applied,
+    the others will be ignored and a warning will be raised
+
+    In the case of a list of new rules generated by `forward_builder`, it will be
+    handled similarly since it decomposes to multiple single forward patch rules downstream.
+    """
+    with pytest.warns(
+        UserWarning,
+    ):
+        with isolate_test_module_fixtures():
+            with instantiate_model_patcher():
+                # 1. Create a model
+                # 2. Create a submodule to patch on
+                # 3. Create 1st rule to patch submodule forward function
+                # 4. Create 2nd rule to patch submodule forward function again
+                # 5. Throws warning that any subsequent forward patches after
+                #    the 1st patch is ignored
+
+                model = module4.Module4Class()
+                SubModule1 = create_module_class(
+                    "SubModule1", 
+                    namespaces={"forward": lambda self: "unpatched_forward_function"}
+                )
+                model.add_module("submodule_1", SubModule1())
+
+                ModelPatcher.register(
+                    ModelPatcherRule(
+                        rule_id=DUMMY_RULE_ID+".1",
+                        trigger=ModelPatcherTrigger(check=SubModule1),
+                        forward=lambda self: "patched_forward_function",
+                    )
+                )
+                ModelPatcher.register(
+                    ModelPatcherRule(
+                        rule_id=DUMMY_RULE_ID+".2",
+                        trigger=ModelPatcherTrigger(check=SubModule1),
+                        forward=lambda self: "patched_forward_function_2",
+                    )
+                )
+                ModelPatcher.patch(model)
+
+
+def test_forward_builder_rule_with_mp_replaces_old_forward():
+    """
+    Ensure that patching a model with a rule using forward_builder argument will
+    replace the children module forwards
+    """
+    def is_module_type_B(module):
+        if hasattr(module, "B"):
+            return True
+        return False
+
+    def is_module_type_C(module):
+        if hasattr(module, "C"):
+            return True
+        return False
+
+    def patched_forward_function(X):
+        return "patched_forward_function"
+
     with isolate_test_module_fixtures():
-        patch_target_module(
-           "tests.model_patcher_fixtures.module1.module3.module3_1.Module3Class",
-           PatchedModuleClass,
-        )
+        with instantiate_model_patcher():
+            # 1. Create Model and 3 different child submodules
+            # 2. Create the forward builder function to produce a list of
+            # (trigger obj, patched forwards) for each child module in model
+            # 3. Create rule on model class to patch the submodules using a forward_builder function
+            # 4. Ensure all submodule forwards are patched
 
-        # - this is the exact module path that was patched, so it will reflect the patched class
-        assert isinstance(module1.module3.module3_1.Module3Class(), PatchedModuleClass)
+            SubModule1 = create_module_class(
+                "SubModule1", namespaces={"forward": lambda X: "unpatched_forward_function"}
+            )
+            SubModule1A = create_module_class(
+                "SubModule1A", parent_class=SubModule1, namespaces={"A": "attributeA"}
+            )
+            SubModule1B = create_module_class(
+                "SubModule1B", parent_class=SubModule1, namespaces={"B": "attributeB"}
+            )
+            SubModule2 = create_module_class(
+                "SubModule2", 
+                namespaces={"C": "attributeC", "forward": lambda X: "unpatched_forward_function"}
+            )
 
-        # - this is the top-level module path, and shows that upper level paths will be
-        #   be affected
-        assert not isinstance(module1.module3.Module3Class(), PatchedModuleClass)
+            model = module4.module5.Module5Class()
+            model.add_module("submodule_1A", SubModule1A())
+            model.add_module("submodule_1B", SubModule1B())
+            model.add_module("submodule_2", SubModule2())
 
-    # S3.2 - module1.module3.module3_1 is a submodule of module1
-    # 1. Replace module1.module3.module3_1.Module3Class with a new class
-    # 2. reload the top-level module path module1
-    # -> NOTE: in general, we should avoid targeting any parent paths
-    #    for reload
-    with isolate_test_module_fixtures():
-        patch_target_module(
-           "tests.model_patcher_fixtures.module1.module3.module3_1.Module3Class",
-           PatchedModuleClass,
-           "tests.model_patcher_fixtures.module1",
-        )
+            # Function to create different triggers for different submodules
+            def build_list_of_triggers(
+                module,
+            ):
+                return [
+                    (ModelPatcherTrigger(check=SubModule1A), patched_forward_function),
+                    (ModelPatcherTrigger(check=is_module_type_B), patched_forward_function),
+                    (ModelPatcherTrigger(check=is_module_type_C), patched_forward_function),
+                ]
 
-        # - the reload of the top level module path module1, will NOT replace module1.module3
-        #   with the original version
-        # - reloading top-level paths is tricky due to caching of the modules
-        # - the reload of a top-level module does not cascade down to children modules.
-        assert not isinstance(module1.module3.module3_1.Module3Class(), PatchedModuleClass)
+            ModelPatcher.register(
+                ModelPatcherRule(
+                    rule_id=DUMMY_RULE_ID,
+                    trigger=ModelPatcherTrigger(check=module4.module5.Module5Class),
+                    forward_builder=build_list_of_triggers,
+                    )
+            )
 
-    # S3.3 - module1.module3 is a submodule of module1
-    # 1. Replace module1.module3.module3_1.Module3Class with a new class
-    # 2. reload the top-level module path module1
-    # -> NOTE: in general, we should avoid targeting any parent paths
-    #    for reload
-    with isolate_test_module_fixtures():
-        patch_target_module(
-           "tests.model_patcher_fixtures.module1.module3.Module3Class",
-           PatchedModuleClass,
-           "tests.model_patcher_fixtures.module1",
-        )
+            ModelPatcher.patch(model)
 
-        # - the reload of the top level module path module1, will replace module1.module3
-        #   with the original version
-        assert not isinstance(module1.module3.module3_1.Module3Class(), PatchedModuleClass)
-
-    # S4 - module1.module3 submodule has a dependency on
-    #      module1.module1_1.mod_1_function
-    # 1. Replace the module1.module1_1.mod_1_function with a new function
-    # 2. Ensure the target reloading of module1.module3 picks up the patched function
-    with isolate_test_module_fixtures():
-        patch_target_module(
-            "tests.model_patcher_fixtures.module1.module1_1.mod_1_function",
-            patched_mod_function,
-            "tests.model_patcher_fixtures.module1.module3.module3_1",
-        )
-        assert module1.module3.Module3Class().attribute() == "patched_mod_function"
+            for _, mod in model.named_children():
+                if hasattr(mod, "forward"):
+                    assert mod.forward() == "patched_forward_function"
