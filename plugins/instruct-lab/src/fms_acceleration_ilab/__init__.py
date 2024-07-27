@@ -12,13 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-KEY_PLUGINS = "plugins"
-PLUGIN_PREFIX = "fms_acceleration_"
+# Local
+# from .framework_plugin_loss import LossAccelerationPlugin
+# from .framework_plugin_multipack import MultipackDataloaderAccelerationPlugin
+from .framework_plugin_padding_free import PaddingFreeAccelerationPlugin
+# from .framework_plugin_mlp_dropout import MLPDropoutAccelerationPlugin
 
-ACCELERATION_FRAMEWORK_ENV_KEY = "ACCELERATION_FRAMEWORK_CONFIG_FILE"
+from fms_acceleration.model_patcher import ModelPatcher
 
-# the order below is a linear precedence in which the plugins will be registered
-# and activated.
-# - hence the plugins that have model loaders should be on top of this list
+PATCHES = [".flash_attn"]
+PLUGIN_PREFIX = "fms_acceleration_ilab"
 
-PLUGINS = ["peft", "foak", "ilab"]
+# TODO: remove the need for the prefix
+ModelPatcher.load_patches(
+    [f"{PLUGIN_PREFIX}{postfix}" for postfix in PATCHES],
+)

@@ -68,7 +68,8 @@ def get_relevant_configuration_sections(configuration: Dict) -> Dict:
             _cfg = relevant_config
             while n > 1:
                 p = path.pop(0)
-                _cfg[p] = {}
+                if p not in _cfg:
+                    _cfg[p] = {}
                 _cfg = _cfg[p]
                 n -= 1
 
