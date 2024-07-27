@@ -57,11 +57,12 @@ def register_tensors_as_parameters_patch_rule(target_module, torch_dtype):
         ModelPatcherRule(
             rule_id="autogptq_patch_tensors_as_float_parameters",
             trigger=ModelPatcherTrigger(check=target_module),
-            forward_builder = build_patch_to_view_tensor_to_parameter_for_fsdp_gptq,
+            forward_builder = partial(
+                build_patch_to_view_tensor_to_parameter_for_fsdp_gptq, torch_dtype=torch_dtype
+            ),
             forward_builder_args=["torch_dtype"],
         )
     )
-    ModelPatcher.patch = partial(ModelPatcher.patch, torch_dtype=torch_dtype)
 
 def make_sure_no_tensor_in_meta_device(
     model,

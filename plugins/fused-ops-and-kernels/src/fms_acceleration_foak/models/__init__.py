@@ -14,14 +14,21 @@
 
 # Local
 from fms_acceleration.model_patcher import ModelPatcher
-from functools import partial
+import importlib
 
 PATCHES = [".models.llama", ".models.mistral", ".models.mixtral"]
 PLUGIN_PREFIX = "fms_acceleration_foak"
 
 # TODO: remove the need for the prefix
 def register_foak_model_patch_rules(base_type):
-    ModelPatcher.load_patches(
-        [f"{PLUGIN_PREFIX}{postfix}" for postfix in PATCHES],
-    )
-    ModelPatcher.patch = partial(ModelPatcher.patch, base_type=base_type)
+    for postfix in PATCHES:
+        # define the patch module path to import
+        # if it exist, import the module
+        patch_path = f"{PLUGIN_PREFIX}{postfix}"
+        if importlib.util.find_spec(patch_path):
+            m = importlib.import_module(patch_path)
+            # get all model patcher rules from the module
+            # register every rule in the module
+            rules = m.get_mp_rules(base_type)
+            for _rule in rules:
+                ModelPatcher.register(_rule)
