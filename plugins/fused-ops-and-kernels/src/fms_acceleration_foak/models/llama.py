@@ -22,7 +22,6 @@ from transformers.models.llama.modeling_llama import (
     LlamaRMSNorm,
 )
 from fms_acceleration.model_patcher import (
-    ModelPatcher,
     ModelPatcherRule,
     ModelPatcherTrigger,
     combine_functions,

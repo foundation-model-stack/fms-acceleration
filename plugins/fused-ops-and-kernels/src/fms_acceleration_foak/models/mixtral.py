@@ -21,7 +21,6 @@ from transformers.models.mixtral.modeling_mixtral import (
     MixtralRMSNorm,
 )
 from fms_acceleration.model_patcher import (
-    ModelPatcher,
     ModelPatcherRule,
     ModelPatcherTrigger,
     combine_functions,

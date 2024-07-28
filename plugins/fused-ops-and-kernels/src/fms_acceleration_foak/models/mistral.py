@@ -22,7 +22,6 @@ from transformers.models.mistral.modeling_mistral import (
     MistralRMSNorm,
 )
 from fms_acceleration.model_patcher import (
-    ModelPatcher,
     ModelPatcherRule,
     ModelPatcherTrigger,
     combine_functions,
