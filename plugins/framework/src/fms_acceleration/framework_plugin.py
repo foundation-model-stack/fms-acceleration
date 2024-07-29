@@ -24,7 +24,6 @@ from peft import LoraConfig
 from transformers import TrainingArguments
 import torch
 
-
 @dataclass
 class PluginRegistration:
     plugin: "AccelerationPlugin"

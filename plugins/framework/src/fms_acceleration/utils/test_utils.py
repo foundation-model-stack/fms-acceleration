@@ -180,3 +180,11 @@ def dummy_augmentation(self, model, train_args, modifiable_args):
 def dummy_custom_loader(self, model_name, **kwargs):
     "dummy custom loader returning dummy model"
     return create_noop_model_with_archs(archs=["DummyModel"])  #
+
+@contextmanager
+def instantiate_model_patcher():
+    from fms_acceleration.model_patcher import ModelPatcher # pylint: disable=import-outside-toplevel
+    old_registrations = ModelPatcher.rules
+    ModelPatcher.rules = {}
+    yield
+    ModelPatcher.rules = old_registrations

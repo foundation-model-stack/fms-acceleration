@@ -19,6 +19,7 @@ from types import MethodType
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union
 import importlib
 import inspect
+import warnings
 
 # Third Party
 import pandas as pd
@@ -27,7 +28,7 @@ import torch
 # ------------------------ helpers -----------------------
 
 
-def _patch_target_module(
+def patch_target_module(
     to_patch: str,
     replace_with: Any,
     target_module: str = None,
@@ -74,7 +75,7 @@ class ModelPatcherTrigger:
 
     # the trigger operation
     check: Union[
-        torch.nn.Module,  # trigger on isinstance
+        Type[torch.nn.Module],  # trigger on isinstance
         Callable[[torch.nn.Module], bool],  # trigger on callable
     ]
 
@@ -88,7 +89,7 @@ class ModelPatcherTrigger:
     def is_triggered(
         self,
         module: torch.nn.Module,
-        module_name: str,
+        module_name: str = None,
     ):
         "Check if trigger returns truthful."
 
@@ -111,12 +112,25 @@ class ModelPatcherTrigger:
         return False
 
     def __post_init__(self):
-
-        if self.type is None:
-            if inspect.isclass(self.check) and issubclass(self.check, torch.nn.Module):
+        # if check is a module
+        if inspect.isclass(self.check) and issubclass(self.check, torch.nn.Module):
+            if self.type is None:
                 self.type = ModelPatcherTriggerType.module
             else:
+                # ensure check conforms with self.type
+                assert self.type == ModelPatcherTriggerType.module, \
+                    "type argument passed but `check` argument does not match type specified"
+        # if check is a callable
+        elif callable(self.check):
+            if self.type is None:
                 self.type = ModelPatcherTriggerType.callable
+            else:
+                # ensure check conforms with self.type
+                assert self.type == ModelPatcherTriggerType.callable, \
+                    "type argument passed but `check` argument does not match type specified"
+        else:
+            raise TypeError("check argument needs to be torch.nn.Module or Callable")
+
 
 
 # type for model forward
@@ -161,11 +175,11 @@ class ModelPatcherRule:
     ] = None
 
     def __post_init__(self):
-        if (
-            self.forward is not None
-            and self.forward_builder is not None
-            and self.import_and_maybe_reload is not None
-        ):
+        if sum([
+            self.forward is not None,
+            self.forward_builder is not None,
+            self.import_and_maybe_reload is not None,
+        ]) != 1:
             raise ValueError(
                 f"Rule '{self.rule_id}' must only have only one of forward, "
                 "foward builder, or import_and_maybe_reload, specified."
@@ -182,7 +196,6 @@ class ModelPatcherRule:
                 f"Rule '{self.rule_id}' has forward_builder_args but no "
                 "forward_builder."
             )
-
 
 # helpful to keep a history of all patching that has been done
 @dataclass
@@ -247,6 +260,8 @@ class ModelPatcher:
 
     @staticmethod
     def did_rule_trigger(module: torch.nn.Module, module_name: str):
+
+        active_rule_name, active_rule = None, None
         for name, rule in ModelPatcher.rules.items():
 
             # if there is no trigger
@@ -254,9 +269,19 @@ class ModelPatcher:
                 continue
 
             if rule.trigger.is_triggered(module, module_name):
-                return name, rule
+                # if active rule, assign the the current rule as active
+                if active_rule is None:
+                    active_rule_name = name
+                    active_rule = rule
+                # otherwise, if there is already an active rule, raise warning
+                # that subsequent compatible forward rules will be ignored
+                # for simple forward patches. forward_builder args are handled
+                # when they are decomposed into new simple forward rules
+                elif rule.forward is not None:
+                    warnings.warn(f"rule {rule.rule_id} is ignored on {module_name} as an \
+                        earlier rule {active_rule.rule_id} has been applied")
 
-        return None, None
+        return active_rule_name, active_rule
 
     @staticmethod
     def _import_and_reload(model: torch.nn.Module):
@@ -305,12 +330,28 @@ class ModelPatcher:
                 elif _target.startswith(module_path):
                     _no_reload.append(rule)
 
-        assert len(_with_reload) <= 1, "cannot have have at most one rule with reload"
+        # If there are multiple reload targets,
+        # ensure that their paths do not conflict as reloading same module might reset patches
+        if len(_with_reload) > 1:
+            # sort ascending target path length
+            _with_reload = sorted(
+                _with_reload,
+                key=lambda _rule: len(_rule.import_and_maybe_reload[2]),
+                reverse=False
+            )
+            for rule_s in _with_reload:
+                for rule_l in _with_reload[1:]:
+                    # if target paths in rule s is a prefix of rule l, raise an error
+                    _, _, _path_s = rule_s.import_and_maybe_reload
+                    _, _, _path_l = rule_l.import_and_maybe_reload
+                    assert not _path_l.startswith(_path_s), \
+                        f"Attempting to reload same path `{_path_s}` multiple times in \
+                            {rule_s.rule_id} and {rule_l.rule_id}"
 
         # handle those with reload first
         for rule in _with_reload + _no_reload:
             _target, _object, _reload = rule.import_and_maybe_reload
-            _patch_target_module(_target, _object, _reload)
+            patch_target_module(_target, _object, _reload)
             ModelPatcher.history.append(
                 ModelPatcherHistory(
                     instance=id(model),
@@ -423,6 +464,7 @@ class ModelPatcher:
     def patch(model: torch.nn.Module, **kwargs):
         # NOTE: for a set of rules, this patch function should be called
         # only once. We do not have any checks for this at the moment
+
         try:
             ModelPatcher._import_and_reload(model.get_base_model())
         except AttributeError:
@@ -460,7 +502,6 @@ class ModelPatcher:
 
 # ------------------------ function -----------------------
 
-
 def patch_model(model: torch.nn.Module, **kwargs):
     ModelPatcher.patch(model, **kwargs)
     return model
@@ -471,17 +512,26 @@ def patch_model_summary():
 
 
 def combine_triggers(*triggers: ModelPatcherTrigger, logic: str = "OR"):
-    assert logic == "OR", "only OR logic implemented for combining triggers"
+    assert logic in ["AND", "OR"], "Only `AND`, `OR` logic implemented for combining triggers"
 
     # NOTE: this can be probably simplified
     def _or_logic(*args, **kwargs):
         for trig in triggers:
-            if trig.check(*args, **kwargs):
+            if trig.is_triggered(*args, **kwargs):
                 return True
         return False
 
-    return ModelPatcherTrigger(check=_or_logic)
+    def _and_logic(*args, **kwargs):
+        for trig in triggers:
+            if not trig.is_triggered(*args, **kwargs):
+                return False
+        return True
 
+    _logic = _or_logic
+    if logic == "AND":
+        _logic = _and_logic
+
+    return ModelPatcherTrigger(check=_logic)
 
 def combine_functions(*funcs: Callable, logic: str = "APPEND"):
     assert logic == "APPEND", "only APPEND logic implemented for combining functions"

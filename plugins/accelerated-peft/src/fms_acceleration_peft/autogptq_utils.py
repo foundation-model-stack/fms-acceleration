@@ -16,43 +16,52 @@
 # https://spdx.dev/learn/handling-license-info/
 
 # Standard
-from typing import Any, Callable, List
-import importlib
+from typing import Callable, List
 
 # Third Party
 from peft import LoraConfig
 from peft.tuners.lora.gptq import QuantLinear as LoraLinearGPTQ
 import torch
 
+from fms_acceleration.model_patcher import ModelPatcher, ModelPatcherRule, ModelPatcherTrigger
+from functools import partial
+
 # these parameters are to be patched for triton v2
 # consider making a map if patching more kernels
 PATCH_FOR_FSDP_TRITON_V2 = ["qweight", "qzeros"]
 
-
-# This function may be moved after merging
-# https://github.com/foundation-model-stack/fms-acceleration/pull/25
-def _patch_target_module(
-    to_patch: str,
-    replace_with: Any,
-    target_module: str = None,
+def build_patch_to_view_tensor_to_parameter_for_fsdp_gptq(
+    module,
+    torch_dtype,
 ):
-    to_patch = to_patch.split(".")
-    assert len(to_patch) > 1, "must have an object to patch"
+    # convert all patched attributes to Parameters of torch_dtype
+    # so FSDP can shard them
+    for attr_name in PATCH_FOR_FSDP_TRITON_V2:
+        attr = getattr(module, attr_name)
+        attr = torch.nn.Parameter(
+            attr.view(torch_dtype), requires_grad=False
+        )
+        setattr(module, attr_name, attr)
 
-    to_patch, obj_name_to_patch = to_patch[:-1], to_patch[-1]
-    to_patch = ".".join(to_patch)
-    source = importlib.import_module(to_patch)
-    original_obj = getattr(source, obj_name_to_patch)
-    setattr(source, obj_name_to_patch, replace_with)
+    # this patches the forward to convert them back to original
+    # type (i.e. int32) before the function call into the kernels
+    return patch_forward_to_view_attributes_before_call(
+        module.forward,
+        attribute_names=PATCH_FOR_FSDP_TRITON_V2,
+        torch_dtype=torch.int32,  # patch it back to
+    )
 
-    if target_module is not None:
-        # reload and this should get the patched object
-        target_module = importlib.import_module(target_module)
-        importlib.reload(target_module)
-
-        # replace it
-        setattr(source, obj_name_to_patch, original_obj)
-
+def register_tensors_as_parameters_patch_rule(target_module, torch_dtype):
+    # Register patch
+    ModelPatcher.register(
+        ModelPatcherRule(
+            rule_id="autogptq_patch_tensors_as_float_parameters",
+            trigger=ModelPatcherTrigger(check=target_module),
+            forward_builder = partial(
+                build_patch_to_view_tensor_to_parameter_for_fsdp_gptq, torch_dtype=torch_dtype
+            ),
+        )
+    )
 
 def make_sure_no_tensor_in_meta_device(
     model,
@@ -123,7 +132,6 @@ def create_new_module_peft(
 
     # if module cannot be found, return None which results in a raise in the call-stack
     return new_module
-
 
 # consider to move this somewhere more general
 def patch_forward_to_view_attributes_before_call(

@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # Standard
-from typing import Callable, Dict, Tuple
+from typing import Dict, Tuple
 
 # Third Party
 from accelerate.utils import set_module_tensor_to_device
@@ -21,32 +21,8 @@ from fms_acceleration import AccelerationPlugin
 from peft import LoraConfig
 from peft.tuners.lora.layer import LoraLayer
 from transformers import TrainingArguments
-from transformers.utils import logging
 import torch
 import torch.distributed as dist
-
-# want to use the transformers logger, but a bit of pain
-logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-logger.setLevel(logging._get_default_logging_level())
-logger.addHandler(logging._default_handler)
-
-
-def log_patch_summary(
-    logging_func: Callable = None,
-):
-    if logging_func is None:
-        logging_func = print
-
-    # this is a guarded import, because the model rule registration
-    # does not need to be loaded unless patch_model is required
-    # Local
-    from .models.model_patcher import (  # pylint: disable=import-outside-toplevel
-        patch_model_summary,
-    )
-
-    for line in patch_model_summary().split("\n"):
-        logging_func(line)
-
 
 # consider moving this somewhere else later
 def lora_adapters_switch_ddp_from_fsdp(modules, fsdp_plugin):
@@ -82,6 +58,16 @@ def lora_adapters_switch_ddp_from_fsdp(modules, fsdp_plugin):
         if not B.weight.is_cuda:
             set_module_tensor_to_device(B, "weight", "cuda")
 
+def register_foak_model_patch_rules(base_type):
+    from fms_acceleration.model_patcher import ModelPatcher # pylint: disable=import-outside-toplevel
+    from .models import llama, mistral, mixtral # pylint: disable=import-outside-toplevel
+    rules = [
+        *llama.get_mp_rules(base_type),
+        *mistral.get_mp_rules(base_type),
+        *mixtral.get_mp_rules(base_type),
+    ]
+    for _rule in rules:
+        ModelPatcher.register(_rule)
 
 class FastQuantizedPeftAccelerationPlugin(AccelerationPlugin):
 
@@ -135,25 +121,13 @@ class FastQuantizedPeftAccelerationPlugin(AccelerationPlugin):
             model.dtype == torch.float16 and train_args.fp16
         ), "need to run in fp16 mixed precision or load model in fp16"
 
-        # this is a guarded import, because the model rule registration
-        # does not need to be loaded unless patch_model is required
-        # Local
-        from .models.model_patcher import (  # pylint: disable=import-outside-toplevel
-            patch_model,
-        )
-
-        model = patch_model(model, base_type=self._base_layer)
+        # wrapper function to register foak patches
+        register_foak_model_patch_rules(base_type = self._base_layer)
         return model, modifiable_args
 
     def get_callbacks_and_ready_for_train(
         self, model: torch.nn.Module = None, accelerator=None
     ):
-
-        # if this is moved to framework, it can be handled as the same way as
-        # log_initialization_message
-        # log the patch summary
-        if accelerator is not None and accelerator.is_main_process:
-            log_patch_summary(logging_func=logger.info)
 
         callbacks = []
         if (

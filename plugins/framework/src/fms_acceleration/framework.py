@@ -38,6 +38,22 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 logger.setLevel(logging._get_default_logging_level())
 logger.addHandler(logging._default_handler)
 
+def log_patch_summary(
+    logging_func: Callable = None,
+):
+    if logging_func is None:
+        logging_func = print
+
+    # this is a guarded import, because the model rule registration
+    # does not need to be loaded unless patch_model is required
+    # Local
+    from .model_patcher import (  # pylint: disable=import-outside-toplevel
+        patch_model_summary,
+    )
+
+    for line in patch_model_summary().split("\n"):
+        logging_func(line)
+
 
 def check_plugin_packages(plugin: AccelerationPlugin):
     if plugin.require_packages is None:
@@ -207,6 +223,12 @@ class AccelerationFramework:
     def get_callbacks_and_ready_for_train(
         self, model: torch.nn.Module = None, accelerator: Accelerator = None
     ):
+
+        from .model_patcher import ModelPatcher # pylint: disable=import-outside-toplevel
+        if model is not None:
+            # Finally apply all registered patches to the model
+            ModelPatcher.patch(model)
+
         # show the initialized message
         if accelerator is not None and accelerator.is_main_process:
             log_initialization_message(
@@ -214,6 +236,9 @@ class AccelerationFramework:
                 PLUGIN_REGISTRATIONS,
                 logging_func=logger.info,
             )
+
+            # if patching is done, print patch summary to logger
+            log_patch_summary(logging_func=logger.info)
 
         cbks = []
         for _, plugin in self.active_plugins:

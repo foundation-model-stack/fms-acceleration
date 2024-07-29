@@ -16,7 +16,7 @@ from ..fused_ops.unsloth_lora.bnb.fast_lora import apply_lora_qkv as fused_op_qk
 from ..fused_ops.unsloth_lora.gptq.fast_lora import apply_lora_mlp as fused_op_mlp_gptq
 from ..fused_ops.unsloth_lora.gptq.fast_lora import apply_lora_o_v2 as fused_op_o_gptq
 from ..fused_ops.unsloth_lora.gptq.fast_lora import apply_lora_qkv as fused_op_qkv_gptq
-from .model_patcher import ModelPatcherTrigger
+from fms_acceleration.model_patcher import ModelPatcherTrigger
 
 KEY_QKV = "qkv"
 KEY_O = "o"

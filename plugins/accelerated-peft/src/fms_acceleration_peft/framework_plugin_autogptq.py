@@ -24,6 +24,7 @@ import os
 
 # Third Party
 from fms_acceleration import AccelerationPlugin
+from fms_acceleration.model_patcher import patch_target_module
 from peft import LoraConfig, prepare_model_for_kbit_training
 from peft.tuners.lora.model import LoraModel
 from transformers import AutoModelForCausalLM, TrainingArguments
@@ -31,6 +32,8 @@ from transformers.modeling_utils import is_fsdp_enabled
 import torch
 import torch.distributed
 
+# Local
+from .autogptq_utils import register_tensors_as_parameters_patch_rule
 
 class AutoGPTQAccelerationPlugin(AccelerationPlugin):
 
@@ -81,11 +84,6 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
             from .gptqmodel.nn_modules.qlinear.qlinear_tritonv2 import ( # pylint: disable=import-outside-toplevel,import-error
                 QuantLinear,
             )
-        # Local
-        from .autogptq_utils import (  # pylint: disable=import-outside-toplevel
-            PATCH_FOR_FSDP_TRITON_V2,
-            patch_forward_to_view_attributes_before_call,
-        )
 
         # Currently we allow only a quantized checkpoint to be loaded, we do not
         # implement the quantization process here.
@@ -143,14 +141,11 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
             kwargs["low_cpu_mem_usage"] = True
             if self.use_external_lib:
                 # Local
-                from .autogptq_utils import (  # pylint: disable=import-outside-toplevel
-                    _patch_target_module,
-                    make_sure_no_tensor_in_meta_device,
-                )
+                from .autogptq_utils import make_sure_no_tensor_in_meta_device # pylint: disable=import-outside-toplevel
 
                 # We patch `make_sure_no_tensor_in_meta_device`
                 # from autogptq to avoid errors on models without bias
-                _patch_target_module(
+                patch_target_module(
                     to_patch="auto_gptq.modeling._utils.make_sure_no_tensor_in_meta_device",
                     replace_with=make_sure_no_tensor_in_meta_device,
                     target_module="auto_gptq.modeling._base",
@@ -201,31 +196,14 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
             world_size > 1
             and os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true"
         ):
+            # register FSDP patch
+            register_tensors_as_parameters_patch_rule(
+                target_module=QuantLinear,
+                torch_dtype=torch_dtype,
+            )
 
-            # patch all the QuantLinear base layers
-            for mod in model.modules():
-                if isinstance(mod, QuantLinear):
-
-                    # convert all patched attributes to Parameters of torch_dtype
-                    # so FSDP can shard them
-                    for attr_name in PATCH_FOR_FSDP_TRITON_V2:
-                        attr = getattr(mod, attr_name)
-                        attr = torch.nn.Parameter(
-                            attr.view(torch_dtype), requires_grad=False
-                        )
-                        setattr(mod, attr_name, attr)
-
-                    # this patches the forward to convert them back to original
-                    # type (i.e. int32) before the function call into the kernels
-                    _forward = patch_forward_to_view_attributes_before_call(
-                        mod.forward,
-                        attribute_names=PATCH_FOR_FSDP_TRITON_V2,
-                        torch_dtype=torch.int32,  # patch it back to
-                    )
-                    mod.forward = MethodType(_forward, mod)
-
-        # replace
-        AutoModelForCausalLM.from_config = _old_from_config
+            # replace
+            AutoModelForCausalLM.from_config = _old_from_config
 
         # AutoGPTQ does not set the torch_dtype of the model carefully
         model.config.torch_dtype = torch_dtype

@@ -21,114 +21,109 @@ from transformers.models.llama.modeling_llama import (
     LlamaMLP,
     LlamaRMSNorm,
 )
-
-# Local
-from ..kernels.unsloth.cross_entropy_loss import FastCrossEntropyLoss
-from ..kernels.unsloth.rms_layernorm import fast_rms_layernorm
-from ..kernels.unsloth.rope_embedding import fast_rope_embedding
-from .model_patcher import (
-    ModelPatcher,
+from fms_acceleration.model_patcher import (
     ModelPatcherRule,
     ModelPatcherTrigger,
     combine_functions,
     combine_triggers,
 )
+
+# Local
+from ..kernels.unsloth.cross_entropy_loss import FastCrossEntropyLoss
+from ..kernels.unsloth.rms_layernorm import fast_rms_layernorm
+from ..kernels.unsloth.rope_embedding import fast_rope_embedding
 from .utils import KEY_MLP, KEY_O, KEY_QKV, build_lora_fused_ops, trigger_fused_ops
 
-# TODO: have a generic version of this rule
-# - do regex on RMSNorm class name
-# - check on the tensors required for fast_rms_layernorm
-ModelPatcher.register(
-    ModelPatcherRule(
-        rule_id="llama-rms",
-        trigger=ModelPatcherTrigger(check=LlamaRMSNorm),
-        forward=fast_rms_layernorm,
-    ),
-)
-
-# TODO: have a generic version of this rule
-# - do regex on Attention class name
-# - have a set of qkv / o module names and check on that
-ModelPatcher.register(
-    ModelPatcherRule(
-        rule_id="llama-qkvo",
-        trigger=combine_triggers(
-            ModelPatcherTrigger(
-                check=partial(
-                    trigger_fused_ops,
-                    attn_cls=LlamaAttention,
+def get_mp_rules(base_type: str):
+    """
+    Function to access all patch rules in this module.
+    If it is a forward_builder rule with `base_type` in
+    its forward builder argument, wrap the forward_builder
+    function as a partial function with the base_type argument
+    """
+    return [
+        # TODO: have a generic version of this rule
+        # - do regex on RMSNorm class name
+        # - check on the tensors required for fast_rms_layernorm
+        ModelPatcherRule(
+            rule_id="llama-rms",
+            trigger=ModelPatcherTrigger(check=LlamaRMSNorm),
+            forward=fast_rms_layernorm,
+        ),
+        # TODO: have a generic version of this rule
+        # - do regex on Attention class name
+        # - have a set of qkv / o module names and check on that
+        ModelPatcherRule(
+            rule_id="llama-qkvo",
+            trigger=combine_triggers(
+                ModelPatcherTrigger(
+                    check=partial(
+                        trigger_fused_ops,
+                        attn_cls=LlamaAttention,
+                        submodule_names=["q_proj", "k_proj", "v_proj"],
+                    )
+                ),
+                ModelPatcherTrigger(
+                    check=partial(
+                        trigger_fused_ops,
+                        attn_cls=LlamaAttention,
+                        submodule_names=["o_proj"],
+                    )
+                ),
+                logic="OR",
+            ),
+            forward_builder=combine_functions(
+                partial(
+                    build_lora_fused_ops,
                     submodule_names=["q_proj", "k_proj", "v_proj"],
-                )
+                    fused_op=KEY_QKV,
+                    base_type=base_type,
+                ),
+                partial(
+                    build_lora_fused_ops,
+                    submodule_names=["o_proj"],
+                    fused_op=KEY_O,
+                    base_type=base_type,
+                ),
+                logic="APPEND",
             ),
-            ModelPatcherTrigger(
+        ),
+        ModelPatcherRule(
+            rule_id="llama-mlp",
+            trigger=ModelPatcherTrigger(
                 check=partial(
                     trigger_fused_ops,
-                    attn_cls=LlamaAttention,
-                    submodule_names=["o_proj"],
+                    attn_cls=LlamaMLP,
+                    submodule_names=["up_proj", "down_proj", "gate_proj"],
                 )
             ),
-            logic="OR",
-        ),
-        forward_builder=combine_functions(
-            partial(
+            forward_builder=partial(
                 build_lora_fused_ops,
-                submodule_names=["q_proj", "k_proj", "v_proj"],
-                fused_op=KEY_QKV,
-            ),
-            partial(
-                build_lora_fused_ops,
-                submodule_names=["o_proj"],
-                fused_op=KEY_O,
-            ),
-            logic="APPEND",
-        ),
-        forward_builder_args=["base_type"],
-    )
-)
-
-ModelPatcher.register(
-    ModelPatcherRule(
-        rule_id="llama-mlp",
-        trigger=ModelPatcherTrigger(
-            check=partial(
-                trigger_fused_ops,
-                attn_cls=LlamaMLP,
                 submodule_names=["up_proj", "down_proj", "gate_proj"],
-            )
+                fused_op=KEY_MLP,
+                base_type=base_type,
+            ),
         ),
-        forward_builder=partial(
-            build_lora_fused_ops,
-            submodule_names=["up_proj", "down_proj", "gate_proj"],
-            fused_op=KEY_MLP,
+        # TODO: have a generic version of this rule
+        # - get the module_name and reload on that
+        ModelPatcherRule(
+            rule_id="llama-cross-ent",
+            import_and_maybe_reload=(
+                "torch.nn.CrossEntropyLoss",
+                FastCrossEntropyLoss,
+                "transformers.models.llama.modeling_llama",
+            ),
         ),
-        forward_builder_args=["base_type"],
-    )
-)
-
-# TODO: have a generic version of this rule
-# - get the module_name and reload on that
-ModelPatcher.register(
-    ModelPatcherRule(
-        rule_id="llama-cross-ent",
-        import_and_maybe_reload=(
-            "torch.nn.CrossEntropyLoss",
-            FastCrossEntropyLoss,
-            "transformers.models.llama.modeling_llama",
-        ),
-    )
-)
-
-# TODO: have a generic version of this rule
-# - get the module name
-# - check if "apply_rotary_pos_emb" exists
-# - patch
-ModelPatcher.register(
-    ModelPatcherRule(
-        rule_id="llama-rope",
-        import_and_maybe_reload=(
-            "transformers.models.llama.modeling_llama.apply_rotary_pos_emb",
-            fast_rope_embedding,
-            None,
-        ),
-    )
-)
+        # TODO: have a generic version of this rule
+        # - get the module name
+        # - check if "apply_rotary_pos_emb" exists
+        # - patch
+        ModelPatcherRule(
+            rule_id="llama-rope",
+            import_and_maybe_reload=(
+                "transformers.models.llama.modeling_llama.apply_rotary_pos_emb",
+                fast_rope_embedding,
+                None,
+            ),
+        )
+    ]

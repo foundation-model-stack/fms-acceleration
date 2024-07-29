@@ -20,85 +20,85 @@ from transformers.models.mixtral.modeling_mixtral import (
     MixtralAttention,
     MixtralRMSNorm,
 )
-
-# Local
-from ..kernels.unsloth.cross_entropy_loss import FastCrossEntropyLoss
-from ..kernels.unsloth.rms_layernorm import fast_rms_layernorm
-from ..kernels.unsloth.rope_embedding import fast_rope_embedding
-from .model_patcher import (
-    ModelPatcher,
+from fms_acceleration.model_patcher import (
     ModelPatcherRule,
     ModelPatcherTrigger,
     combine_functions,
     combine_triggers,
 )
+
+# Local
+from ..kernels.unsloth.cross_entropy_loss import FastCrossEntropyLoss
+from ..kernels.unsloth.rms_layernorm import fast_rms_layernorm
+from ..kernels.unsloth.rope_embedding import fast_rope_embedding
+
 from .utils import KEY_O, KEY_QKV, build_lora_fused_ops, trigger_fused_ops
 
-# - do regex on RMSNorm class name
-# - check on the tensors required for fast_rms_layernorm
-ModelPatcher.register(
-    ModelPatcherRule(
-        rule_id="mixtral-rms",
-        trigger=ModelPatcherTrigger(check=MixtralRMSNorm),
-        forward=fast_rms_layernorm,
-    ),
-)
+def get_mp_rules(base_type):
+    """
+    Function to access all patch rules in this module.
+    If it is a forward_builder rule with `base_type` in
+    its forward builder argument, wrap the forward_builder
+    function as a partial function with the base_type argument
+    """
 
-ModelPatcher.register(
-    ModelPatcherRule(
-        rule_id="mixtral-qkvo",
-        trigger=combine_triggers(
-            ModelPatcherTrigger(
-                check=partial(
-                    trigger_fused_ops,
-                    attn_cls=MixtralAttention,
+    # - do regex on RMSNorm class name
+    # - check on the tensors required for fast_rms_layernorm
+    return [
+        ModelPatcherRule(
+            rule_id="mixtral-rms",
+            trigger=ModelPatcherTrigger(check=MixtralRMSNorm),
+            forward=fast_rms_layernorm,
+        ),
+        ModelPatcherRule(
+            rule_id="mixtral-qkvo",
+            trigger=combine_triggers(
+                ModelPatcherTrigger(
+                    check=partial(
+                        trigger_fused_ops,
+                        attn_cls=MixtralAttention,
+                        submodule_names=["q_proj", "k_proj", "v_proj"],
+                    )
+                ),
+                ModelPatcherTrigger(
+                    check=partial(
+                        trigger_fused_ops,
+                        attn_cls=MixtralAttention,
+                        submodule_names=["o_proj"],
+                    )
+                ),
+                logic="OR",
+            ),
+            forward_builder=combine_functions(
+                partial(
+                    build_lora_fused_ops,
                     submodule_names=["q_proj", "k_proj", "v_proj"],
-                )
-            ),
-            ModelPatcherTrigger(
-                check=partial(
-                    trigger_fused_ops,
-                    attn_cls=MixtralAttention,
+                    fused_op=KEY_QKV,
+                    base_type=base_type,
+                ),
+                partial(
+                    build_lora_fused_ops,
                     submodule_names=["o_proj"],
-                )
+                    fused_op=KEY_O,
+                    base_type=base_type,
+                ),
+                logic="APPEND",
             ),
-            logic="OR",
         ),
-        forward_builder=combine_functions(
-            partial(
-                build_lora_fused_ops,
-                submodule_names=["q_proj", "k_proj", "v_proj"],
-                fused_op=KEY_QKV,
+        ModelPatcherRule(
+            rule_id="mixtral-cross-ent",
+            import_and_maybe_reload=(
+                "torch.nn.CrossEntropyLoss",
+                FastCrossEntropyLoss,
+                "transformers.models.mixtral.modeling_mixtral",
             ),
-            partial(
-                build_lora_fused_ops,
-                submodule_names=["o_proj"],
-                fused_op=KEY_O,
+        ),
+        ModelPatcherRule(
+            rule_id="mixtral-rope",
+            import_and_maybe_reload=(
+                "transformers.models.mixtral.modeling_mixtral.apply_rotary_pos_emb",
+                fast_rope_embedding,
+                None,
             ),
-            logic="APPEND",
-        ),
-        forward_builder_args=["base_type"],
-    )
-)
-
-ModelPatcher.register(
-    ModelPatcherRule(
-        rule_id="mixtral-cross-ent",
-        import_and_maybe_reload=(
-            "torch.nn.CrossEntropyLoss",
-            FastCrossEntropyLoss,
-            "transformers.models.mixtral.modeling_mixtral",
-        ),
-    )
-)
-
-ModelPatcher.register(
-    ModelPatcherRule(
-        rule_id="mixtral-rope",
-        import_and_maybe_reload=(
-            "transformers.models.mixtral.modeling_mixtral.apply_rotary_pos_emb",
-            fast_rope_embedding,
-            None,
-        ),
-    )
-)
+        )
+    ]

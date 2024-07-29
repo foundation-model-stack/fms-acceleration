@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fms-acceleration-foak"
-version = '0.0.1'
+version = '0.1.1.dev'
 description = "FMS Acceleration using Fused Operations and Kernels"
 authors = [
   {name = "Fabian Lim", email = "flim@sg.ibm.com"},
@@ -22,7 +22,7 @@ classifiers=[
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
 ]
-dependencies = ['pandas']
+dependencies = []
 
 [tool.hatch.build.targets.wheel]
 only-include = ["src/fms_acceleration_foak"]
