@@ -111,9 +111,10 @@ def main(
         columns={"self": "new", "other": "ref"}, level=-1
     )
     diff = diff[diff.index.isin([outlier for outlier in outliers])]
-    outliers_df = outliers_df.set_index(indices).merge(
-        diff, left_index=True, right_index=True
-    )
+    if not diff.empty:
+        outliers_df = outliers_df.set_index(indices).merge(
+            diff, left_index=True, right_index=True
+        )
     outliers_df.to_csv(os.path.join(result_dir, OUTLIERS_FILENAME))
     for chart, filename in charts:
         chart.figure.savefig(os.path.join(result_dir, filename))

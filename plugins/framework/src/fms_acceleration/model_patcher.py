@@ -179,7 +179,7 @@ class ModelPatcherRule:
             self.forward is not None,
             self.forward_builder is not None,
             self.import_and_maybe_reload is not None,
-        ]) > 1:
+        ]) != 1:
             raise ValueError(
                 f"Rule '{self.rule_id}' must only have only one of forward, "
                 "foward builder, or import_and_maybe_reload, specified."
@@ -332,7 +332,7 @@ class ModelPatcher:
 
         # If there are multiple reload targets,
         # ensure that their paths do not conflict as reloading same module might reset patches
-        if len(_with_reload)>1:
+        if len(_with_reload) > 1:
             # sort ascending target path length
             _with_reload = sorted(
                 _with_reload,
