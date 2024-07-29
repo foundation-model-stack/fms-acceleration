@@ -14,7 +14,7 @@
 
 # Standard
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Set, Tuple, Callable
+from typing import Any, Dict, List, Optional, Set, Tuple
 import importlib
 import sys
 

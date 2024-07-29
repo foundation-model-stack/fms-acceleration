@@ -59,8 +59,8 @@ def lora_adapters_switch_ddp_from_fsdp(modules, fsdp_plugin):
             set_module_tensor_to_device(B, "weight", "cuda")
 
 def register_foak_model_patch_rules(base_type):
-    from fms_acceleration.model_patcher import ModelPatcher
-    from .models import llama, mistral, mixtral
+    from fms_acceleration.model_patcher import ModelPatcher # pylint: disable=import-outside-toplevel
+    from .models import llama, mistral, mixtral # pylint: disable=import-outside-toplevel
     rules = [
         *llama.get_mp_rules(base_type),
         *mistral.get_mp_rules(base_type),
