@@ -22,9 +22,11 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         """
         This implementation assumes that only 3 arguments, input_ids, position_ids and labels
         are needed by the model, anything else is dropped by the collator
-        """       
+        """
         if return_tensors is None:
             return_tensors = self.return_tensors
+
+        # Preserve the the original collate behaviour to cater to all use cases
         is_labels_provided = "labels" in features[0]
         ret = {"input_ids": [], "labels": [], "position_ids": []}
         for feature in features:
@@ -35,3 +37,4 @@ class DataCollatorWithFlattening(DefaultDataCollator):
             else:
                 ret["labels"] += [-100] + feature["input_ids"][1:]
         return default_data_collator([ret], return_tensors)
+        

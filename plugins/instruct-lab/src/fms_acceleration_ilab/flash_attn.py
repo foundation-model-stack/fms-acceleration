@@ -20,7 +20,7 @@ def prepare_fa2_from_position_ids(query, key, value, position_ids, query_length)
 
 # we can replace with the model patcher eventually
 def build_fa_forward(
-    attention: torch.nn.Module, causal: bool = True, dropout: float = None 
+    attention: torch.nn.Module, causal: bool = True, dropout: float = None
 ):
     # assert not hasattr(self, '_position_ids'), "cannot patch fa attention"
 
