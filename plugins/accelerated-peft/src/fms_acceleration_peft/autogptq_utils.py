@@ -60,7 +60,6 @@ def register_tensors_as_parameters_patch_rule(target_module, torch_dtype):
             forward_builder = partial(
                 build_patch_to_view_tensor_to_parameter_for_fsdp_gptq, torch_dtype=torch_dtype
             ),
-            forward_builder_args=["torch_dtype"],
         )
     )
 

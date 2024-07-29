@@ -21,31 +21,8 @@ import sys
 # Third Party
 from accelerate import Accelerator
 from peft import LoraConfig
-from transformers.utils import logging
 from transformers import TrainingArguments
 import torch
-
-# want to use the transformers logger, but a bit of pain
-logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
-logger.setLevel(logging._get_default_logging_level())
-logger.addHandler(logging._default_handler)
-
-def log_patch_summary(
-    logging_func: Callable = None,
-):
-    if logging_func is None:
-        logging_func = print
-
-    # this is a guarded import, because the model rule registration
-    # does not need to be loaded unless patch_model is required
-    # Local
-    from fms_acceleration.model_patcher import (  # pylint: disable=import-outside-toplevel
-        patch_model_summary,
-    )
-
-    for line in patch_model_summary().split("\n"):
-        logging_func(line)
-
 
 @dataclass
 class PluginRegistration:
@@ -168,15 +145,6 @@ class AccelerationPlugin:
     def get_callbacks_and_ready_for_train(
         self, model: torch.nn.Module = None, accelerator: Accelerator = None
     ):
-        from .model_patcher import ModelPatcher # pylint: disable=import-outside-toplevel
-        if model is not None:
-            # Finally apply all registered patches to the model
-            ModelPatcher.patch(model)
-
-        # if patching is done, print patch summary to logger
-        if len(ModelPatcher.history) > 0:
-            log_patch_summary(logging_func=logger.info)
-
         return []
 
     def _check_config_and_maybe_check_values(
