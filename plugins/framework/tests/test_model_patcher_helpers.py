@@ -251,8 +251,9 @@ def test_mp_rule_raises_error_when_arguments_incorrectly_configured():
             import_and_maybe_reload=(),
         )
 
-    # Test that rule construction raises if forward_builder_args are provided
-    # without a forward_builder
+    # Test that rule construction raises forward_builder_args are provided
+    # without a forward_builder, this can be the case when user passes in a
+    # forward instead of forward_builder
     with pytest.raises(
         ValueError,
         match="has forward_builder_args but no " \
@@ -260,6 +261,7 @@ def test_mp_rule_raises_error_when_arguments_incorrectly_configured():
     ):
         ModelPatcherRule(
             rule_id=DUMMY_RULE_ID,
+            forward = lambda self, X: X,
             forward_builder_args=[]
         )
 
