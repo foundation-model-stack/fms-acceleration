@@ -223,6 +223,12 @@ class AccelerationFramework:
     def get_callbacks_and_ready_for_train(
         self, model: torch.nn.Module = None, accelerator: Accelerator = None
     ):
+
+        from .model_patcher import ModelPatcher # pylint: disable=import-outside-toplevel
+        if model is not None:
+            # Finally apply all registered patches to the model
+            ModelPatcher.patch(model)
+
         # show the initialized message
         if accelerator is not None and accelerator.is_main_process:
             log_initialization_message(
@@ -231,13 +237,7 @@ class AccelerationFramework:
                 logging_func=logger.info,
             )
 
-        from .model_patcher import ModelPatcher # pylint: disable=import-outside-toplevel
-        if model is not None:
-            # Finally apply all registered patches to the model
-            ModelPatcher.patch(model)
-
-        # if patching is done, print patch summary to logger
-        if len(ModelPatcher.history) > 0:
+            # if patching is done, print patch summary to logger
             log_patch_summary(logging_func=logger.info)
 
         cbks = []

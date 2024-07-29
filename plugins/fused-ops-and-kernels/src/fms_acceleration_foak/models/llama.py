@@ -34,14 +34,14 @@ from ..kernels.unsloth.rms_layernorm import fast_rms_layernorm
 from ..kernels.unsloth.rope_embedding import fast_rope_embedding
 from .utils import KEY_MLP, KEY_O, KEY_QKV, build_lora_fused_ops, trigger_fused_ops
 
-def get_mp_rules(base_type):
+def get_mp_rules(base_type: str):
     """
     Function to access all patch rules in this module.
     If it is a forward_builder rule with `base_type` in
     its forward builder argument, wrap the forward_builder
     function as a partial function with the base_type argument
     """
-    LLAMA_MP_RULES = [
+    return [
         # TODO: have a generic version of this rule
         # - do regex on RMSNorm class name
         # - check on the tensors required for fast_rms_layernorm
@@ -77,11 +77,13 @@ def get_mp_rules(base_type):
                     build_lora_fused_ops,
                     submodule_names=["q_proj", "k_proj", "v_proj"],
                     fused_op=KEY_QKV,
+                    base_type=base_type,
                 ),
                 partial(
                     build_lora_fused_ops,
                     submodule_names=["o_proj"],
                     fused_op=KEY_O,
+                    base_type=base_type,
                 ),
                 logic="APPEND",
             ),
@@ -99,6 +101,7 @@ def get_mp_rules(base_type):
                 build_lora_fused_ops,
                 submodule_names=["up_proj", "down_proj", "gate_proj"],
                 fused_op=KEY_MLP,
+                base_type=base_type,
             ),
         ),
         # TODO: have a generic version of this rule
@@ -124,11 +127,3 @@ def get_mp_rules(base_type):
             ),
         )
     ]
-
-    for rule in LLAMA_MP_RULES:
-        if rule.forward_builder is not None:
-            rule.forward_builder = partial(
-                rule.forward_builder,
-                base_type=base_type,
-            )
-    return LLAMA_MP_RULES

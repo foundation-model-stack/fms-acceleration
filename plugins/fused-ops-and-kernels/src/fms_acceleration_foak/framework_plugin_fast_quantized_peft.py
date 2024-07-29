@@ -23,7 +23,6 @@ from peft.tuners.lora.layer import LoraLayer
 from transformers import TrainingArguments
 import torch
 import torch.distributed as dist
-from fms_acceleration_foak.models import register_foak_model_patch_rules
 
 # consider moving this somewhere else later
 def lora_adapters_switch_ddp_from_fsdp(modules, fsdp_plugin):
@@ -59,6 +58,16 @@ def lora_adapters_switch_ddp_from_fsdp(modules, fsdp_plugin):
         if not B.weight.is_cuda:
             set_module_tensor_to_device(B, "weight", "cuda")
 
+def register_foak_model_patch_rules(base_type):
+    from fms_acceleration.model_patcher import ModelPatcher
+    from .models import llama, mistral, mixtral
+    rules = [
+        *llama.get_mp_rules(base_type),
+        *mistral.get_mp_rules(base_type),
+        *mixtral.get_mp_rules(base_type),
+    ]
+    for _rule in rules:
+        ModelPatcher.register(_rule)
 
 class FastQuantizedPeftAccelerationPlugin(AccelerationPlugin):
 

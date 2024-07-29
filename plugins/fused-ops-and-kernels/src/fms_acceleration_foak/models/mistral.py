@@ -43,7 +43,7 @@ def get_mp_rules(base_type):
     function as a partial function with the base_type argument
     """
 
-    MISTRAL_MP_RULES = [
+    return [
         # - do regex on RMSNorm class name
         # - check on the tensors required for fast_rms_layernorm
         ModelPatcherRule(
@@ -75,11 +75,13 @@ def get_mp_rules(base_type):
                     build_lora_fused_ops,
                     submodule_names=["q_proj", "k_proj", "v_proj"],
                     fused_op=KEY_QKV,
+                    base_type=base_type,
                 ),
                 partial(
                     build_lora_fused_ops,
                     submodule_names=["o_proj"],
                     fused_op=KEY_O,
+                    base_type=base_type,
                 ),
                 logic="APPEND",
             ),
@@ -97,6 +99,7 @@ def get_mp_rules(base_type):
                 build_lora_fused_ops,
                 submodule_names=["up_proj", "down_proj", "gate_proj"],
                 fused_op=KEY_MLP,
+                base_type=base_type,
             ),
         ),
         ModelPatcherRule(
@@ -116,11 +119,3 @@ def get_mp_rules(base_type):
             ),
         )
     ]
-
-    for rule in MISTRAL_MP_RULES:
-        if rule.forward_builder is not None:
-            rule.forward_builder = partial(
-                rule.forward_builder,
-                base_type=base_type,
-            )
-    return MISTRAL_MP_RULES
