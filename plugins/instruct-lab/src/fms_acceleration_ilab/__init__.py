@@ -13,17 +13,4 @@
 # limitations under the License.
 
 # Local
-# from .framework_plugin_loss import LossAccelerationPlugin
-# from .framework_plugin_multipack import MultipackDataloaderAccelerationPlugin
 from .framework_plugin_padding_free import PaddingFreeAccelerationPlugin
-# from .framework_plugin_mlp_dropout import MLPDropoutAccelerationPlugin
-
-from fms_acceleration.model_patcher import ModelPatcher
-
-PATCHES = [".flash_attn"]
-PLUGIN_PREFIX = "fms_acceleration_ilab"
-
-# TODO: remove the need for the prefix
-ModelPatcher.load_patches(
-    [f"{PLUGIN_PREFIX}{postfix}" for postfix in PATCHES],
-)

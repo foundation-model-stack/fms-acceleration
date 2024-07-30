@@ -20,13 +20,14 @@ import warnings
 # Third Party
 from fms_acceleration import AccelerationPlugin
 from peft import LoraConfig
-from transformers import TrainingArguments, __version__ as transformers_version, DataCollatorForSeq2Seq
+from transformers import TrainingArguments, __version__ as transformers_version, DataCollatorForSeq2Seq, DataCollatorWithPadding
 from accelerate import Accelerator
 import torch
 from types import MethodType
 from torch.utils.data import DataLoader
 
-SUPPORTED_TRANSFORMERS_VERSION = "4.43"
+# This is the version where padding-free was merged into transformers
+TRANSFORMERS_VERSION = "4.43"
 
 class PaddingFreeAccelerationPlugin(AccelerationPlugin):
     
@@ -41,7 +42,7 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
         # - so it requires knowledge about the dataloader
         self._method = self._check_config_and_maybe_check_values(
             key="training.attention.padding_free.method",
-            values=["huggingface-injected"],
+            values=["huggingface"],
         )
 
     @property
@@ -63,7 +64,7 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
         # such as attention dropout, the version check should be shifted
         # into `build_fa_forward` to manage the forward replacement inside
         # the function.
-        if version.parse(transformers_version) < version.parse(SUPPORTED_TRANSFORMERS_VERSION):
+        if version.parse(transformers_version) < version.parse(TRANSFORMERS_VERSION):
             # guarded
             from fms_acceleration.model_patcher import ( # pylint: disable=import-outside-toplevel
                 ModelPatcher,
@@ -96,12 +97,12 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
             )
         else:
             warnings.warn(f"transformers version is equal or later \
-                than {SUPPORTED_TRANSFORMERS_VERSION}, attention forward will not be replaced.")
+                than {TRANSFORMERS_VERSION}, attention forward will not be replaced.")
 
         return model, modifiable_args
 
     def get_callbacks_and_ready_for_train(
-        self, model: torch.nn.Module = None, accelerator: Accelerator=None
+        self, model: torch.nn.Module = None, accelerator: Accelerator = None
     ):
         # patch the dataloader on the accelerator
         self._patch_dataloader(accelerator)
@@ -119,7 +120,7 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
             """
             # Check if transformers already supports a collator that flattens the batch
             # Otherwise, use the locally implemented DataCollatorWithFlattening
-            if version.parse(transformers_version) < version.parse(SUPPORTED_TRANSFORMERS_VERSION):
+            if version.parse(transformers_version) < version.parse(TRANSFORMERS_VERSION):
                 from .ilab_utils import DataCollatorWithFlattening
             else:
                 from transformers import DataCollatorWithFlattening
@@ -131,9 +132,9 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
                     return _old_prepare(*args, device_placement=device_placement)
                 dataloader = args[0]
 
-                # Ensure that the current dataloader.collate_fn is Seq2Seq as FMS
-                # currently only supports pre-tokenized inputs with Seq2Seq 
-                if isinstance(dataloader.collate_fn, DataCollatorForSeq2Seq):
+                # Ensure that the current dataloader.collate_fn is DataCollatorWithPadding
+                # FMS currently only supports pre-tokenized inputs with DataCollatorWithPadding
+                if isinstance(dataloader.collate_fn, DataCollatorWithPadding):
                     raise Exception("The padding-free plugin only works on a Seq2Seq data collator, \
                         otherwise the it can be unreliable")
 

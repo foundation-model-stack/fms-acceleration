@@ -3,9 +3,8 @@ training:
 
   # attention module configurations
   # e.g. padding-free modifications to attention layer
-  # e.g. adding dropout to attention layer
   attention:
 
     # this controls the confgurations for padding_free computation of attention
     padding_free: 
-      method: "huggingface-injected"
+      method: "huggingface"
