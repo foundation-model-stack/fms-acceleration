@@ -98,22 +98,33 @@ def main(
     result_dir, reference_benchmark_filepath, plot_columns, threshold_ratio, indices
 ):
     ref, args_ref = read_df(reference_benchmark_filepath, indices, plot_columns)
+    new_benchmark_filepath = os.path.join(result_dir, BENCHMARK_FILENAME)
     df, args_df = read_df(
-        os.path.join(result_dir, BENCHMARK_FILENAME), indices, plot_columns
+        new_benchmark_filepath, indices, plot_columns
     )
     # Analyse between both sets of results and retrieve outliers
+    # - this has a side effect of plotting the charts
     outliers_df, outliers, charts = compare_results(
         df, ref, plot_columns, threshold_ratio=threshold_ratio
     )
-    # Find arguments that are different between ref and new
-    # to highlight as possible cause of anomaly
-    diff = args_df.compare(args_ref, align_axis=1).rename(
-        columns={"self": "new", "other": "ref"}, level=-1
-    )
-    diff = diff[diff.index.isin([outlier for outlier in outliers])]
-    if not diff.empty:
-        outliers_df = outliers_df.set_index(indices).merge(
-            diff, left_index=True, right_index=True
+    # this logic is brittle and will not hold if new benchmark is not 
+    # of the exact same format as the reference benchmark,
+    # so put a try-catch. 
+    try:
+        # Find arguments that are different between ref and new
+        # to highlight as possible cause of anomaly
+        diff = args_df.compare(args_ref, align_axis=1).rename(
+            columns={"self": "new", "other": "ref"}, level=-1
+        )
+        diff = diff[diff.index.isin([outlier for outlier in outliers])]
+        if not diff.empty:
+            outliers_df = outliers_df.set_index(indices).merge(
+                diff, left_index=True, right_index=True
+            )
+    except ValueError: 
+        print (
+            f"New '{new_benchmark_filepath}' is probably a partial bench. So unable"
+            "to properly compare if the arguments are consistent with old bench."
         )
     outliers_df.to_csv(os.path.join(result_dir, OUTLIERS_FILENAME))
     for chart, filename in charts:
