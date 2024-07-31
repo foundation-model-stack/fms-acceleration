@@ -12,10 +12,13 @@ import warnings
 # Third Party
 from tqdm import tqdm
 from transformers import AutoConfig, HfArgumentParser, TrainingArguments
+from transformers import AutoTokenizer
 import datasets
 import pandas as pd
 import torch
 import yaml
+
+from scripts.benchmarks.data_processing import build_data_formatting_func
 
 """
 This benchmarking script 
@@ -25,19 +28,6 @@ This benchmarking script
     3. Builds a list of experiment objects to run based on the set of experiment arguments
     4. Consolidates the experiment results into a summary
 """
-
-PROMPT_DICT = {
-    "prompt_input": (
-        "Below is an instruction that describes a task, paired with an input that provides further context. "
-        "Write a response that appropriately completes the request.\n\n"
-        "### Instruction:\n{instruction}\n\n### Input:\n{input}\n\n### Response:"
-    ),
-    "prompt_no_input": (
-        "Below is an instruction that describes a task. "
-        "Write a response that appropriately completes the request.\n\n"
-        "### Instruction:\n{instruction}\n\n### Response:"
-    ),
-}
 
 COMMAND_PYTHON = "python"
 COMMAND_ACCELERATE = "accelerate launch --config_file {accelerate_config_path} --num_processes={num_processes} --main_process_port={process_port}"
@@ -50,6 +40,7 @@ FILE_RESULTS = "results.json"
 FILE_SHELL_COMMAND = "command.sh"
 FILE_SCRIPT_ARGS = "script.json"
 FILE_SUMMARY_CSV = "raw_summary.csv"
+DATA_JSON_NAME = "cache_{}.json"
 
 DIR_BENCHMARKS = os.path.dirname(os.path.realpath(__file__))
 DIR_PREFIX_EXPERIMENT = "exp"
@@ -157,44 +148,71 @@ def get_hf_arguments_with_no_value(dataclass_types):
 TRUE_FALSE_ARGUMENTS = get_hf_arguments_with_no_value(dataclass_types=TrainingArguments)
 
 
-def format_fn(example, input_key: str = "input", output_key: str = "output"):
-    prompt_input, prompt_no_input = (
-        PROMPT_DICT["prompt_input"],
-        PROMPT_DICT["prompt_no_input"],
-    )
-    output = (
-        prompt_input.format_map(example)
-        if example.get(input_key, "") != ""
-        else prompt_no_input.format_map(example)
-    )
-    output = f"{output} {example[output_key]}"
-    return {output_key: output}
-
-
 class BenchmarkDataset:
     def __init__(
         self,
-        dataset_name: str,
-        format_fn: Callable,
-        unused_columns: List[str] = ["instruction", "input"],
+        data_save_path: str,
+        dataset_name: str = 'yahma/alpaca-cleaned',
+        dataset_split: str = "train",
+        formatting: str = 'instruct',
+        tokenize: bool = True,
+        input_field: str = 'input',
+        dataset_text_field: str = 'output',
     ) -> None:
-        self.dataset_name = dataset_name
-        self.dataset = self.prepare_dataset(format_fn, unused_columns=unused_columns)
+        self.dataset_split = datasets.load_dataset(
+            dataset_name, split=dataset_split
+        )
 
-    def save_to_path(self, save_path: str):
-        self.dataset.to_json(save_path)
+        self.kwargs = {
+            'formatting': formatting,
+            'tokenize': tokenize,
+            'input_field': input_field,
+            'dataset_text_field': dataset_text_field,
+        }
+        self.training_paths = {} # cache to store the training paths
+        self.data_save_path = data_save_path
 
     def prepare_dataset(
-        self,
-        format_fn: Callable = None,
-        dataset_split: str = "train",
-        unused_columns: List[str] = None,
+        self, model_name: str,
     ):
-        ds = datasets.load_dataset(self.dataset_name)
-        if format_fn:
-            ds = ds[dataset_split].map(format_fn, remove_columns=unused_columns)
-        return ds
+        if model_name in self.training_paths:
+            return self.training_paths[model_name]
 
+        if self.kwargs['tokenize']:
+            tokenizer = AutoTokenizer.from_pretrained(model_name)
+
+            # for now, if pad_token_id is None, will just do a replacement
+            if tokenizer.pad_token_id is None:
+                tokenizer.pad_token_id = tokenizer.eos_token_id
+
+            # replace some special characters in the model name
+            save_path = DATA_JSON_NAME.format(
+                re.sub(r'[/-]', '_', model_name),
+            )
+        else:
+            tokenizer = None
+            save_path = DATA_JSON_NAME.format('all')
+
+        # get the full path
+        save_path = os.path.join(self.data_save_path, save_path)
+
+        # build the formatting func
+        format_fn, kwargs = build_data_formatting_func(
+            tokenizer, **self.kwargs, 
+            features=set(self.dataset_split.features)
+        )
+
+        print (f"Preparing dataset '{save_path}'")
+
+        # call the map
+        ds = self.dataset_split.map(format_fn, **kwargs)
+
+        # save it
+        ds.to_json(save_path)
+
+        # store in cache
+        self.training_paths[model_name] = save_path
+        return save_path
 
 def convert_keypairs_to_map(keypairs: List):
     return {key: val for key, val in zip(keypairs[::2], keypairs[1::2])}
@@ -319,6 +337,11 @@ class ScenarioMatrix:
             print(f"Scenario '{self.name}' preloading model '{model_name}'")
             # just preload the config
             AutoConfig.from_pretrained(model_name)
+
+    def prepare_datasets(self, benchmark_datasets: BenchmarkDataset):
+        for model_name in self.arguments["model_name_or_path"]:
+            print(f"Scenario '{self.name}' preparing dataset for model '{model_name}'")
+            benchmark_datasets.prepare_dataset(model_name)
 
     def get_scenario_matrices_and_defaults(self):
         scenario_defaults = {}
@@ -602,9 +625,8 @@ def get_peak_mem_usage_by_device_id(gpu_logs: pd.DataFrame):
     return peak_values.sub(initial_values), device_name
 
 
-def prepare_arguments(args):
+def prepare_arguments(args, benchmark_dataset: BenchmarkDataset):
     defaults = ConfigUtils.read_yaml(args.defaults_config_path)
-    defaults["training_data_path"] = args.dataset_save_path
     scenarios = ConfigUtils.read_yaml(args.scenarios_config_path)["scenarios"]
     acceleration_config_map = convert_keypairs_to_map(
         args.acceleration_framework_config_keypairs
@@ -646,6 +668,13 @@ def prepare_arguments(args):
         )
         if args.preload_models and len(products) > 0:
             scenario.preload_models()
+
+        # handle the dataset
+        for x in products:
+            # prepare the dataset
+            training_path = benchmark_dataset.prepare_dataset(x['model_name_or_path'])
+            # update
+            x['training_data_path'] = training_path
 
         for (
             num_gpus,
@@ -801,10 +830,13 @@ def main(args):
         args.log_nvidia_smi = False
 
     # 1. Prepares a standard BenchmarkDataset
-    # TODO: consider caching the json file
+    # -  the preperation of the dataset is deferred to when 'prepare_dataset' is called
+    dataset_processing_args = ConfigUtils.read_yaml(args.scenarios_config_path)['data_processing']
     if not args.no_data_processing:
-        benchmark_dataset = BenchmarkDataset(args.dataset_name, format_fn)
-        benchmark_dataset.save_to_path(args.dataset_save_path)
+        benchmark_dataset = BenchmarkDataset(
+            args.dataset_save_path,
+            **dataset_processing_args,
+        )
 
     # dump out the script arguments
     os.makedirs(args.results_output_path, exist_ok=True)
@@ -812,7 +844,7 @@ def main(args):
         json.dump(vars(args), f, indent=4, sort_keys=True)
 
     # 2. Prepares a list of experiment arguments from a set of configs
-    experiment_args = prepare_arguments(args)
+    experiment_args = prepare_arguments(args, benchmark_dataset)
 
     # 3. Builds a list of experiment objects to run based on the set of experiment arguments
     experiment_stats = {}
@@ -949,15 +981,9 @@ if __name__ == "__main__":
         help="path to defaults config file",
     )
     parser.add_argument(
-        "--dataset_name",
-        type=str,
-        default="yahma/alpaca-cleaned",
-        help="dataset to benchmark on",
-    )
-    parser.add_argument(
         "--dataset_save_path",
         type=str,
-        default=f"{DIR_BENCHMARKS}/data/cache.json",
+        default=f"{DIR_BENCHMARKS}/data",
         help="dataset cache path",
     )
     parser.add_argument(

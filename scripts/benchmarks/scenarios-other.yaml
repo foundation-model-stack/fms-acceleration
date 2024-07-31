@@ -1,0 +1,14 @@
+# This file holds a list of scenarios to may be run.
+data_processing:
+  dataset_name: yahma/alpaca-cleaned
+  formatting: "instruct"
+  tokenize: True
+  input_field: input
+
+scenarios:
+    -   name: full-finetuning
+        arguments:
+            learning_rate: 2e-5
+            model_name_or_path: 
+                - 'mistralai/Mistral-7B-v0.1'
+            torch_dtype: float16
