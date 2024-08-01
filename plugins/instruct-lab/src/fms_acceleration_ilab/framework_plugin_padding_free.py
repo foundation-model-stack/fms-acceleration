@@ -14,7 +14,6 @@
 
 # Standard
 from typing import Dict, Tuple
-from packaging import version
 import warnings
 
 # Third Party
@@ -22,16 +21,12 @@ from fms_acceleration import AccelerationPlugin
 from peft import LoraConfig
 from transformers import (
     TrainingArguments,
-    __version__ as transformers_version,
     DataCollatorForSeq2Seq,
 )
 from accelerate import Accelerator
 import torch
 from types import MethodType
 from torch.utils.data import DataLoader
-
-# This is the version where padding-free was merged into transformers
-TRANSFORMERS_VERSION = "4.44"
 
 class PaddingFreeAccelerationPlugin(AccelerationPlugin):
 
@@ -68,54 +63,54 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
         from functools import partial # pylint: disable=import-outside-toplevel
 
         # This check is done here to only patch the attention forward
-        # if below a specific transformer version (4.43.3) that already
-        # addresses padding free
+        # the PR was merged here
         # https://github.com/huggingface/transformers/pull/31629
-        # Subsequently, when additional features are added to the patch
-        # such as attention dropout, the version check should be shifted
-        # into `build_fa_forward` to manage the forward replacement inside
-        # the function.
 
         try:
-            # if this is importable, it means
-            # https://github.com/huggingface/transformers/pull/31629/files
+            # if this is importable, it means the PR
             # has been merged, and there is no more need to 
             from transformers import DataCollatorWithFlattening # pylint: disable=import-outside-toplevel,no-name-in-module
-            warnings.warn(f"transformers version supports \
-                padding free natively in various models.")
+
+            # - if import successful this will print and return
+            warnings.warn(
+                "transformers version supports padding free natively in various models."
+            )
             return model, modifiable_args
 
         except:
             pass
 
-        import torch.nn
-
+        # Otherwise patching is required:
+        # 1. a custom forward has to be registered on the backbone
+        #    to intercept the position ids
         def _is_backbone(module: torch.nn.Module):
             return any(
                 isinstance(mod, torch.nn.Embedding)
                 for mod in module.children()
             )
 
-        # patch top level
+        # - patch backbone
         model_type = model.config.model_type
-        from .flash_attn import build2
+        from .flash_attn import build_backbone_forward
         ModelPatcher.register(
             ModelPatcherRule(
-                rule_id=f"{model_type}-top-pad-free",
-                # trigger=ModelPatcherTrigger(check=model.__class__),
+                rule_id=f"{model_type}-backbone-pad-free",
                 trigger=ModelPatcherTrigger(check=_is_backbone),
                 forward_builder=partial(
-                    build2,
+                    build_backbone_forward,
                     model_id=id(model),
                 ),
             ),
         )
 
+        # Next, the flash attention function needs to be patched
+        # how it is patched depends on the transformers version
         try:
-            # if this can be imported, then we need to patch it
-            # - because it does not have logic to handle the flattened batch
-            # - replace with our version that has the new logic
-            # - do this only once
+            # Case I:
+            # if transformers.modeling_flash_attention_utils 
+            # can be imported, then we patch the flash attention function
+            # here. This is required because 
+            # - this is an old version that does not have logic to handle the flattened batch
 
             # pylint: disable=import-outside-toplevel
             from transformers.modeling_flash_attention_utils import _flash_attention_forward
@@ -129,14 +124,14 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
                         "transformers.modeling_flash_attention_utils._flash_attention_forward",
                         partial(_flash_attention_forward_with_posids, id(model)),
                         model.__module__,
-                        # "transformers.models.mistral.modeling_mistral",
                     )
                 ),
             )
         except:
-
-            # finally we need to patch the flash attention
-            # as they do not yet accept the position ids
+            # Case II: the flash attention functions are methods 
+            # attached to the model classes
+            # - for similar reasons as Case I, they need to be patched on the
+            #   FA2 modules
             from .flash_attn import build_fa_forward # pylint: disable=import-outside-toplevel
             def is_flash_attn_2(module):
                 if (

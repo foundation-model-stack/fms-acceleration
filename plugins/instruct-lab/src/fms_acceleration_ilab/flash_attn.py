@@ -17,7 +17,6 @@ import inspect
 from functools import partial
 import torch
 from transformers.utils import is_flash_attn_2_available, is_flash_attn_greater_or_equal
-from types import MethodType
 from typing import Optional
 
 if is_flash_attn_2_available():
@@ -42,7 +41,7 @@ POSITION_IDS_CACHE = {}
 
 # - needed to store position ids when first come into model
 # will pass these to the flash attention function
-def build2(
+def build_backbone_forward(
     model: torch.nn.Module, model_id: str,
 ):
     # forward
@@ -122,8 +121,9 @@ def _flash_attention_forward_with_posids(
                 deterministic = os.environ.get("FLASH_ATTENTION_DETERMINISTIC", "0") == "1"
             flash_kwargs["deterministic"] = deterministic
     except:
-        # FIXME: is_flash_attn_greater_or_equal expects a version
+        # FIXME: is_flash_attn_greater_or_equal expects a packaging.version
         # object for < 4.43
+        # - we just assume that this deterministic flag is not impt
         pass
 
     if softcap is not None:
