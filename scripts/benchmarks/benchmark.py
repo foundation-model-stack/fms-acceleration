@@ -158,7 +158,9 @@ class BenchmarkDataset:
         tokenize: bool = True,
         input_field: str = 'input',
         dataset_text_field: str = 'output',
+        chat_template: str = None,
     ) -> None:
+
         self.dataset_split = datasets.load_dataset(
             dataset_name, split=dataset_split
         )
@@ -168,12 +170,13 @@ class BenchmarkDataset:
             'tokenize': tokenize,
             'input_field': input_field,
             'dataset_text_field': dataset_text_field,
+            'chat_template' : chat_template
         }
         self.training_paths = {} # cache to store the training paths
         self.data_save_path = data_save_path
 
     def prepare_dataset(
-        self, model_name: str,
+        self, model_name: str, response_template: str = None,
     ):
         if model_name in self.training_paths:
             return self.training_paths[model_name]
@@ -199,8 +202,13 @@ class BenchmarkDataset:
         # build the formatting func
         format_fn, kwargs = build_data_formatting_func(
             tokenizer, **self.kwargs, 
-            features=set(self.dataset_split.features)
+            features=set(self.dataset_split.features),
+            response_template=response_template,
         )
+
+        if 'chat_template' in self.kwargs:
+            print ('*** CHAT TEMPLATE *****')
+            print (self.kwargs['chat_template'])
 
         print (f"Preparing dataset '{save_path}'")
 
@@ -337,11 +345,6 @@ class ScenarioMatrix:
             print(f"Scenario '{self.name}' preloading model '{model_name}'")
             # just preload the config
             AutoConfig.from_pretrained(model_name)
-
-    def prepare_datasets(self, benchmark_datasets: BenchmarkDataset):
-        for model_name in self.arguments["model_name_or_path"]:
-            print(f"Scenario '{self.name}' preparing dataset for model '{model_name}'")
-            benchmark_datasets.prepare_dataset(model_name)
 
     def get_scenario_matrices_and_defaults(self):
         scenario_defaults = {}
@@ -672,7 +675,14 @@ def prepare_arguments(args, benchmark_dataset: BenchmarkDataset):
         # handle the dataset
         for x in products:
             # prepare the dataset
-            training_path = benchmark_dataset.prepare_dataset(x['model_name_or_path'])
+            training_path = benchmark_dataset.prepare_dataset(
+                x['model_name_or_path'],
+                (
+                    x['response_template'] 
+                    if 'response_template' in x
+                    else constants.get('response_template')
+                )
+            )
             # update
             x['training_data_path'] = training_path
 

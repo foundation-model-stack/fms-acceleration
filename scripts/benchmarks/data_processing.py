@@ -2,6 +2,64 @@ from trl import DataCollatorForCompletionOnlyLM
 from transformers import PreTrainedTokenizer
 from typing import Dict, Callable, List
 
+DEFAULT_FIELDS = [
+    'input_ids', 
+    'attention_mask', 
+    'labels'
+]
+
+def build_data_formatting_func(
+    tokenizer: PreTrainedTokenizer = None,
+    formatting: str = 'instruct',
+    tokenize: bool = True,
+    input_field: str = 'input',
+    dataset_text_field: str = 'output',
+    features: List = None, 
+    response_template: str = None,
+    chat_template: str = None,
+):
+    if tokenizer is None or chat_template is None:
+        return _build_data_formatting_func_without_chat_template(
+            tokenizer, formatting, tokenize, input_field, dataset_text_field,
+            features, response_template
+        )
+
+    return _build_data_formatting_func(
+        tokenizer, tokenize, chat_template,
+        dataset_text_field, features, response_template
+    )
+    
+
+# this one uses the chat template and tokenizer
+def _build_data_formatting_func(
+    tokenizer: PreTrainedTokenizer,
+    tokenize: bool = True,
+    chat_template: str = None,
+    dataset_text_field: str = "output",
+    features: List = None, 
+    response_template: str = None,
+):
+
+    tokenizer.chat_template = chat_template
+
+    loss_masking = None
+    if tokenize and response_template is not None:
+        loss_masking = instruction_mask_loss(tokenizer, response_template)
+
+    def _format(example):
+        formatted_and_maybe_tokenized = tokenizer.apply_chat_template([example], tokenize=tokenize)
+        key = 'input_ids' if tokenize else dataset_text_field
+        if not loss_masking:
+            return {key: formatted_and_maybe_tokenized}
+        return loss_masking(formatted_and_maybe_tokenized)
+
+    return _format, {
+        'remove_columns': features.difference(
+            set(DEFAULT_FIELDS)
+        )
+    }
+
+# ---- NOTE: remove this eventually and move to check templates ---- 
 PROMPT_DICT = {
     "prompt_input": (
         "Below is an instruction that describes a task, paired with an input that provides further context. "
@@ -15,13 +73,6 @@ PROMPT_DICT = {
     ),
 }
 
-RESPONSE_TEMPLATE = '### Response:'
-DEFAULT_FIELDS = [
-    'input_ids', 
-    'attention_mask', 
-    'labels'
-]
-
 # combine functions
 # c = combine(a, b) then c(i) = b(a(i))
 FUNC = Callable[[Dict], Dict]
@@ -33,13 +84,14 @@ def combine_functions(*funcs : FUNC) -> FUNC:
 
     return _combine
 
-def build_data_formatting_func(
+def _build_data_formatting_func_without_chat_template(
     tokenizer: PreTrainedTokenizer = None,
     formatting: str = 'instruct',
     tokenize: bool = True,
     input_field: str = 'input',
     dataset_text_field: str = 'output',
     features: List = None, 
+    response_template: str = None,
 ):
     # FIFO
     funcs = []
@@ -63,9 +115,9 @@ def build_data_formatting_func(
             )
         )
 
-        if formatting == 'instruct':
+        if formatting == 'instruct' and response_template:
             funcs.append(
-                instruction_mask_loss(tokenizer)
+                instruction_mask_loss(tokenizer, response_template)
             )
 
     if len(funcs) == 0:
@@ -110,10 +162,15 @@ def tokenization(
 
     return _tokenize
 
+# ---- NOTE: remove this eventually and move to check templates ---- 
+
 def instruction_mask_loss(
     tokenizer: PreTrainedTokenizer, 
-    response_template: str = RESPONSE_TEMPLATE, 
+    response_template: str,
 ):
+
+    print(f"Applying loss masking to reponse template '{response_template}'")
+
     # cheat, use the data collator to mask the loss tokens
     response_template_ids = tokenizer.encode(
         response_template, add_special_tokens=False
