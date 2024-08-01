@@ -5,6 +5,6 @@ training:
   # e.g. padding-free modifications to attention layer
   attention:
 
-    # this controls the confgurations for padding_free computation of attention
+    # this controls the confgurations for padding free computation of flash attention
     padding_free: 
       method: "huggingface"

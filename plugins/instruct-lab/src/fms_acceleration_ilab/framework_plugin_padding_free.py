@@ -20,7 +20,7 @@ import warnings
 # Third Party
 from fms_acceleration import AccelerationPlugin
 from peft import LoraConfig
-from transformers import TrainingArguments, __version__ as transformers_version, DataCollatorForSeq2Seq, DataCollatorWithPadding
+from transformers import TrainingArguments, __version__ as transformers_version, DataCollatorForSeq2Seq
 from accelerate import Accelerator
 import torch
 from types import MethodType
@@ -132,11 +132,9 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
                     return _old_prepare(*args, device_placement=device_placement)
                 dataloader = args[0]
 
-                # Ensure that the current dataloader.collate_fn is DataCollatorWithPadding
-                # FMS currently only supports pre-tokenized inputs with DataCollatorWithPadding
-                if isinstance(dataloader.collate_fn, DataCollatorWithPadding):
-                    raise Exception("The padding-free plugin only works on a Seq2Seq data collator, \
-                        otherwise the it can be unreliable")
+                if not isinstance(dataloader.collate_fn, DataCollatorForSeq2Seq):
+                    raise Exception("The padding-free plugin currently only works with a `DataCollatorForSeq2Seq` collate_fn, \
+                        otherwise the collation can be unreliable")
 
                 # Replace the collate_fn in dataloader
                 dataloader.collate_fn = DataCollatorWithFlattening()
