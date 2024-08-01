@@ -28,6 +28,7 @@ import torch
 from types import MethodType
 from torch.utils.data import DataLoader
 
+
 class PaddingFreeAccelerationPlugin(AccelerationPlugin):
 
     require_packages = ["flash_attn"]
@@ -55,12 +56,12 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
         modifiable_args: Tuple[LoraConfig],
     ):
         # guarded
-        from fms_acceleration.model_patcher import ( # pylint: disable=import-outside-toplevel
+        from fms_acceleration.model_patcher import (  # pylint: disable=import-outside-toplevel
             ModelPatcher,
             ModelPatcherRule,
             ModelPatcherTrigger,
         )
-        from functools import partial # pylint: disable=import-outside-toplevel
+        from functools import partial  # pylint: disable=import-outside-toplevel
 
         # This check is done here to only patch the attention forward
         # the PR was merged here
@@ -68,8 +69,11 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
 
         try:
             # if this is importable, it means the PR
-            # has been merged, and there is no more need to 
-            from transformers import DataCollatorWithFlattening # pylint: disable=import-outside-toplevel,no-name-in-module
+            # has been merged, and there is no more need to
+            # pylint: disable=import-outside-toplevel,no-name-in-module,unused-import
+            from transformers import (
+                DataCollatorWithFlattening,
+            )
 
             # - if import successful this will print and return
             warnings.warn(
@@ -77,21 +81,20 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
             )
             return model, modifiable_args
 
-        except:
+        except ImportError:
             pass
 
         # Otherwise patching is required:
         # 1. a custom forward has to be registered on the backbone
         #    to intercept the position ids
         def _is_backbone(module: torch.nn.Module):
-            return any(
-                isinstance(mod, torch.nn.Embedding)
-                for mod in module.children()
-            )
+            return any(isinstance(mod, torch.nn.Embedding) for mod in module.children())
 
         # - patch backbone
         model_type = model.config.model_type
+        # pylint: disable=import-outside-toplevel
         from .flash_attn import build_backbone_forward
+
         ModelPatcher.register(
             ModelPatcherRule(
                 rule_id=f"{model_type}-backbone-pad-free",
@@ -107,36 +110,39 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
         # how it is patched depends on the transformers version
         try:
             # Case I:
-            # if transformers.modeling_flash_attention_utils 
+            # if transformers.modeling_flash_attention_utils
             # can be imported, then we patch the flash attention function
-            # here. This is required because 
+            # here. This is required because
             # - this is an old version that does not have logic to handle the flattened batch
 
             # pylint: disable=import-outside-toplevel
-            from transformers.modeling_flash_attention_utils import _flash_attention_forward
+            from transformers.modeling_flash_attention_utils import (
+                _flash_attention_forward,
+            )
 
             from .flash_attn import _flash_attention_forward_with_posids
 
             ModelPatcher.register(
                 ModelPatcherRule(
-                    rule_id=f"flash_attn_forward",
+                    rule_id="flash_attn_forward",
                     import_and_maybe_reload=(
                         "transformers.modeling_flash_attention_utils._flash_attention_forward",
                         partial(_flash_attention_forward_with_posids, id(model)),
                         model.__module__,
-                    )
+                    ),
                 ),
             )
-        except:
-            # Case II: the flash attention functions are methods 
+        except ImportError:
+            # Case II: the flash attention functions are methods
             # attached to the model classes
             # - for similar reasons as Case I, they need to be patched on the
             #   FA2 modules
-            from .flash_attn import build_fa_forward # pylint: disable=import-outside-toplevel
+            from .flash_attn import (
+                build_fa_forward,
+            )  # pylint: disable=import-outside-toplevel
+
             def is_flash_attn_2(module):
-                if (
-                    module.__class__.__name__.endswith("FlashAttention2")
-                ):
+                if module.__class__.__name__.endswith("FlashAttention2"):
                     return True
                 return False
 
@@ -161,8 +167,8 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
         return []
 
     def _patch_dataloader(
-            self,
-            accelerator: Accelerator,
+        self,
+        accelerator: Accelerator,
     ):
         """
         Hijacks the accelorator prepare inside `Trainer.train`
@@ -172,22 +178,31 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
         """
         try:
             # Check if transformers already supports a collator that flattens the batch
-            from transformers import DataCollatorWithFlattening # pylint: disable=import-outside-toplevel,no-name-in-module
-        except:
+            # pylint: disable=import-outside-toplevel,no-name-in-module
+            from transformers import (
+                DataCollatorWithFlattening,
+            )
+        except ImportError:
             # Otherwise, use the locally implemented DataCollatorWithFlattening
-            from .ilab_utils import DataCollatorWithFlattening # pylint: disable=import-outside-toplevel
+            # pylint: disable=import-outside-toplevel
+            from .ilab_utils import (
+                DataCollatorWithFlattening,
+            )
 
         # hijack the dataloader in accelerator.prepare to replace the collate_fn
         _old_prepare = accelerator.prepare
+
         def prepare(self, *args, device_placement=None):
             if len(args) > 1 or not isinstance(args[0], DataLoader):
                 return _old_prepare(*args, device_placement=device_placement)
             dataloader = args[0]
 
             if not isinstance(dataloader.collate_fn, DataCollatorForSeq2Seq):
-                raise TypeError("The padding-free plugin currently only works with a \
+                raise TypeError(
+                    "The padding-free plugin currently only works with a \
                     `DataCollatorForSeq2Seq` collate_fn, \
-                    otherwise the collation can be unreliable")
+                    otherwise the collation can be unreliable"
+                )
 
             # Replace the collate_fn in dataloader
             dataloader.collate_fn = DataCollatorWithFlattening()
@@ -195,6 +210,7 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
             return dataloader
 
         accelerator.prepare = MethodType(prepare, accelerator)
+
 
 # register
 AccelerationPlugin.register_plugin(
