@@ -32,3 +32,8 @@ framework_configs:
         - accelerated-peft
         - fused-ops-and-kernels
       filename: accelerated-peft-bnb-nf4-foak-sample-configuration.yaml
+
+    - shortname: ilab-padding-free
+      plugins:
+        - instruct-lab
+      filename: ilab-padding-free-sample-configuration.yaml

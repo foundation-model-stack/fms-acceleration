@@ -3,7 +3,6 @@
 # Each stanza incorporates various configurations for 
 # different fine-tuning / training tasks.
 plugins:
-
   # Configurations to accelerate data packing/padding in training
   training:
 
@@ -12,5 +11,5 @@ plugins:
     attention:
 
       # this controls the confgurations for padding free computation of flash attention
-      padding_free: 
-        method: "huggingface"
+      padding_free:
+        method: huggingface
