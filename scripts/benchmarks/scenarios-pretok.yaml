@@ -51,3 +51,12 @@ scenarios:
             model_name_or_path: 
                 - 'mistralai/Mistral-7B-v0.1'
             torch_dtype: float16
+
+    -   name: padding-free
+        framework_config: 
+            - ilab-padding-free
+        arguments:
+            learning_rate: 2e-5
+            model_name_or_path: 
+                - 'mistralai/Mistral-7B-v0.1'
+            torch_dtype: float16
