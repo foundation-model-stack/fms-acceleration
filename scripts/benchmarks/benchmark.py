@@ -90,6 +90,7 @@ HF_ARG_SKIP_MEMORY_METRIC = "--skip_memory_metrics"
 RESULT_FIELD_ALLOCATED_GPU_MEM = "mem_torch_mem_alloc_in_bytes"
 RESULT_FIELD_PEAK_ALLOCATED_GPU_MEM = "mem_peak_torch_mem_alloc_in_bytes"
 ERROR_MESSAGES = "error_messages"
+DRY_RUN_MESSAGE = "dry_run"
 
 
 def extract_gpu_memory_metrics(output_metrics) -> Tuple[float]:
@@ -366,6 +367,7 @@ class Experiment:
 
     @property
     def is_completed(self):
+
         if not os.path.exists(self.results_filename):
             return False
         # otherwise open it and check for errors
@@ -373,7 +375,11 @@ class Experiment:
             results = json.load(f)
 
         # return complete only if no errors
-        return not ERROR_MESSAGES in results
+        # and is not a dry run
+        return (
+            not ERROR_MESSAGES in results and
+            results.get(DRY_RUN_MESSAGE, False) == False
+        )
 
     def run(
         self,
@@ -558,7 +564,8 @@ class DryRunExperiment(Experiment):
     def get_experiment_final_metrics(
         self, final_metrics_keys: List[str] = ["train_loss", "train_runtime"]
     ):
-        return {}
+        # will insert a special dry run key
+        return {DRY_RUN_MESSAGE: True}
 
     def maybe_get_experiment_error_traceback(self):
         return None

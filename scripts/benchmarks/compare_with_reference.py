@@ -34,6 +34,7 @@ DEFAULT_IGNORED_COLUMNS = [
 
 DEFAULT_REFERENCE_FILEPATH = "scripts/benchmarks/refs/a100_80gb.csv"
 BENCHMARK_FILENAME = "benchmarks.csv"
+RAW_FILENAME = "raw_summary.csv"
 OUTLIERS_FILENAME = "outliers.csv"
 
 def plot_chart(ax, x, y, title, xlabel, ylabel):
@@ -82,8 +83,11 @@ def compare_results(df, ref, plot_columns, threshold_ratio=0.1):
     return outliers_df, outliers, charts
 
 
-def read_df(file_path, indices, plot_columns):
-    df = pd.read_csv(file_path)
+def read_df(file_path_or_dataframe, indices, plot_columns):
+    if isinstance(file_path_or_dataframe, str):
+        df = pd.read_csv(file_path_or_dataframe)
+    else:
+        df = file_path_or_dataframe
     df.set_index(indices, inplace=True)
     # all other columns not for plotting or explicitly ignored are hyperparameters
     argument_columns = [
@@ -98,22 +102,48 @@ def main(
     result_dir, reference_benchmark_filepath, plot_columns, threshold_ratio, indices
 ):
     ref, args_ref = read_df(reference_benchmark_filepath, indices, plot_columns)
-    df, args_df = read_df(
-        os.path.join(result_dir, BENCHMARK_FILENAME), indices, plot_columns
-    )
+
+    # NOTE: this is a bit of a hack, if the new bench is a smaller bench, then we
+    # supplement the data from the raw summary
+    new_benchmark_filepath = os.path.join(result_dir, BENCHMARK_FILENAME) 
+    try:
+        df, args_df  = read_df(new_benchmark_filepath, indices, plot_columns)
+    except KeyError:
+        raw_filepath = os.path.join(result_dir, RAW_FILENAME)
+        print (
+            f"New '{new_benchmark_filepath}' is probably a partial bench. Supplementing "
+            f"missing columns from raw data '{raw_filepath}'."
+        )
+        df2 = pd.read_csv(new_benchmark_filepath)
+        df = pd.read_csv(raw_filepath)
+        df, args_df = read_df(
+            pd.concat([df, df2[[x for x in df2.columns if x not in df.columns]]], axis=1),
+            indices, plot_columns
+        )
+
     # Analyse between both sets of results and retrieve outliers
+    # - this has a side effect of plotting the charts
     outliers_df, outliers, charts = compare_results(
         df, ref, plot_columns, threshold_ratio=threshold_ratio
     )
-    # Find arguments that are different between ref and new
-    # to highlight as possible cause of anomaly
-    diff = args_df.compare(args_ref, align_axis=1).rename(
-        columns={"self": "new", "other": "ref"}, level=-1
-    )
-    diff = diff[diff.index.isin([outlier for outlier in outliers])]
-    if not diff.empty:
-        outliers_df = outliers_df.set_index(indices).merge(
-            diff, left_index=True, right_index=True
+    # this logic is brittle and will not hold if new benchmark is not 
+    # of the exact same format as the reference benchmark,
+    # so put a try-catch. 
+    try:
+        # Find arguments that are different between ref and new
+        # to highlight as possible cause of anomaly
+        diff = args_df.compare(args_ref, align_axis=1).rename(
+            columns={"self": "new", "other": "ref"}, level=-1
+        )
+        diff = diff[diff.index.isin([outlier for outlier in outliers])]
+        if not diff.empty:
+            outliers_df = outliers_df.set_index(indices).merge(
+                diff, left_index=True, right_index=True
+            )
+    except ValueError: 
+        print (
+            f"New '{new_benchmark_filepath}' is probably a partial bench. So unable"
+            "to properly compare if the arguments are consistent with old bench."
         )
     outliers_df.to_csv(os.path.join(result_dir, OUTLIERS_FILENAME))
     for chart, filename in charts:

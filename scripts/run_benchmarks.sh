@@ -44,7 +44,7 @@ MEMORY_LOGGING=${MEMORY_LOGGING:-"all"}
 NUM_GPUS_MATRIX=${1-"1 2"}
 RESULT_DIR=${2:-"benchmark_outputs"}
 SCENARIOS_CONFIG=${3:-$SCENARIOS_CONFIG}
-SCENARIOS_FILTER=${4-$SCNTAG_PEFT_AUTOGPTQ}
+SCENARIOS_FILTER=${4:-$SCNTAG_PEFT_AUTOGPTQ}
 
 echo "NUM_GPUS_MATRIX: $NUM_GPUS_MATRIX"
 echo "RESULT_DIR: $RESULT_DIR"
@@ -77,7 +77,7 @@ PIP_REQUIREMENTS_FILE=$RESULT_DIR/$PIP_REQUIREMENTS_FILE
 # preload models by default
 EXTRA_ARGS="--preload_models"
 
-if [ ! -z "$SCENARIOS_FILTER" ]; then 
+if [ "$SCENARIOS_FILTER" != "none" ]; then 
     EXTRA_ARGS="$EXTRA_ARGS --run_only_scenarios $SCENARIOS_FILTER"
 fi
 
@@ -137,5 +137,9 @@ PYTHONPATH=. \
         'error_messages' \
         'acceleration_framework_config_file'
 
-PYTHONPATH=. \
-    python $WORKING_DIR/compare_with_reference.py --result_dir $RESULT_DIR
+if [ "$DRY_RUN" = "true" ]; then 
+    echo "DRY_RUN=True, will skip compare with reference logic"
+else
+    PYTHONPATH=. \
+        python $WORKING_DIR/compare_with_reference.py --result_dir $RESULT_DIR
+fi
