@@ -11,13 +11,13 @@ import warnings
 
 # Third Party
 from tqdm import tqdm
-from transformers import AutoConfig, HfArgumentParser, TrainingArguments
-from transformers import AutoTokenizer
+from transformers import AutoConfig, AutoTokenizer, HfArgumentParser, TrainingArguments
 import datasets
 import pandas as pd
 import torch
 import yaml
 
+# First Party
 from scripts.benchmarks.data_processing import build_data_formatting_func
 
 """
@@ -85,8 +85,9 @@ RESULT_FIELD_PEAK_ALLOCATED_GPU_MEM = "mem_peak_torch_mem_alloc_in_bytes"
 ERROR_MESSAGES = "error_messages"
 DRY_RUN_MESSAGE = "dry_run"
 
-SCENARIOS_STANZA_SCN = 'scenarios'
-SCENARIOS_STANZA_DATA = 'data_processing' # optional
+SCENARIOS_STANZA_SCN = "scenarios"
+SCENARIOS_STANZA_DATA = "data_processing"  # optional
+
 
 def extract_gpu_memory_metrics(output_metrics) -> Tuple[float]:
     """
@@ -156,36 +157,36 @@ class BenchmarkDataset:
     def __init__(
         self,
         data_save_path: str,
-        dataset_name: str = 'yahma/alpaca-cleaned',
+        dataset_name: str = "yahma/alpaca-cleaned",
         dataset_split: str = "train",
-        formatting: str = 'instruct',
+        formatting: str = "instruct",
         tokenize: bool = False,
-        input_field: str = 'input',
-        dataset_text_field: str = 'output',
+        input_field: str = "input",
+        dataset_text_field: str = "output",
         chat_template: str = None,
     ) -> None:
 
-        self.dataset_split = datasets.load_dataset(
-            dataset_name, split=dataset_split
-        )
+        self.dataset_split = datasets.load_dataset(dataset_name, split=dataset_split)
 
         self.kwargs = {
-            'formatting': formatting,
-            'tokenize': tokenize,
-            'input_field': input_field,
-            'dataset_text_field': dataset_text_field,
-            'chat_template' : chat_template
+            "formatting": formatting,
+            "tokenize": tokenize,
+            "input_field": input_field,
+            "dataset_text_field": dataset_text_field,
+            "chat_template": chat_template,
         }
-        self.training_paths = {} # cache to store the training paths
+        self.training_paths = {}  # cache to store the training paths
         self.data_save_path = data_save_path
 
     def prepare_dataset(
-        self, model_name: str, response_template: str = None,
+        self,
+        model_name: str,
+        response_template: str = None,
     ):
         if model_name in self.training_paths:
             return self.training_paths[model_name]
 
-        if self.kwargs['tokenize']:
+        if self.kwargs["tokenize"]:
             tokenizer = AutoTokenizer.from_pretrained(model_name)
 
             # for now, if pad_token_id is None, will just do a replacement
@@ -194,27 +195,28 @@ class BenchmarkDataset:
 
             # replace some special characters in the model name
             save_path = DATA_JSON_NAME.format(
-                re.sub(r'[/-]', '_', model_name),
+                re.sub(r"[/-]", "_", model_name),
             )
         else:
             tokenizer = None
-            save_path = DATA_JSON_NAME.format('all')
+            save_path = DATA_JSON_NAME.format("all")
 
         # get the full path
         save_path = os.path.join(self.data_save_path, save_path)
 
         # build the formatting func
         format_fn, kwargs = build_data_formatting_func(
-            tokenizer, **self.kwargs, 
+            tokenizer,
+            **self.kwargs,
             features=set(self.dataset_split.features),
             response_template=response_template,
         )
 
-        if 'chat_template' in self.kwargs:
-            print ('*** CHAT TEMPLATE *****')
-            print (self.kwargs['chat_template'])
+        if "chat_template" in self.kwargs:
+            print("*** CHAT TEMPLATE *****")
+            print(self.kwargs["chat_template"])
 
-        print (f"Preparing dataset '{save_path}'")
+        print(f"Preparing dataset '{save_path}'")
 
         # call the map
         ds = self.dataset_split.map(format_fn, **kwargs)
@@ -225,6 +227,7 @@ class BenchmarkDataset:
         # store in cache
         self.training_paths[model_name] = save_path
         return save_path
+
 
 def convert_keypairs_to_map(keypairs: List):
     return {key: val for key, val in zip(keypairs[::2], keypairs[1::2])}
@@ -680,12 +683,12 @@ def prepare_arguments(args, benchmark_dataset: BenchmarkDataset):
         for x in products:
             # prepare the dataset
             training_path = benchmark_dataset.prepare_dataset(
-                x['model_name_or_path'],
+                x["model_name_or_path"],
                 (
-                    x[HF_ARG_RESPONSE_TEMPLATE] 
+                    x[HF_ARG_RESPONSE_TEMPLATE]
                     if HF_ARG_RESPONSE_TEMPLATE in x
                     else constants.get(HF_ARG_RESPONSE_TEMPLATE)
-                )
+                ),
             )
             # update
             x[HF_ARG_TRAINING_DATA_PATH] = training_path
@@ -845,7 +848,7 @@ def main(args):
 
     # 1. Prepares a standard BenchmarkDataset
     # -  the preperation of the dataset is deferred to when 'prepare_dataset' is called
-    # -  try to read the data_processing stanza of 
+    # -  try to read the data_processing stanza of
     dataset_processing_args = ConfigUtils.read_yaml(args.scenarios_config_path).get(
         SCENARIOS_STANZA_DATA, {}
     )

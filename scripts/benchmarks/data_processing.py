@@ -1,34 +1,43 @@
-from trl import DataCollatorForCompletionOnlyLM
-from transformers import PreTrainedTokenizer
-from typing import Dict, Callable, List
+# Standard
+from typing import Callable, Dict, List
 
-DEFAULT_FIELDS = [
-    'input_ids', 
-    'attention_mask', 
-    'labels'
-]
+# Third Party
+from transformers import PreTrainedTokenizer
+from trl import DataCollatorForCompletionOnlyLM
+
+DEFAULT_FIELDS = ["input_ids", "attention_mask", "labels"]
+
 
 def build_data_formatting_func(
     tokenizer: PreTrainedTokenizer = None,
-    formatting: str = 'instruct',
+    formatting: str = "instruct",
     tokenize: bool = False,
-    input_field: str = 'input',
-    dataset_text_field: str = 'output',
-    features: List = None, 
+    input_field: str = "input",
+    dataset_text_field: str = "output",
+    features: List = None,
     response_template: str = None,
     chat_template: str = None,
 ):
     if tokenizer is None or chat_template is None:
         return _build_data_formatting_func_without_chat_template(
-            tokenizer, formatting, tokenize, input_field, dataset_text_field,
-            features, response_template
+            tokenizer,
+            formatting,
+            tokenize,
+            input_field,
+            dataset_text_field,
+            features,
+            response_template,
         )
 
     return _build_data_formatting_func(
-        tokenizer, tokenize, chat_template,
-        dataset_text_field, features, response_template
+        tokenizer,
+        tokenize,
+        chat_template,
+        dataset_text_field,
+        features,
+        response_template,
     )
-    
+
 
 # this one uses the chat template and tokenizer
 def _build_data_formatting_func(
@@ -36,7 +45,7 @@ def _build_data_formatting_func(
     tokenize: bool = False,
     chat_template: str = None,
     dataset_text_field: str = "output",
-    features: List = None, 
+    features: List = None,
     response_template: str = None,
 ):
 
@@ -47,19 +56,18 @@ def _build_data_formatting_func(
         loss_masking = instruction_mask_loss(tokenizer, response_template)
 
     def _format(example):
-        formatted_and_maybe_tokenized = tokenizer.apply_chat_template([example], tokenize=tokenize)
-        key = 'input_ids' if tokenize else dataset_text_field
+        formatted_and_maybe_tokenized = tokenizer.apply_chat_template(
+            [example], tokenize=tokenize
+        )
+        key = "input_ids" if tokenize else dataset_text_field
         if not loss_masking:
             return {key: formatted_and_maybe_tokenized}
         return loss_masking(formatted_and_maybe_tokenized)
 
-    return _format, {
-        'remove_columns': features.difference(
-            set(DEFAULT_FIELDS)
-        )
-    }
+    return _format, {"remove_columns": features.difference(set(DEFAULT_FIELDS))}
 
-# ---- NOTE: remove this eventually and move to check templates ---- 
+
+# ---- NOTE: remove this eventually and move to check templates ----
 PROMPT_DICT = {
     "prompt_input": (
         "Below is an instruction that describes a task, paired with an input that provides further context. "
@@ -76,7 +84,9 @@ PROMPT_DICT = {
 # combine functions
 # c = combine(a, b) then c(i) = b(a(i))
 FUNC = Callable[[Dict], Dict]
-def combine_functions(*funcs : FUNC) -> FUNC:
+
+
+def combine_functions(*funcs: FUNC) -> FUNC:
     def _combine(x):
         for f in funcs:
             x = f(x)
@@ -84,13 +94,14 @@ def combine_functions(*funcs : FUNC) -> FUNC:
 
     return _combine
 
+
 def _build_data_formatting_func_without_chat_template(
     tokenizer: PreTrainedTokenizer = None,
-    formatting: str = 'instruct',
+    formatting: str = "instruct",
     tokenize: bool = False,
-    input_field: str = 'input',
-    dataset_text_field: str = 'output',
-    features: List = None, 
+    input_field: str = "input",
+    dataset_text_field: str = "output",
+    features: List = None,
     response_template: str = None,
 ):
     # FIFO
@@ -99,43 +110,31 @@ def _build_data_formatting_func_without_chat_template(
     if features is None:
         features = set()
 
-    if formatting == 'instruct':
+    if formatting == "instruct":
         funcs.append(
             instruction_formatter(
-                input_field=input_field,
-                dataset_text_field=dataset_text_field
+                input_field=input_field, dataset_text_field=dataset_text_field
             )
         )
 
     if tokenize:
-        funcs.append(
-            tokenization(
-                tokenizer,
-                dataset_text_field=dataset_text_field
-            )
-        )
+        funcs.append(tokenization(tokenizer, dataset_text_field=dataset_text_field))
 
-        if formatting == 'instruct' and response_template:
-            funcs.append(
-                instruction_mask_loss(tokenizer, response_template)
-            )
+        if formatting == "instruct" and response_template:
+            funcs.append(instruction_mask_loss(tokenizer, response_template))
 
     if len(funcs) == 0:
-        raise ValueError(
-            "Unable to build a data formatting recipe"
-        )
+        raise ValueError("Unable to build a data formatting recipe")
 
     return combine_functions(*funcs), {
-        'remove_columns': features.union(
+        "remove_columns": features.union(
             set([input_field, dataset_text_field])
-        ).difference(
-            set(DEFAULT_FIELDS)
-        )
+        ).difference(set(DEFAULT_FIELDS))
     }
 
+
 def instruction_formatter(
-    input_field: str = "input", 
-    dataset_text_field: str = "output"
+    input_field: str = "input", dataset_text_field: str = "output"
 ):
     def format_fn(example: Dict):
         prompt_input, prompt_no_input = (
@@ -152,20 +151,20 @@ def instruction_formatter(
 
     return format_fn
 
-def tokenization(
-    tokenizer: PreTrainedTokenizer, 
-    dataset_text_field: str = "output"
-):
+
+def tokenization(tokenizer: PreTrainedTokenizer, dataset_text_field: str = "output"):
     def _tokenize(example):
         text_field = example[dataset_text_field] + tokenizer.eos_token
         return tokenizer(text_field)
 
     return _tokenize
 
-# ---- NOTE: remove this eventually and move to check templates ---- 
+
+# ---- NOTE: remove this eventually and move to check templates ----
+
 
 def instruction_mask_loss(
-    tokenizer: PreTrainedTokenizer, 
+    tokenizer: PreTrainedTokenizer,
     response_template: str,
     take_from_index: int = 2,
 ):
@@ -177,17 +176,21 @@ def instruction_mask_loss(
         response_template, add_special_tokens=False
     )
 
-    # this ignores the first 
+    # this ignores the first
     if len(response_template_ids) > take_from_index:
         response_template_ids = response_template_ids[take_from_index:]
-        print (f"Taking response_ids[{take_from_index}:] from '{len(response_template_ids)}' response tokens")
-    
-    collator = DataCollatorForCompletionOnlyLM(response_template_ids, tokenizer=tokenizer, ignore_index=-100)
+        print(
+            f"Taking response_ids[{take_from_index}:] from '{len(response_template_ids)}' response tokens"
+        )
+
+    collator = DataCollatorForCompletionOnlyLM(
+        response_template_ids, tokenizer=tokenizer, ignore_index=-100
+    )
 
     def collate_example(example):
         # single example
-        collated_example = collator([example], return_tensors = "pt")
+        collated_example = collator([example], return_tensors="pt")
         # flatten the additional dim
-        return {k: v.view(-1) for k,v in collated_example.items()}
+        return {k: v.view(-1) for k, v in collated_example.items()}
 
     return collate_example
