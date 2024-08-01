@@ -11,7 +11,7 @@ DEFAULT_FIELDS = [
 def build_data_formatting_func(
     tokenizer: PreTrainedTokenizer = None,
     formatting: str = 'instruct',
-    tokenize: bool = True,
+    tokenize: bool = False,
     input_field: str = 'input',
     dataset_text_field: str = 'output',
     features: List = None, 
@@ -33,7 +33,7 @@ def build_data_formatting_func(
 # this one uses the chat template and tokenizer
 def _build_data_formatting_func(
     tokenizer: PreTrainedTokenizer,
-    tokenize: bool = True,
+    tokenize: bool = False,
     chat_template: str = None,
     dataset_text_field: str = "output",
     features: List = None, 
@@ -87,7 +87,7 @@ def combine_functions(*funcs : FUNC) -> FUNC:
 def _build_data_formatting_func_without_chat_template(
     tokenizer: PreTrainedTokenizer = None,
     formatting: str = 'instruct',
-    tokenize: bool = True,
+    tokenize: bool = False,
     input_field: str = 'input',
     dataset_text_field: str = 'output',
     features: List = None, 
@@ -167,6 +167,7 @@ def tokenization(
 def instruction_mask_loss(
     tokenizer: PreTrainedTokenizer, 
     response_template: str,
+    take_from_index: int = 2,
 ):
 
     print(f"Applying loss masking to reponse template '{response_template}'")
@@ -174,7 +175,13 @@ def instruction_mask_loss(
     # cheat, use the data collator to mask the loss tokens
     response_template_ids = tokenizer.encode(
         response_template, add_special_tokens=False
-    )[2:]
+    )
+
+    # this ignores the first 
+    if len(response_template_ids) > take_from_index:
+        response_template_ids = response_template_ids[take_from_index:]
+        print (f"Taking response_ids[{take_from_index}:] from '{len(response_template_ids)}' response tokens")
+    
     collator = DataCollatorForCompletionOnlyLM(response_template_ids, tokenizer=tokenizer, ignore_index=-100)
 
     def collate_example(example):

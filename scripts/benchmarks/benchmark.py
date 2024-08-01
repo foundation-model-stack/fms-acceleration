@@ -77,12 +77,16 @@ HF_TRAINER_LOG_GPU_STAGE_INIT = "init_mem_gpu"
 HF_TRAINER_LOG_GPU_STAGE_TRAIN = "train_mem_gpu"
 KEYWORD_PEAKED_DELTA = "peaked_delta"
 KEYWORD_ALLOC_DELTA = "alloc_delta"
-HF_ARG_SKIP_MEMORY_METRIC = "--skip_memory_metrics"
+HF_ARG_TRAINING_DATA_PATH = "training_data_path"
+HF_ARG_RESPONSE_TEMPLATE = "response_template"
+HF_ARG_SKIP_MEMORY_METRIC = "skip_memory_metrics"
 RESULT_FIELD_ALLOCATED_GPU_MEM = "mem_torch_mem_alloc_in_bytes"
 RESULT_FIELD_PEAK_ALLOCATED_GPU_MEM = "mem_peak_torch_mem_alloc_in_bytes"
 ERROR_MESSAGES = "error_messages"
 DRY_RUN_MESSAGE = "dry_run"
 
+SCENARIOS_STANZA_SCN = 'scenarios'
+SCENARIOS_STANZA_DATA = 'data_processing' # optional
 
 def extract_gpu_memory_metrics(output_metrics) -> Tuple[float]:
     """
@@ -155,7 +159,7 @@ class BenchmarkDataset:
         dataset_name: str = 'yahma/alpaca-cleaned',
         dataset_split: str = "train",
         formatting: str = 'instruct',
-        tokenize: bool = True,
+        tokenize: bool = False,
         input_field: str = 'input',
         dataset_text_field: str = 'output',
         chat_template: str = None,
@@ -630,7 +634,7 @@ def get_peak_mem_usage_by_device_id(gpu_logs: pd.DataFrame):
 
 def prepare_arguments(args, benchmark_dataset: BenchmarkDataset):
     defaults = ConfigUtils.read_yaml(args.defaults_config_path)
-    scenarios = ConfigUtils.read_yaml(args.scenarios_config_path)["scenarios"]
+    scenarios = ConfigUtils.read_yaml(args.scenarios_config_path)[SCENARIOS_STANZA_SCN]
     acceleration_config_map = convert_keypairs_to_map(
         args.acceleration_framework_config_keypairs
     )
@@ -678,13 +682,13 @@ def prepare_arguments(args, benchmark_dataset: BenchmarkDataset):
             training_path = benchmark_dataset.prepare_dataset(
                 x['model_name_or_path'],
                 (
-                    x['response_template'] 
-                    if 'response_template' in x
-                    else constants.get('response_template')
+                    x[HF_ARG_RESPONSE_TEMPLATE] 
+                    if HF_ARG_RESPONSE_TEMPLATE in x
+                    else constants.get(HF_ARG_RESPONSE_TEMPLATE)
                 )
             )
             # update
-            x['training_data_path'] = training_path
+            x[HF_ARG_TRAINING_DATA_PATH] = training_path
 
         for (
             num_gpus,
@@ -711,7 +715,7 @@ def generate_list_of_experiments(
         expr_arg_w_outputdir = exp_arg + [
             "--output_dir",
             os.path.join(experiment_output_dir, hf_products_dir),
-            HF_ARG_SKIP_MEMORY_METRIC,
+            "--" + HF_ARG_SKIP_MEMORY_METRIC,
             not log_memory_in_trainer,
         ]
         expr_cls = Experiment if not dry_run else DryRunExperiment
@@ -841,7 +845,10 @@ def main(args):
 
     # 1. Prepares a standard BenchmarkDataset
     # -  the preperation of the dataset is deferred to when 'prepare_dataset' is called
-    dataset_processing_args = ConfigUtils.read_yaml(args.scenarios_config_path)['data_processing']
+    # -  try to read the data_processing stanza of 
+    dataset_processing_args = ConfigUtils.read_yaml(args.scenarios_config_path).get(
+        SCENARIOS_STANZA_DATA, {}
+    )
     if not args.no_data_processing:
         benchmark_dataset = BenchmarkDataset(
             args.dataset_save_path,

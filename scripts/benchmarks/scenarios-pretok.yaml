@@ -1,10 +1,24 @@
-# This file holds a list of scenarios to may be run.
+# This file holds a sample full-finetuning scenario and 
+# demonstrates various pretokenization scenarios
+
+# the data_processing stanza is optional
+# - if it is missing, then the defaults is to use alpaca
+# with instruct formatting and no tokenization
+
+# - this is an older style method which does not rely on 
+#   chat templates, this will also do instruct formatting
+# - but if tokenize = True, this works only if 
+#   sft_trainer accepts pretokenized dataset
 # data_processing:
 #   dataset_name: yahma/alpaca-cleaned
 #   formatting: "instruct"
 #   tokenize: True
 #   input_field: input
 
+# - this is the new style, with the chat templates for formatting
+# - this is the best approach to keep things flexible and
+#   allows to configure many different datasets
+#  - there is an option of setting tokenize is True or False
 data_processing:
   dataset_name: yahma/alpaca-cleaned
   chat_template: |
@@ -29,6 +43,7 @@ data_processing:
     {% endfor %}
   tokenize: True
 
+# scenarios
 scenarios:
     -   name: full-finetuning
         arguments:
