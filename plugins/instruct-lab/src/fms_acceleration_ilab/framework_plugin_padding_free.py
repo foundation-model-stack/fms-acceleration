@@ -20,7 +20,11 @@ import warnings
 # Third Party
 from fms_acceleration import AccelerationPlugin
 from peft import LoraConfig
-from transformers import TrainingArguments, __version__ as transformers_version, DataCollatorForSeq2Seq
+from transformers import (
+    TrainingArguments,
+    __version__ as transformers_version,
+    DataCollatorForSeq2Seq,
+)
 from accelerate import Accelerator
 import torch
 from types import MethodType
@@ -30,7 +34,7 @@ from torch.utils.data import DataLoader
 TRANSFORMERS_VERSION = "4.44"
 
 class PaddingFreeAccelerationPlugin(AccelerationPlugin):
-    
+
     require_packages = ["flash_attn"]
 
     def __init__(self, configurations: Dict[str, Dict]):
@@ -111,37 +115,38 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
     def _patch_dataloader(
             self,
             accelerator: Accelerator,
-        ):
-            """
-            Hijacks the accelorator prepare inside `Trainer.train`
-            - If it is a single argument. it is assumed to be the prepare call on the dataloader
-            - we replace the collate function in the dataloader to flatten the batch into a long
-            sequence with special tokens to define the attention computation boundaries
-            """
-            # Check if transformers already supports a collator that flattens the batch
-            # Otherwise, use the locally implemented DataCollatorWithFlattening
-            if version.parse(transformers_version) < version.parse(TRANSFORMERS_VERSION):
-                from .ilab_utils import DataCollatorWithFlattening
-            else:
-                from transformers import DataCollatorWithFlattening
+    ):
+        """
+        Hijacks the accelorator prepare inside `Trainer.train`
+        - If it is a single argument. it is assumed to be the prepare call on the dataloader
+        - we replace the collate function in the dataloader to flatten the batch into a long
+        sequence with special tokens to define the attention computation boundaries
+        """
+        # Check if transformers already supports a collator that flattens the batch
+        # Otherwise, use the locally implemented DataCollatorWithFlattening
+        if version.parse(transformers_version) < version.parse(TRANSFORMERS_VERSION):
+            from .ilab_utils import DataCollatorWithFlattening # pylint: disable=import-outside-toplevel
+        else:
+            from transformers import DataCollatorWithFlattening # pylint: disable=import-outside-toplevel,no-name-in-module
 
-            # hijack the dataloader in accelerator.prepare to replace the collate_fn
-            _old_prepare = accelerator.prepare
-            def prepare(self, *args, device_placement=None):
-                if len(args) > 1 or not isinstance(args[0], DataLoader):
-                    return _old_prepare(*args, device_placement=device_placement)
-                dataloader = args[0]
+        # hijack the dataloader in accelerator.prepare to replace the collate_fn
+        _old_prepare = accelerator.prepare
+        def prepare(self, *args, device_placement=None):
+            if len(args) > 1 or not isinstance(args[0], DataLoader):
+                return _old_prepare(*args, device_placement=device_placement)
+            dataloader = args[0]
 
-                if not isinstance(dataloader.collate_fn, DataCollatorForSeq2Seq):
-                    raise Exception("The padding-free plugin currently only works with a `DataCollatorForSeq2Seq` collate_fn, \
-                        otherwise the collation can be unreliable")
+            if not isinstance(dataloader.collate_fn, DataCollatorForSeq2Seq):
+                raise TypeError("The padding-free plugin currently only works with a \
+                    `DataCollatorForSeq2Seq` collate_fn, \
+                    otherwise the collation can be unreliable")
 
-                # Replace the collate_fn in dataloader
-                dataloader.collate_fn = DataCollatorWithFlattening()
+            # Replace the collate_fn in dataloader
+            dataloader.collate_fn = DataCollatorWithFlattening()
 
-                return dataloader
+            return dataloader
 
-            accelerator.prepare = MethodType(prepare, accelerator)
+        accelerator.prepare = MethodType(prepare, accelerator)
 
 # register
 AccelerationPlugin.register_plugin(

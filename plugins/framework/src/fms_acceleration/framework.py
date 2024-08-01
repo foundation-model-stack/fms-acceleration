@@ -194,7 +194,7 @@ class AccelerationFramework:
         modifiable_args: Tuple,
     ):
         # get the config
-        archs = model.config.architectures 
+        archs = model.config.architectures
         model_archs = set(archs if archs is not None else [])
 
         # NOTE: this assumes that augmentation order does not matter
