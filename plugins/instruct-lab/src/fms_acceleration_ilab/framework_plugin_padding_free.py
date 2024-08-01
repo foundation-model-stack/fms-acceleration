@@ -27,7 +27,7 @@ from types import MethodType
 from torch.utils.data import DataLoader
 
 # This is the version where padding-free was merged into transformers
-TRANSFORMERS_VERSION = "4.43"
+TRANSFORMERS_VERSION = "4.44"
 
 class PaddingFreeAccelerationPlugin(AccelerationPlugin):
     

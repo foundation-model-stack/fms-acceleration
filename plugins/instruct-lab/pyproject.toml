@@ -5,9 +5,10 @@ build-backend = "hatchling.build"
 [project]
 name = "fms-acceleration-ilab"
 version = '0.0.1'
-description = "FMS Acceleration using Attention Techniques"
+description = "FMS Acceleration Plugin for Functionalities Used in Instruct Lab Training"
 authors = [
   {name = "Fabian Lim", email = "flim@sg.ibm.com"},
+  {name = "Aaron Chew", email = "aaron.chew1@ibm.com"},
 ]
 license = {text = "Apache-2.0"}
 readme = "README.md"

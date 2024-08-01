@@ -1,3 +1,17 @@
+# Copyright The FMS HF Tuning Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import torch
 from transformers.utils import is_flash_attn_2_available
 from types import MethodType
@@ -18,7 +32,6 @@ def prepare_fa2_from_position_ids(query, key, value, position_ids, query_length)
     max_length = position_ids.max()+1
     return (query, key, value, indices_q, (cu_seq_lens, cu_seq_lens), (max_length, max_length))
 
-# we can replace with the model patcher eventually
 def build_fa_forward(
     attention: torch.nn.Module, causal: bool = True, dropout: float = None
 ):

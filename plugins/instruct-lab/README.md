@@ -12,9 +12,9 @@ Plugin | Description | Depends | Loading | Augmentation | Callbacks
 [padding_free](./src/fms_acceleration_ilab/framework_plugin_padding_free.py) | Padding-Free Flash Attention Computation | flash_attn | ✅ | ✅
 
 
-## Native Transformers Support from V4.43.0
-Transformers natively supports padding-free from v4.43.0. The padding-free plugin will use the transformers library if compatible, 
-otherwise if `transformers < V4.43.0` the plugin will use an internal implementation instead.
+## Native Transformers Support from V4.44.0
+Transformers natively supports padding-free from v4.44.0. The padding-free plugin will use the transformers library if compatible, 
+otherwise if `transformers < V4.44.0` the plugin will use an internal implementation instead.
 
 ## Known Issues
 
