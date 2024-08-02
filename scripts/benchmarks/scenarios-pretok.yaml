@@ -1,0 +1,62 @@
+# This file holds a sample full-finetuning scenario and 
+# demonstrates various pretokenization scenarios
+
+# the data_processing stanza is optional
+# - if it is missing, then the defaults is to use alpaca
+# with instruct formatting and no tokenization
+
+# - this is an older style method which does not rely on 
+#   chat templates, this will also do instruct formatting
+# - but if tokenize = True, this works only if 
+#   sft_trainer accepts pretokenized dataset
+# data_processing:
+#   dataset_name: yahma/alpaca-cleaned
+#   formatting: "instruct"
+#   tokenize: True
+#   input_field: input
+
+# - this is the new style, with the chat templates for formatting
+# - this is the best approach to keep things flexible and
+#   allows to configure many different datasets
+#  - there is an option of setting tokenize is True or False
+data_processing:
+  dataset_name: yahma/alpaca-cleaned
+  chat_template: |
+    {%- for message in messages %}
+        {% if message['input'] != '' %}
+    Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
+
+        {% else %}
+    Below is an instruction that describes a task. Write a response that appropriately completes the request.
+
+        {% endif %}
+    ### Instruction:
+    {{ message['instruction'] }}
+
+        {% if message['input'] != '' %}
+    ### Input:
+    {{ message['input'] }}
+
+        {% endif %}
+    ### Response:
+    {{ message['output'] + eos_token }}
+    {% endfor %}
+  tokenize: True
+
+# scenarios
+scenarios:
+    -   name: full-finetuning
+        arguments:
+            learning_rate: 2e-5
+            model_name_or_path: 
+                - 'mistralai/Mistral-7B-v0.1'
+            torch_dtype: float16
+
+    -   name: padding-free
+        framework_config: 
+            - ilab-padding-free
+        arguments:
+            learning_rate: 2e-5
+            model_name_or_path: 
+                - 'mistralai/Mistral-7B-v0.1'
+            torch_dtype: float16

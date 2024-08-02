@@ -25,7 +25,7 @@ SCNTAG_PEFT_AUTOGPTQ=accelerated-peft-gptq
 # ------------- OTHER CONFIGS -----------------
 
 # data will be cached in here
-DATA_CACHE=data/cache.json
+DATA_CACHE=data
 
 # final result placed here
 BENCH_RESULT_FILE=benchmarks.csv
@@ -44,7 +44,7 @@ MEMORY_LOGGING=${MEMORY_LOGGING:-"all"}
 NUM_GPUS_MATRIX=${1-"1 2"}
 RESULT_DIR=${2:-"benchmark_outputs"}
 SCENARIOS_CONFIG=${3:-$SCENARIOS_CONFIG}
-SCENARIOS_FILTER=${4:-$SCNTAG_PEFT_AUTOGPTQ}
+SCENARIOS_FILTER=${4-$SCNTAG_PEFT_AUTOGPTQ}
 
 echo "NUM_GPUS_MATRIX: $NUM_GPUS_MATRIX"
 echo "RESULT_DIR: $RESULT_DIR"

@@ -37,6 +37,7 @@ BENCHMARK_FILENAME = "benchmarks.csv"
 RAW_FILENAME = "raw_summary.csv"
 OUTLIERS_FILENAME = "outliers.csv"
 
+
 def plot_chart(ax, x, y, title, xlabel, ylabel):
     ax.scatter(x, y, s=10)
     ax.set_title(title, fontsize=8)
