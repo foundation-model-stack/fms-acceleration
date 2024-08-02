@@ -10,6 +10,7 @@ The fms-acceleration framework includes accelerators for Full and Parameter Effi
  - Bits-and-Bytes (BNB) quantised LoRA : QLoRA acceleration
  - AutoGPTQ quantised LoRA : GPTQ-LoRA acceleration
  - Full Fine Tuning acceleration (coming soon)
+ - Padding-Free Attention
 
 Our tests show a significant increase in training token throughput using this fms-acceleration framework.
 
