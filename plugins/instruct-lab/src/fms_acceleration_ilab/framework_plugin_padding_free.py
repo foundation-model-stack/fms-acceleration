@@ -14,7 +14,6 @@
 
 # Standard
 from typing import Dict, Tuple
-from packaging import version
 import warnings
 
 # Third Party
@@ -22,7 +21,6 @@ from fms_acceleration import AccelerationPlugin
 from peft import LoraConfig
 from transformers import (
     TrainingArguments,
-    __version__ as transformers_version,
     DataCollatorForSeq2Seq,
 )
 from accelerate import Accelerator
@@ -30,8 +28,6 @@ import torch
 from types import MethodType
 from torch.utils.data import DataLoader
 
-# This is the version where padding-free was merged into transformers
-TRANSFORMERS_VERSION = "4.44"
 
 class PaddingFreeAccelerationPlugin(AccelerationPlugin):
 
@@ -59,33 +55,94 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
         train_args: TrainingArguments,
         modifiable_args: Tuple[LoraConfig],
     ):
+        # guarded
+        from fms_acceleration.model_patcher import (  # pylint: disable=import-outside-toplevel
+            ModelPatcher,
+            ModelPatcherRule,
+            ModelPatcherTrigger,
+        )
+        from functools import partial  # pylint: disable=import-outside-toplevel
 
         # This check is done here to only patch the attention forward
-        # if below a specific transformer version (4.43.3) that already
-        # addresses padding free
+        # the PR was merged here
         # https://github.com/huggingface/transformers/pull/31629
-        # Subsequently, when additional features are added to the patch
-        # such as attention dropout, the version check should be shifted
-        # into `build_fa_forward` to manage the forward replacement inside
-        # the function.
-        if version.parse(transformers_version) < version.parse(TRANSFORMERS_VERSION):
-            # guarded
-            from fms_acceleration.model_patcher import ( # pylint: disable=import-outside-toplevel
-                ModelPatcher,
-                ModelPatcherRule,
-                ModelPatcherTrigger,
-            )
-            from .flash_attn import build_fa_forward # pylint: disable=import-outside-toplevel
-            from functools import partial # pylint: disable=import-outside-toplevel
 
-            # TODO: have a generic version of this rule
-            # - do regex on RMSNorm class name
-            # - check on the tensors required for fast_rms_layernorm
-            model_type = model.config.model_type
+        try:
+            # if this is importable, it means the PR
+            # has been merged, and there is no more need to
+            # pylint: disable=import-outside-toplevel,no-name-in-module,unused-import
+            from transformers import (
+                DataCollatorWithFlattening,
+            )
+
+            # - if import successful this will print and return
+            warnings.warn(
+                "transformers version supports padding free natively in various models."
+            )
+            return model, modifiable_args
+
+        except ImportError:
+            pass
+
+        # Otherwise patching is required:
+        # 1. a custom forward has to be registered on the backbone
+        #    to intercept the position ids
+        def _is_backbone(module: torch.nn.Module):
+            return any(isinstance(mod, torch.nn.Embedding) for mod in module.children())
+
+        # - patch backbone
+        model_type = model.config.model_type
+        # pylint: disable=import-outside-toplevel
+        from .flash_attn import build_backbone_forward
+
+        ModelPatcher.register(
+            ModelPatcherRule(
+                rule_id=f"{model_type}-backbone-pad-free",
+                trigger=ModelPatcherTrigger(check=_is_backbone),
+                forward_builder=partial(
+                    build_backbone_forward,
+                    model_id=id(model),
+                ),
+            ),
+        )
+
+        # Next, the flash attention function needs to be patched
+        # how it is patched depends on the transformers version
+        try:
+            # Case I:
+            # if transformers.modeling_flash_attention_utils
+            # can be imported, then we patch the flash attention function
+            # here. This is required because
+            # - this is an old version that does not have logic to handle the flattened batch
+
+            # pylint: disable=import-outside-toplevel
+            from transformers.modeling_flash_attention_utils import (
+                _flash_attention_forward,
+            )
+
+            from .flash_attn import _flash_attention_forward_with_posids
+
+            ModelPatcher.register(
+                ModelPatcherRule(
+                    rule_id="flash_attn_forward",
+                    import_and_maybe_reload=(
+                        "transformers.modeling_flash_attention_utils._flash_attention_forward",
+                        partial(_flash_attention_forward_with_posids, id(model)),
+                        model.__module__,
+                    ),
+                ),
+            )
+        except ImportError:
+            # Case II: the flash attention functions are methods
+            # attached to the model classes
+            # - for similar reasons as Case I, they need to be patched on the
+            #   FA2 modules
+            from .flash_attn import (
+                build_fa_forward,
+            )  # pylint: disable=import-outside-toplevel
+
             def is_flash_attn_2(module):
-                if (
-                    module.__class__.__name__.endswith("FlashAttention2")
-                ):
+                if module.__class__.__name__.endswith("FlashAttention2"):
                     return True
                 return False
 
@@ -95,13 +152,10 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
                     trigger=ModelPatcherTrigger(check=is_flash_attn_2),
                     forward_builder=partial(
                         build_fa_forward,
-                        causal=True,
+                        model_id=id(model),
                     ),
                 ),
             )
-        else:
-            warnings.warn(f"transformers version is equal or later \
-                than {TRANSFORMERS_VERSION}, attention forward will not be replaced.")
 
         return model, modifiable_args
 
@@ -113,8 +167,8 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
         return []
 
     def _patch_dataloader(
-            self,
-            accelerator: Accelerator,
+        self,
+        accelerator: Accelerator,
     ):
         """
         Hijacks the accelorator prepare inside `Trainer.train`
@@ -122,24 +176,33 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
         - we replace the collate function in the dataloader to flatten the batch into a long
         sequence with special tokens to define the attention computation boundaries
         """
-        # Check if transformers already supports a collator that flattens the batch
-        # Otherwise, use the locally implemented DataCollatorWithFlattening
-        if version.parse(transformers_version) < version.parse(TRANSFORMERS_VERSION):
-            from .ilab_utils import DataCollatorWithFlattening # pylint: disable=import-outside-toplevel
-        else:
-            from transformers import DataCollatorWithFlattening # pylint: disable=import-outside-toplevel,no-name-in-module
+        try:
+            # Check if transformers already supports a collator that flattens the batch
+            # pylint: disable=import-outside-toplevel,no-name-in-module
+            from transformers import (
+                DataCollatorWithFlattening,
+            )
+        except ImportError:
+            # Otherwise, use the locally implemented DataCollatorWithFlattening
+            # pylint: disable=import-outside-toplevel
+            from .ilab_utils import (
+                DataCollatorWithFlattening,
+            )
 
         # hijack the dataloader in accelerator.prepare to replace the collate_fn
         _old_prepare = accelerator.prepare
+
         def prepare(self, *args, device_placement=None):
             if len(args) > 1 or not isinstance(args[0], DataLoader):
                 return _old_prepare(*args, device_placement=device_placement)
             dataloader = args[0]
 
             if not isinstance(dataloader.collate_fn, DataCollatorForSeq2Seq):
-                raise TypeError("The padding-free plugin currently only works with a \
+                raise TypeError(
+                    "The padding-free plugin currently only works with a \
                     `DataCollatorForSeq2Seq` collate_fn, \
-                    otherwise the collation can be unreliable")
+                    otherwise the collation can be unreliable"
+                )
 
             # Replace the collate_fn in dataloader
             dataloader.collate_fn = DataCollatorWithFlattening()
@@ -147,6 +210,7 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
             return dataloader
 
         accelerator.prepare = MethodType(prepare, accelerator)
+
 
 # register
 AccelerationPlugin.register_plugin(
