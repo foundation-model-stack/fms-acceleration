@@ -10,6 +10,7 @@ The fms-acceleration framework includes accelerators for Full and Parameter Effi
  - Bits-and-Bytes (BNB) quantised LoRA : QLoRA acceleration
  - AutoGPTQ quantised LoRA : GPTQ-LoRA acceleration
  - Full Fine Tuning acceleration (coming soon)
+ - Padding-Free Attention
 
 Our tests show a significant increase in training token throughput using this fms-acceleration framework.
 
@@ -29,9 +30,10 @@ For example:
 
 Plugin | Description | Depends | License | Status
 --|--|--|--|--
-[framework](./plugins/framework/README.md) | This acceleration framework for integration with huggingface trainers | | | Beta
-[accelerated-peft](./plugins/accelerated-peft/README.md) | For PEFT-training, e.g., 4bit QLoRA. | Huggingface<br>AutoGPTQ | Apache 2.0<br>MIT | Beta
+[framework](./plugins/framework/README.md) | This acceleration framework for integration with huggingface trainers | | | Alpha
+[accelerated-peft](./plugins/accelerated-peft/README.md) | For PEFT-training, e.g., 4bit QLoRA. | Huggingface<br>AutoGPTQ | Apache 2.0<br>MIT | Alpha
 [fused-op-and-kernels](./plugins/fused-ops-and-kernels/README.md)  | Fused LoRA and triton kernels (e.g., fast cross-entropy, rms, rope) | -- | Apache 2.0 [(contains extracted code)](./plugins/fused-ops-and-kernels/README.md#code-extracted-from-unsloth)| Beta
+[instruct-lab](./plugins/instruct-lab/README.md)  | Padding-Free Flash Attention Computation | flash-attn | Apache 2.0 | Beta
  MOE-training-acceleration  | [MegaBlocks](https://github.com/databricks/megablocks) inspired triton Kernels and acclerations for Mixture-of-Expert models |  | Apache 2.0 | Coming Soon
 
 ## Usage with FMS HF Tuning
