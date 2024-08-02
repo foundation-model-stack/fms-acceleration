@@ -29,10 +29,10 @@ For example:
 
 Plugin | Description | Depends | License | Status
 --|--|--|--|--
-[framework](./plugins/framework/README.md) | This acceleration framework for integration with huggingface trainers | | | Beta
-[accelerated-peft](./plugins/accelerated-peft/README.md) | For PEFT-training, e.g., 4bit QLoRA. | Huggingface<br>AutoGPTQ | Apache 2.0<br>MIT | Beta
+[framework](./plugins/framework/README.md) | This acceleration framework for integration with huggingface trainers | | | Alpha
+[accelerated-peft](./plugins/accelerated-peft/README.md) | For PEFT-training, e.g., 4bit QLoRA. | Huggingface<br>AutoGPTQ | Apache 2.0<br>MIT | Alpha
 [fused-op-and-kernels](./plugins/fused-ops-and-kernels/README.md)  | Fused LoRA and triton kernels (e.g., fast cross-entropy, rms, rope) | -- | Apache 2.0 [(contains extracted code)](./plugins/fused-ops-and-kernels/README.md#code-extracted-from-unsloth)| Beta
-[ilab-padding-free](./plugins/instruct-lab/README.md)  | Padding-Free Flash Attention Computation | flash-attn | Apache 2.0 | Beta
+[instruct-lab](./plugins/instruct-lab/README.md)  | Padding-Free Flash Attention Computation | flash-attn | Apache 2.0 | Beta
  MOE-training-acceleration  | [MegaBlocks](https://github.com/databricks/megablocks) inspired triton Kernels and acclerations for Mixture-of-Expert models |  | Apache 2.0 | Coming Soon
 
 ## Usage with FMS HF Tuning
