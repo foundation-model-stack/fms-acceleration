@@ -207,7 +207,7 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
             # Replace the collate_fn in dataloader
             dataloader.collate_fn = DataCollatorWithFlattening()
 
-            return dataloader
+            return _old_prepare(dataloader)
 
         accelerator.prepare = MethodType(prepare, accelerator)
 
