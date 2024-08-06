@@ -21,4 +21,4 @@ ACCELERATION_FRAMEWORK_ENV_KEY = "ACCELERATION_FRAMEWORK_CONFIG_FILE"
 # and activated.
 # - hence the plugins that have model loaders should be on top of this list
 
-PLUGINS = ["peft", "foak", "ilab"]
+PLUGINS = ["peft", "foak", "aadp"]
