@@ -93,7 +93,7 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
         # - patch backbone
         model_type = model.config.model_type
         # pylint: disable=import-outside-toplevel
-        from .flash_attn import build_backbone_forward
+        from .flash_attn import build_backbone_forward, build_toplevel_model_forward
 
         ModelPatcher.register(
             ModelPatcherRule(
@@ -101,6 +101,19 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
                 trigger=ModelPatcherTrigger(check=_is_backbone),
                 forward_builder=partial(
                     build_backbone_forward,
+                    model_id=id(model),
+                ),
+            ),
+        )
+
+        # Need to patch the top-level model to accept and cache additional
+        # kwargs, cu_seq_lens and max_len from data collator
+        ModelPatcher.register(
+            ModelPatcherRule(
+                rule_id=f"{model_type}-cumseqlen-cache",
+                trigger=ModelPatcherTrigger(check=model.__class__),
+                forward_builder=partial(
+                    build_toplevel_model_forward,
                     model_id=id(model),
                 ),
             ),
