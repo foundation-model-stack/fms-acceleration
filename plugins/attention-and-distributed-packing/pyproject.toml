@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "fms-acceleration-ilab"
+name = "fms-acceleration-aadp"
 version = '0.0.1'
-description = "FMS Acceleration Plugin for Functionalities Used in Instruct Lab Training"
+description = "FMS Acceleration Plugin for Attention and Distributed Packing Optimizations"
 authors = [
   {name = "Fabian Lim", email = "flim@sg.ibm.com"},
   {name = "Aaron Chew", email = "aaron.chew1@ibm.com"},
@@ -24,7 +24,7 @@ classifiers=[
 ]
 
 [tool.hatch.build.targets.wheel]
-only-include = ["src/fms_acceleration_ilab"]
+only-include = ["src/fms_acceleration_aadp"]
 
 [tool.hatch.build.targets.wheel.sources]
 "src" = ""

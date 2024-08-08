@@ -17,13 +17,13 @@ from fms_acceleration.utils import (
     instantiate_framework,
     read_configuration,
 )
-from fms_acceleration_ilab import PaddingFreeAccelerationPlugin
+from fms_acceleration_aadp import PaddingFreeAccelerationPlugin
 
 # configuration
 DIRNAME = os.path.dirname(__file__)
-CONFIG_PATH_ILAB = os.path.join(DIRNAME, "../configs/instruct_lab.yaml")
+CONFIG_PATH_ILAB = os.path.join(DIRNAME, "../configs/aadp.yaml")
 
-def test_framework_installs_ilab_padding_free_plugin():
+def test_framework_installs_aadp_padding_free_plugin():
     with instantiate_framework(
         read_configuration(CONFIG_PATH_ILAB), require_packages_check=False
     ) as framework:

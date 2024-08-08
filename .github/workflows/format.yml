@@ -29,7 +29,7 @@ jobs:
           - "framework"
           - "accelerated-peft"
           - "fused-ops-and-kernels"
-          - "instruct-lab"
+          - "attention-and-distributed-packing"
 
     steps:
       - uses: actions/checkout@v4
