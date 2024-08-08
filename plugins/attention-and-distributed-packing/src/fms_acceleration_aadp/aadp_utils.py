@@ -15,7 +15,7 @@
 from dataclasses import dataclass
 import warnings
 from transformers import DefaultDataCollator, default_data_collator
-
+import torch
 
 @dataclass
 class DataCollatorWithFlattening(DefaultDataCollator):
@@ -51,4 +51,24 @@ class DataCollatorWithFlattening(DefaultDataCollator):
                 ret["labels"] += [-100] + feature["labels"][1:]
             else:
                 ret["labels"] += [-100] + feature["input_ids"][1:]
-        return default_data_collator([ret], return_tensors)
+
+        position_ids = torch.tensor(ret["position_ids"]).flatten()
+        indices_q = torch.arange(
+            position_ids.size(0), device=position_ids.device, dtype=torch.int32
+        )
+        cu_seq_lens = torch.cat(
+            (
+                indices_q[position_ids == 0],
+                torch.tensor(
+                    position_ids.size(), dtype=torch.int32
+                ),
+            )
+        )
+        max_length = position_ids.max() + 1
+
+        # return default_data_collator([ret], return_tensors)
+        return {
+            **default_data_collator([ret], return_tensors),
+            "cu_seq_lens": cu_seq_lens,
+            "max_length": max_length,
+        }

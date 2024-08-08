@@ -32,36 +32,27 @@ if is_flash_attn_2_available():
         inspect.signature(flash_attn_func).parameters
     )
 
-
-def prepare_fa2_from_position_ids(query, key, value, position_ids, query_length):
-    query = query.view(-1, query.size(-2), query.size(-1))
-    key = key.view(-1, key.size(-2), key.size(-1))
-    value = value.view(-1, value.size(-2), value.size(-1))
-    position_ids = position_ids.flatten()
-    indices_q = torch.arange(
-        position_ids.size(0), device=position_ids.device, dtype=torch.int32
-    )
-    cu_seq_lens = torch.cat(
-        (
-            indices_q[position_ids == 0],
-            torch.tensor(
-                position_ids.size(), device=position_ids.device, dtype=torch.int32
-            ),
-        )
-    )
-    max_length = position_ids.max() + 1
-    return (
-        query,
-        key,
-        value,
-        indices_q,
-        (cu_seq_lens, cu_seq_lens),
-        (max_length, max_length),
-    )
-
-
 # model id -> position_ids
 POSITION_IDS_CACHE = {}
+CU_SEQ_LENS_CACHE = {}
+MAX_SEQ_LENS_CACHE = {}
+
+# This is used to patch the top-level model to accept cuseqlen
+# and maxseqlen as additional args that are cached for attention
+# computation
+def build_toplevel_model_forward(
+    model: torch.nn.Module,
+    model_id: str,
+):
+    # forward
+    old_forward = model.forward
+
+    def forward(self, *args, cu_seq_lens, max_length, **kwargs):
+        CU_SEQ_LENS_CACHE[model_id] = (cu_seq_lens, cu_seq_lens)
+        MAX_SEQ_LENS_CACHE[model_id] = (max_length, max_length)
+        return old_forward(*args, **kwargs)
+
+    return forward
 
 
 # - needed to store position ids when first come into model
@@ -123,6 +114,8 @@ def _flash_attention_forward_with_posids(
 ):
     # get the position ids out here
     position_ids = POSITION_IDS_CACHE[model_id]
+    cu_seqlens_q, cu_seqlens_k = CU_SEQ_LENS_CACHE[model_id]
+    max_seqlen_in_batch_q, max_seqlen_in_batch_k = MAX_SEQ_LENS_CACHE[model_id]
 
     if not use_top_left_mask:
         causal = is_causal
@@ -161,19 +154,10 @@ def _flash_attention_forward_with_posids(
     assert attention_mask is None, "should not be using attention mask"
     assert position_ids is not None, "should be expecting position ids"
     batch_size = query_states.size(0)
-    (
-        query_states,
-        key_states,
-        value_states,
-        _,
-        cu_seq_lens,
-        max_seq_lens,
-    ) = prepare_fa2_from_position_ids(
-        query_states, key_states, value_states, position_ids, query_length
-    )
 
-    cu_seqlens_q, cu_seqlens_k = cu_seq_lens
-    max_seqlen_in_batch_q, max_seqlen_in_batch_k = max_seq_lens
+    query_states = query_states.view(-1, query_states.size(-2), query_states.size(-1))
+    key_states = key_states.view(-1, key_states.size(-2), key_states.size(-1))
+    value_states = value_states.view(-1, value_states.size(-2), value_states.size(-1))
 
     attn_output = flash_attn_varlen_func(
         query_states,
