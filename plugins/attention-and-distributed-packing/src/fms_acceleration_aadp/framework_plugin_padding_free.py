@@ -25,8 +25,6 @@ from transformers import (
 )
 from accelerate import Accelerator
 import torch
-from types import MethodType
-from torch.utils.data import DataLoader
 
 
 class PaddingFreeAccelerationPlugin(AccelerationPlugin):
@@ -63,10 +61,25 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
         )
         from functools import partial  # pylint: disable=import-outside-toplevel
 
+        # TODO: to be moved to framework
+        from .accelerator_patcher import AcceleratorPatcher, AcceleratorPatcherComponent
+
+        def _collator_check_seq2seq(collate_fn):
+            # supposed to just return bool, but we raise here
+            if not isinstance(collate_fn, DataCollatorForSeq2Seq):
+                raise TypeError(
+                    "The padding-free plugin currently only works with a \
+                    `DataCollatorForSeq2Seq` collate_fn, \
+                    otherwise the collation can be unreliable"
+                )
+
+            return True
+
         # This check is done here to only patch the attention forward
         # the PR was merged here
         # https://github.com/huggingface/transformers/pull/31629
 
+        _native = False
         try:
             # if this is importable, it means the PR
             # has been merged, and there is no more need to
@@ -74,15 +87,30 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
             from transformers import (
                 DataCollatorWithFlattening,
             )
+            _native = True
 
-            # - if import successful this will print and return
+        except ImportError:
+
+            # Otherwise, use the locally implemented DataCollatorWithFlattening
+            # pylint: disable=import-outside-toplevel
+            from .aadp_utils import (
+                DataCollatorWithFlattening,
+            )
+
+        # setup the collator
+        AcceleratorPatcher.replace(
+            "flattening-collator", AcceleratorPatcherComponent.data_collator,
+            replacement=DataCollatorWithFlattening(), 
+            pre_requisite_check=_collator_check_seq2seq,
+        )
+
+        if _native:
+            # - if natively supported, then no more need for patch the model
+            # - so print and return
             warnings.warn(
                 "transformers version supports padding free natively in various models."
             )
             return model, modifiable_args
-
-        except ImportError:
-            pass
 
         # Otherwise patching is required:
         # 1. a custom forward has to be registered on the backbone
@@ -157,59 +185,19 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
                 ),
             )
 
+
         return model, modifiable_args
 
     def get_callbacks_and_ready_for_train(
         self, model: torch.nn.Module = None, accelerator: Accelerator = None
     ):
-        # patch the dataloader on the accelerator
-        self._patch_dataloader(accelerator)
+
+        # TODO: to be moved to framework
+        from .accelerator_patcher import patch_accelerator, AcceleratorPatcher
+        patch_accelerator(accelerator)
+        print (AcceleratorPatcher.summary())
+
         return []
-
-    def _patch_dataloader(
-        self,
-        accelerator: Accelerator,
-    ):
-        """
-        Hijacks the accelorator prepare inside `Trainer.train`
-        - If it is a single argument. it is assumed to be the prepare call on the dataloader
-        - we replace the collate function in the dataloader to flatten the batch into a long
-        sequence with special tokens to define the attention computation boundaries
-        """
-        try:
-            # Check if transformers already supports a collator that flattens the batch
-            # pylint: disable=import-outside-toplevel,no-name-in-module
-            from transformers import (
-                DataCollatorWithFlattening,
-            )
-        except ImportError:
-            # Otherwise, use the locally implemented DataCollatorWithFlattening
-            # pylint: disable=import-outside-toplevel
-            from .aadp_utils import (
-                DataCollatorWithFlattening,
-            )
-
-        # hijack the dataloader in accelerator.prepare to replace the collate_fn
-        _old_prepare = accelerator.prepare
-
-        def prepare(self, *args, device_placement=None):
-            if len(args) > 1 or not isinstance(args[0], DataLoader):
-                return _old_prepare(*args, device_placement=device_placement)
-            dataloader = args[0]
-
-            if not isinstance(dataloader.collate_fn, DataCollatorForSeq2Seq):
-                raise TypeError(
-                    "The padding-free plugin currently only works with a \
-                    `DataCollatorForSeq2Seq` collate_fn, \
-                    otherwise the collation can be unreliable"
-                )
-
-            # Replace the collate_fn in dataloader
-            dataloader.collate_fn = DataCollatorWithFlattening()
-
-            return _old_prepare(dataloader)
-
-        accelerator.prepare = MethodType(prepare, accelerator)
 
 
 # register
