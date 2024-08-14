@@ -36,6 +36,7 @@ PIP_REQUIREMENTS_FILE=requirements.txt
 # ------------- DROP COLUMNS FRO RESULTS -----------------
 # env inputs
 DRY_RUN=${DRY_RUN:-"false"}
+NO_COMPARE=${NO_COMPARE:-"false"}
 NO_DATA_PROCESSING=${NO_DATA_PROCESSING:-"false"}
 NO_OVERWRITE=${NO_OVERWRITE:-"false"}
 MEMORY_LOGGING=${MEMORY_LOGGING:-"all"}
@@ -105,6 +106,7 @@ if [ ! "$NO_OVERWRITE" = "true" ]; then
 fi
 
 # run the bench
+PYTHONPATH=. \
 python $WORKING_DIR/benchmark.py \
    --num_gpus $NUM_GPUS_MATRIX \
    --scenarios_config_path $SCENARIOS_CONFIG \
@@ -138,8 +140,8 @@ PYTHONPATH=. \
         'acceleration_framework_config_file'
 
 if [ "$DRY_RUN" = "true" ]; then 
-    echo "DRY_RUN=True, will skip compare with reference logic"
-else
+    echo "DRY_RUN=True, will skip compare with reference logic"    
+elif [ "$NO_COMPARE" = "false" ]; then
     PYTHONPATH=. \
         python $WORKING_DIR/compare_with_reference.py --result_dir $RESULT_DIR
 fi

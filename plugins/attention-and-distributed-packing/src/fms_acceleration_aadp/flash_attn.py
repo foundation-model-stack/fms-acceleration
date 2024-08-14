@@ -138,9 +138,12 @@ def _flash_attention_forward_with_posids(
             and sliding_window is not None
             and key_states.shape[1] > sliding_window
         )
-    flash_kwargs = (
-        {"window_size": (sliding_window, sliding_window)} if use_sliding_windows else {}
-    )
+
+    # set flash_kwargs only if both use_sliding_window=true and sliding window exist
+    # otherwise, flash_attn takes window_size = -1 as the default
+    flash_kwargs = {}
+    if use_sliding_windows and sliding_window:
+        flash_kwargs = {"window_size": (sliding_window, sliding_window)}
 
     try:
         if is_flash_attn_greater_or_equal("2.4.1"):

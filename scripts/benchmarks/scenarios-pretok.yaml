@@ -19,44 +19,81 @@
 # - this is the best approach to keep things flexible and
 #   allows to configure many different datasets
 #  - there is an option of setting tokenize is True or False
+
 data_processing:
-  dataset_name: yahma/alpaca-cleaned
-  chat_template: |
-    {%- for message in messages %}
-        {% if message['input'] != '' %}
-    Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
+    dataset_name: microsoft/orca-math-word-problems-200k
+    chat_template: |
+        {%- for message in messages %}
+        USER:
+            {% if message['question'] != '' %}
+        {{ message['question'] }}
+            {% endif %}
 
-        {% else %}
-    Below is an instruction that describes a task. Write a response that appropriately completes the request.
-
-        {% endif %}
-    ### Instruction:
-    {{ message['instruction'] }}
-
-        {% if message['input'] != '' %}
-    ### Input:
-    {{ message['input'] }}
-
-        {% endif %}
-    ### Response:
-    {{ message['output'] + eos_token }}
-    {% endfor %}
-  tokenize: True
-
+        ASSISTANT:
+            {% if message['answer'] != '' %}
+        {{ message['answer'] }}
+            {% endif %}
+        {%- endfor %}
+    dataset_split: "train[:2000]"
+    tokenize: True
+  
 # scenarios
 scenarios:
     -   name: full-finetuning
         arguments:
             learning_rate: 2e-5
+            torch_dtype: float16
+            gradient_accumulation_steps: 2
+            max_steps: null
             model_name_or_path: 
                 - 'mistralai/Mistral-7B-v0.1'
-            torch_dtype: float16
 
     -   name: padding-free
         framework_config: 
-            - ilab-padding-free
+            - aadp-padding-free
         arguments:
             learning_rate: 2e-5
+            torch_dtype: float16
+            gradient_accumulation_steps: 2
+            max_steps: null
+            #remove_unused_columns: False # used only for refactor
             model_name_or_path: 
                 - 'mistralai/Mistral-7B-v0.1'
+
+    -   name: accelerated-peft-bnb
+        framework_config: 
+            - accelerated-peft-bnb
+            - accelerated-peft-bnb-foak
+            - accelerated-peft-bnb-foak-padding-free
+        arguments:
+            fp16: True
+            learning_rate: 2e-4
             torch_dtype: float16
+            peft_method: lora
+            r: 16
+            lora_alpha: 16
+            lora_dropout: 0.1
+            target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
+            max_steps: null
+            gradient_accumulation_steps: 2
+            model_name_or_path: 
+                - 'mistralai/Mistral-7B-v0.1'
+
+    -   name: accelerated-peft-gptq
+        framework_config: 
+            - accelerated-peft-autogptq
+            - accelerated-peft-autogptq-foak
+            - accelerated-peft-autogptq-foak-padding-free
+        arguments:
+            learning_rate: 2e-4
+            fp16: True
+            torch_dtype: float16
+            peft_method: lora
+            r: 16
+            lora_alpha: 16
+            lora_dropout: 0.1
+            target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
+            max_steps: null
+            gradient_accumulation_steps: 2
+            model_name_or_path: 
+                - 'TheBloke/Mistral-7B-v0.1-GPTQ'

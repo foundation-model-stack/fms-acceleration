@@ -79,6 +79,7 @@ KEYWORD_PEAKED_DELTA = "peaked_delta"
 KEYWORD_ALLOC_DELTA = "alloc_delta"
 HF_ARG_TRAINING_DATA_PATH = "training_data_path"
 HF_ARG_RESPONSE_TEMPLATE = "response_template"
+HF_ARG_DATASET_TEXT_FIELD = "dataset_text_field"
 HF_ARG_SKIP_MEMORY_METRIC = "skip_memory_metrics"
 RESULT_FIELD_ALLOCATED_GPU_MEM = "mem_torch_mem_alloc_in_bytes"
 RESULT_FIELD_PEAK_ALLOCATED_GPU_MEM = "mem_peak_torch_mem_alloc_in_bytes"
@@ -164,9 +165,14 @@ class BenchmarkDataset:
         input_field: str = "input",
         dataset_text_field: str = "output",
         chat_template: str = None,
+        additional_dataset_kwargs: Dict = {},
     ) -> None:
 
-        self.dataset_split = datasets.load_dataset(dataset_name, split=dataset_split)
+        self.dataset_split = datasets.load_dataset(
+            dataset_name,
+            split=dataset_split,
+            **additional_dataset_kwargs
+        )
 
         self.kwargs = {
             "formatting": formatting,
@@ -177,6 +183,7 @@ class BenchmarkDataset:
         }
         self.training_paths = {}  # cache to store the training paths
         self.data_save_path = data_save_path
+        self.is_pretokenized = False
 
     def prepare_dataset(
         self,
@@ -220,6 +227,8 @@ class BenchmarkDataset:
 
         # call the map
         ds = self.dataset_split.map(format_fn, **kwargs)
+        # set an attribute to indicate dataset has already been tokenized
+        self.is_pretokenized = 'input_ids' in ds.column_names and 'labels' in ds.column_names
 
         # save it
         ds.to_json(save_path)
@@ -257,7 +266,7 @@ class ConfigUtils:
             # otherwise if a regular argument
             if val is None:
                 warnings.warn(
-                    f"Argument '{arg}' is not a true/false argument andhad a 'None' value ",
+                    f"Argument '{arg}' is not a true/false argument andhad a 'None' value "\
                     "and thus will be ignored.",
                 )
                 continue
@@ -668,6 +677,8 @@ def prepare_arguments(args, benchmark_dataset: BenchmarkDataset):
             print(f"Scenario '{_scn_name}' has matrix '{k}' of len {len(v)}")
             scn_factor *= len(v)
 
+        # scenario-specific constants should overwrite any similar values in defaults
+        defaults = {k:v for k, v in defaults.items() if k not in scenario_constants}
         # update defaults with scenario constants
         constants = {**scenario_constants, **defaults}
         # Remove any empty variables and combine matrices to dictionary to cartesian product on
@@ -690,6 +701,15 @@ def prepare_arguments(args, benchmark_dataset: BenchmarkDataset):
                     else constants.get(HF_ARG_RESPONSE_TEMPLATE)
                 ),
             )
+            # Check to remove all template arguments if dataset is pretokenized at this stage
+            if benchmark_dataset.is_pretokenized:
+                # if `prepare_dataset` has formatted and tokenized the dataset,
+                # Update the following args to ensure SFTTrainer
+                # recognizes it as a pretokenized dataset
+                constants[HF_ARG_RESPONSE_TEMPLATE] = None
+                constants[HF_ARG_DATASET_TEXT_FIELD] = None
+                x["packing"] = False
+
             # update
             x[HF_ARG_TRAINING_DATA_PATH] = training_path
 
