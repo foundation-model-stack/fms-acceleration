@@ -1,4 +1,4 @@
-# FMS Acceleration for Instruct Lab
+# FMS Acceleration for Attention And Distributed Packing Plugin
 
 This library contains plugins to accelerate finetuning with the following optimizations:
 

@@ -185,7 +185,7 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
         except ImportError:
             # Otherwise, use the locally implemented DataCollatorWithFlattening
             # pylint: disable=import-outside-toplevel
-            from .ilab_utils import (
+            from .aadp_utils import (
                 DataCollatorWithFlattening,
             )
 
