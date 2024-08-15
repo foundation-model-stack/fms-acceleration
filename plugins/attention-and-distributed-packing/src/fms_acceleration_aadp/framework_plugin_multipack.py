@@ -78,12 +78,14 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
 
         # guarded because multipack has numba dependencies
         # Third Party
+        # pylint: disable=import-outside-toplevel
         from fms_acceleration.accelerator_patcher import (
             AcceleratorPatcher,
             AcceleratorPatcherComponent,
         )
 
         # Local
+        # pylint: disable=import-outside-toplevel
         from .multipack_sampler import (
             MultipackDistributedBatchSampler,
             find_packing_max_batch_len_and_grad_accum,
