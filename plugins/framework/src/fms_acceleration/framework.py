@@ -39,19 +39,13 @@ logger.setLevel(logging._get_default_logging_level())
 logger.addHandler(logging._default_handler)
 
 def log_patch_summary(
+    summary: List[str],
     logging_func: Callable = None,
 ):
     if logging_func is None:
         logging_func = print
 
-    # this is a guarded import, because the model rule registration
-    # does not need to be loaded unless patch_model is required
-    # Local
-    from .model_patcher import (  # pylint: disable=import-outside-toplevel
-        patch_model_summary,
-    )
-
-    for line in patch_model_summary().split("\n"):
+    for line in summary:
         logging_func(line)
 
 
@@ -231,6 +225,11 @@ class AccelerationFramework:
             # Finally apply all registered patches to the model
             ModelPatcher.patch(model)
 
+        # do the accelerator patching
+        from .accelerator_patcher import AcceleratorPatcher
+        if accelerator is not None:
+            AcceleratorPatcher.patch(accelerator)
+
         # show the initialized message
         if accelerator is not None and accelerator.is_main_process:
             log_initialization_message(
@@ -240,7 +239,13 @@ class AccelerationFramework:
             )
 
             # if patching is done, print patch summary to logger
-            log_patch_summary(logging_func=logger.info)
+            log_patch_summary(
+                ModelPatcher.summary(raw=False).split("\n"), logging_func=logger.info
+            )
+
+            log_patch_summary(
+                AcceleratorPatcher.summary().split("\n"), logging_func=logger.info
+            )
 
         cbks = []
         for _, plugin in self.active_plugins:

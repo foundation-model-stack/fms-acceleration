@@ -61,19 +61,13 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
         )
         from functools import partial  # pylint: disable=import-outside-toplevel
 
-        # TODO: to be moved to framework
-        from .accelerator_patcher import AcceleratorPatcher, AcceleratorPatcherComponent
+        from fms_acceleration.accelerator_patcher import AcceleratorPatcher, AcceleratorPatcherComponent
 
         def _collator_check_seq2seq(collate_fn):
-            # supposed to just return bool, but we raise here
-            if not isinstance(collate_fn, DataCollatorForSeq2Seq):
-                raise TypeError(
-                    "The padding-free plugin currently only works with a \
-                    `DataCollatorForSeq2Seq` collate_fn, \
-                    otherwise the collation can be unreliable"
-                )
-
-            return True
+            # "The padding-free plugin currently only works with a
+            # `DataCollatorForSeq2Seq` collate_fn,
+            # otherwise the collation can be unreliable"
+            return isinstance(collate_fn, DataCollatorForSeq2Seq)
 
         # This check is done here to only patch the attention forward
         # the PR was merged here
@@ -185,19 +179,7 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
                 ),
             )
 
-
         return model, modifiable_args
-
-    def get_callbacks_and_ready_for_train(
-        self, model: torch.nn.Module = None, accelerator: Accelerator = None
-    ):
-
-        # TODO: to be moved to framework
-        from .accelerator_patcher import patch_accelerator, AcceleratorPatcher
-        patch_accelerator(accelerator)
-        print (AcceleratorPatcher.summary())
-
-        return []
 
 
 # register
