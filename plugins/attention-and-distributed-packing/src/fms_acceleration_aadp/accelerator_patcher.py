@@ -1,50 +1,74 @@
-
-# singleton implementation of a dataloader patcher
-# - DataLoaderPatcher.patch should only be called once
+# Copyright The FMS HF Tuning Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 from accelerate import Accelerator
 
 from enum import Enum
 from dataclasses import dataclass
 
-from transformers import DataCollator
 from torch.utils.data import DataLoader
 
 from typing import List, Dict, Any, Callable
 from types import MethodType
 
-# NOTE: this is more general than replacing components
+# AcceleratorPatcher allows various modifications to the accelerator object:
+# - includes replacements of various components, and other things (e.g., inserting)
+#   additional metrics in the outputs of a model forward
+# - AcceleratorPatcherComponent regards the components that can be replaced
+# - the AcceleratorRule abstracts logic for modifying AcceleratorPatcherComponent
+# NOTE: currently only AcceleratorRuleReplace is implemented
+
+# ---------------------------------- CLASSES -----------------------------------
+
+# Components that can be modified / replaced via the patching of the accelerator
 class AcceleratorPatcherComponent(Enum):
-    data_loader = 1
+
+    # The dataloader can be replaced
+    data_loader = 1  
+
+    # The data collator within the dataloader can be replaced
     data_collator = 2
 
-# additional kwargs
-RULE_SPECIAL_KWARGS = {
-    AcceleratorPatcherComponent.data_loader.value: {"skip_prepare"}
-}
-
-# NOTE: these are those that can be replaced
-REPLACEABLE_COMPONENTS_ENUMS = (
-    AcceleratorPatcherComponent.data_loader,
-    AcceleratorPatcherComponent.data_collator,
-)
-
+# Components that are replaceable
 # DataCollator is a typing.NewType and does not work well with isinstance
-# - so we replace it with Callable
-REPLACEABLE_COMPONENTS_TYPES = {
+# - so we type data_collator as a Callable
+REPLACEABLE_COMPONENTS = {
     AcceleratorPatcherComponent.data_loader.value: DataLoader,
     AcceleratorPatcherComponent.data_collator.value: Callable
 }
 
-# helpful to keep a history of all patching that has been done
+# History of all the patching that has been performed
 @dataclass
 class AcceleratorPatcherHistory:
 
     # component that is patched
     component: AcceleratorPatcherComponent
 
-    # name of the rule that was applied
+    # type of rule (see RULE below)
+    kind: str 
+
+    # id of the rule that was applied
     rule_id: str
+
+# ---------------------------------- RULE -----------------------------------
+
+RULE_KIND_REPLACEMENT = 'replacement'
+
+# List of special kwargs that may affect behavior of specific rules
+RULE_SPECIAL_KWARGS = {
+    RULE_KIND_REPLACEMENT: {"skip_prepare"}
+}
 
 @dataclass
 class AcceleratorRuleReplace:
@@ -70,7 +94,7 @@ class AcceleratorRuleReplace:
             self.kwargs = {}
 
         assert all(
-            k in RULE_SPECIAL_KWARGS[self.component.value] for k in self.kwargs
+            k in RULE_SPECIAL_KWARGS[RULE_KIND_REPLACEMENT] for k in self.kwargs
         ), f"Invalid special behavior kwargs in '{self.kwargs.keys()}'"
 
 
@@ -81,6 +105,7 @@ class AcceleratorRuleReplace:
         assert self.pre_req(to_be_replaced), \
             f"Rule '{self.rule_id}' failed pre-requisite check for type '{type(to_be_replaced)}'."
 
+# Sigleton AcceleratorPatcher
 class AcceleratorPatcher:
 
     # singleton history of patches
@@ -97,27 +122,35 @@ class AcceleratorPatcher:
         pre_requisite_check : Callable = None,
         kwargs: Dict = None
     ):
+        """replace a component. Note that once this method is called, the replacement
+        is expected to occur, that is there is no fallback behavior 
+        - if the pre_requisite_check fails will raise.
+        - if there are two replace calls on the same component will raise.
 
-        # generic check
-        # ensure that rule has not been added before
+        replacement: the replacement object.
+        pre_requisite_check (callable): the component to be replaced is expected to 
+            pass this check, otherwise raises.
+        kwargs (dict): These control special behaviors of the replacement rules, see
+            RULE_SPECIAL_KWARGS above.
+        """
+
+        # - ensure that rule has not been added before
         assert not any(
             h.rule_id == rule_id for h in AcceleratorPatcher.history
         ), f"Rule '{rule_id}' has already been added"
 
-        # check for replacement rules
-        # - if any of the replacements exist already
-        if component in REPLACEABLE_COMPONENTS_ENUMS:
+        assert component.value not in AcceleratorPatcher.replacement_rules, \
+            f"replace has already been called once on component '{component.value}'"
 
-            assert isinstance(
-                replacement, REPLACEABLE_COMPONENTS_TYPES[
-                    component.value
-                ]
-            ), (
+        # - ensure replacement object is of the correct type
+        comp_cls = REPLACEABLE_COMPONENTS.get(component.value)
+        if comp_cls:
+            assert isinstance(replacement, comp_cls), (
                 f"Rule '{rule_id}' replacing component '{component}' with wrong ",
                 f"type '{type(replacement)}'"
             )
 
-        # store the replacment
+        # - register the replacement rule
         AcceleratorPatcher.replacement_rules[
             component.value
         ] = AcceleratorRuleReplace(
@@ -125,15 +158,20 @@ class AcceleratorPatcher:
             replacement, pre_requisite_check, kwargs
         )
 
-        # record the history
+        # - record the history. This is done in advance for replacements even 
+        #   the pre-req check has not been run. 
+        # - This advanced registration simplifies logic in the patch, and its ok
+        #   because we will raise in the pre-req if fails, as the semantics for 
+        #   replace is that it is expected to occur once called.
         AcceleratorPatcher.history.append(
-            AcceleratorPatcherHistory(component, rule_id)
+            AcceleratorPatcherHistory(component, RULE_KIND_REPLACEMENT, rule_id)
         )
 
     @staticmethod
     def patch(accelerator: Accelerator):
 
         # some rules will require patching the prepare function
+        # - e.g., if replacements are required.
         if any(
             key in (
                 AcceleratorPatcherComponent.data_collator.value,
@@ -143,13 +181,6 @@ class AcceleratorPatcher:
             for key in AcceleratorPatcher.replacement_rules
         ):
             AcceleratorPatcher._patch_prepare(accelerator)
-
-    @staticmethod
-    def _has_dataloader_replacement():
-        return (
-            AcceleratorPatcherComponent.data_loader in 
-            AcceleratorPatcher.replacement_rules
-        )
 
     # function to patch the accelerator prepare
     @staticmethod
@@ -163,15 +194,15 @@ class AcceleratorPatcher:
                 return _old_prepare(*args, device_placement=device_placement)
 
             # if there is dataloader replacment
-            replace_dataloader_rule = AcceleratorPatcher.replacement_rules.get(
+            dataloader_replacement_rule = AcceleratorPatcher.replacement_rules.get(
                 AcceleratorPatcherComponent.data_loader.value
             )
             # the original dataloader
             dataloader = args[0]
 
-            if replace_dataloader_rule:
-                replace_dataloader_rule.pre_req_check(dataloader)
-                dataloader = replace_dataloader_rule.replacement
+            if dataloader_replacement_rule:
+                dataloader_replacement_rule.pre_req_check(dataloader)
+                dataloader = dataloader_replacement_rule.replacement
 
             # if there is dataloader replacment
             collator_replacement_rule = AcceleratorPatcher.replacement_rules.get(
@@ -188,8 +219,8 @@ class AcceleratorPatcher:
             # - special behavior for dataloader replacements
             # - need to know if we run the original prepare
             if (
-                replace_dataloader_rule is not None 
-                and replace_dataloader_rule.kwargs.get("skip_prepare", False)
+                dataloader_replacement_rule is not None 
+                and dataloader_replacement_rule.kwargs.get("skip_prepare", False)
             ):
                 return dataloader
             else:
@@ -203,13 +234,13 @@ class AcceleratorPatcher:
         result.append("***************** Accelerator Patching *************")
         for x in AcceleratorPatcher.history:
             result.append(
-                "Rule: {0:15s} Component: {1:25s}".format(
-                    x.rule_id, x.component
+                "Rule: {0:25s} Kind: {1:10s} Component: {2:20s}".format(
+                    x.rule_id, x.kind, x.component.name
                 )
             )
 
         return "\n".join(result)
 
-
+# patch_accelerator should only be called once
 def patch_accelerator(accelerator: Accelerator):
     AcceleratorPatcher.patch(accelerator)
