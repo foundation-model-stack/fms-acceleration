@@ -53,7 +53,7 @@ ignore=CVS,protobufs
 # format. Because '\\' represents the directory delimiter on Windows systems,
 # it can't be used as an escape character.
 # NOTE: do not lint code imported from unsloth
-ignore-paths=.*fused_ops/unsloth_lora.*,.*kernels/unsloth*
+ignore-paths=.*multipack_sampler.py
 
 # Files or directories matching the regular expression patterns are skipped.
 # The regex matches against base names, not paths. The default value ignores

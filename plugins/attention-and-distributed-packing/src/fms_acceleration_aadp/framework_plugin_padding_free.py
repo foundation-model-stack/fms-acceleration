@@ -17,7 +17,6 @@ from typing import Dict, Tuple
 import warnings
 
 # Third Party
-from accelerate import Accelerator
 from fms_acceleration import AccelerationPlugin
 from peft import LoraConfig
 from transformers import DataCollatorForSeq2Seq, TrainingArguments
@@ -55,6 +54,7 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
         from functools import partial  # pylint: disable=import-outside-toplevel
 
         # Third Party
+        # pylint: disable=import-outside-toplevel
         from fms_acceleration.accelerator_patcher import (
             AcceleratorPatcher,
             AcceleratorPatcherComponent,
