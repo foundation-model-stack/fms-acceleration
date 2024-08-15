@@ -14,3 +14,4 @@
 
 # Local
 from .framework_plugin_padding_free import PaddingFreeAccelerationPlugin
+from .framework_plugin_multipack import MultipackDataloaderAccelerationPlugin

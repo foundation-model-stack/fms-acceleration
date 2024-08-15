@@ -146,6 +146,7 @@ KEY_BNB_NF4_BASELINE = "baseline-bnb-nf4"
 KEY_AUTO_GPTQ_FOAK = "auto-gptq-foak"
 KEY_BNB_NF4_FOAK = "bnb-nf4-foak"
 KEY_AADP_PADDING_FREE = "aadp-padding-free"
+KEY_AADP_MULTIPACK = "aadp-multipack"
 
 CONFIGURATIONS = {
     KEY_AUTO_GPTQ: "plugins/accelerated-peft/configs/autogptq.yaml",
@@ -168,7 +169,8 @@ CONFIGURATIONS = {
         "plugins/fused-ops-and-kernels/configs/fast_quantized_peft.yaml",
         [("peft.quantization.fused_ops_and_kernels.base_layer", "bitsandbytes")],
     ),
-    KEY_AADP_PADDING_FREE: "plugins/attention-and-distributed-packing/configs/aadp.yaml",
+    KEY_AADP_PADDING_FREE: "plugins/attention-and-distributed-packing/configs/padding_free.yaml",
+    KEY_AADP_MULTIPACK: "plugins/attention-and-distributed-packing/configs/multipack.yaml",
 }
 
 # list of (tag, combi) tuples
@@ -187,6 +189,7 @@ COMBINATIONS = [
     ("accelerated-peft-bnb-nf4-padding-free", (KEY_AADP_PADDING_FREE,KEY_BNB_NF4)),
     ("accelerated-peft-autogptq-foak-padding-free", (KEY_AADP_PADDING_FREE,KEY_AUTO_GPTQ, KEY_AUTO_GPTQ_FOAK)),
     ("accelerated-peft-bnb-nf4-foak-padding-free", (KEY_AADP_PADDING_FREE,KEY_BNB_NF4, KEY_BNB_NF4_FOAK)),
+    ("aadp-padding-free-multipack", (KEY_AADP_PADDING_FREE, KEY_AADP_MULTIPACK)),
 ]
 
 
