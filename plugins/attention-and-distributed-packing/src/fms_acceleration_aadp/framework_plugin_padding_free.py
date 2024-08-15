@@ -17,13 +17,10 @@ from typing import Dict, Tuple
 import warnings
 
 # Third Party
+from accelerate import Accelerator
 from fms_acceleration import AccelerationPlugin
 from peft import LoraConfig
-from transformers import (
-    TrainingArguments,
-    DataCollatorForSeq2Seq,
-)
-from accelerate import Accelerator
+from transformers import DataCollatorForSeq2Seq, TrainingArguments
 import torch
 
 
@@ -54,14 +51,19 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
         modifiable_args: Tuple[LoraConfig],
     ):
         # guarded
+        # Standard
+        from functools import partial  # pylint: disable=import-outside-toplevel
+
+        # Third Party
+        from fms_acceleration.accelerator_patcher import (
+            AcceleratorPatcher,
+            AcceleratorPatcherComponent,
+        )
         from fms_acceleration.model_patcher import (  # pylint: disable=import-outside-toplevel
             ModelPatcher,
             ModelPatcherRule,
             ModelPatcherTrigger,
         )
-        from functools import partial  # pylint: disable=import-outside-toplevel
-
-        from fms_acceleration.accelerator_patcher import AcceleratorPatcher, AcceleratorPatcherComponent
 
         def _collator_check_seq2seq(collate_fn):
             # "The padding-free plugin currently only works with a
@@ -78,23 +80,23 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
             # if this is importable, it means the PR
             # has been merged, and there is no more need to
             # pylint: disable=import-outside-toplevel,no-name-in-module,unused-import
-            from transformers import (
-                DataCollatorWithFlattening,
-            )
+            # Third Party
+            from transformers import DataCollatorWithFlattening
+
             _native = True
 
         except ImportError:
 
             # Otherwise, use the locally implemented DataCollatorWithFlattening
             # pylint: disable=import-outside-toplevel
-            from .aadp_utils import (
-                DataCollatorWithFlattening,
-            )
+            # Local
+            from .aadp_utils import DataCollatorWithFlattening
 
         # setup the collator
         AcceleratorPatcher.replace(
-            "flattening-collator", AcceleratorPatcherComponent.data_collator,
-            replacement=DataCollatorWithFlattening(), 
+            "flattening-collator",
+            AcceleratorPatcherComponent.data_collator,
+            replacement=DataCollatorWithFlattening(),
             pre_requisite_check=_collator_check_seq2seq,
         )
 
@@ -115,6 +117,7 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
         # - patch backbone
         model_type = model.config.model_type
         # pylint: disable=import-outside-toplevel
+        # Local
         from .flash_attn import build_backbone_forward
 
         ModelPatcher.register(
@@ -138,10 +141,12 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
             # - this is an old version that does not have logic to handle the flattened batch
 
             # pylint: disable=import-outside-toplevel
+            # Third Party
             from transformers.modeling_flash_attention_utils import (
                 _flash_attention_forward,
             )
 
+            # Local
             from .flash_attn import _flash_attention_forward_with_posids
 
             ModelPatcher.register(
@@ -159,9 +164,10 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
             # attached to the model classes
             # - for similar reasons as Case I, they need to be patched on the
             #   FA2 modules
-            from .flash_attn import (
+            # Local
+            from .flash_attn import (  # pylint: disable=import-outside-toplevel
                 build_fa_forward,
-            )  # pylint: disable=import-outside-toplevel
+            )
 
             def is_flash_attn_2(module):
                 if module.__class__.__name__.endswith("FlashAttention2"):

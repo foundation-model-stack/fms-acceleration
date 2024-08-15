@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from accelerate import Accelerator
-
-from enum import Enum
+# Standard
 from dataclasses import dataclass
-
-from torch.utils.data import DataLoader
-
-from typing import List, Dict, Any, Callable
+from enum import Enum
 from types import MethodType
+from typing import Any, Callable, Dict, List
+
+# Third Party
+from accelerate import Accelerator
+from torch.utils.data import DataLoader
 
 # AcceleratorPatcher allows various modifications to the accelerator object:
 # - includes replacements of various components, and other things (e.g., inserting)
@@ -31,22 +31,25 @@ from types import MethodType
 
 # ---------------------------------- CLASSES -----------------------------------
 
+
 # Components that can be modified / replaced via the patching of the accelerator
 class AcceleratorPatcherComponent(Enum):
 
     # The dataloader can be replaced
-    data_loader = 1  
+    data_loader = 1
 
     # The data collator within the dataloader can be replaced
     data_collator = 2
+
 
 # Components that are replaceable
 # DataCollator is a typing.NewType and does not work well with isinstance
 # - so we type data_collator as a Callable
 REPLACEABLE_COMPONENTS = {
     AcceleratorPatcherComponent.data_loader.value: DataLoader,
-    AcceleratorPatcherComponent.data_collator.value: Callable
+    AcceleratorPatcherComponent.data_collator.value: Callable,
 }
+
 
 # History of all the patching that has been performed
 @dataclass
@@ -56,19 +59,19 @@ class AcceleratorPatcherHistory:
     component: AcceleratorPatcherComponent
 
     # type of rule (see RULE below)
-    kind: str 
+    kind: str
 
     # id of the rule that was applied
     rule_id: str
 
+
 # ---------------------------------- RULE -----------------------------------
 
-RULE_KIND_REPLACEMENT = 'replacement'
+RULE_KIND_REPLACEMENT = "replacement"
 
 # List of special kwargs that may affect behavior of specific rules
-RULE_SPECIAL_KWARGS = {
-    RULE_KIND_REPLACEMENT: {"skip_prepare"}
-}
+RULE_SPECIAL_KWARGS = {RULE_KIND_REPLACEMENT: {"skip_prepare"}}
+
 
 @dataclass
 class AcceleratorRuleReplace:
@@ -94,12 +97,9 @@ class AcceleratorRuleReplace:
 
     def __post_init__(self):
 
-        assert (
-            (self.replacement is None and self.replacement_builder is not None)
-            or 
-            (self.replacement is not None and self.replacement_builder is None)
-        ), \
-            "either replacement or replacement should be specified"
+        assert (self.replacement is None and self.replacement_builder is not None) or (
+            self.replacement is not None and self.replacement_builder is None
+        ), "either replacement or replacement should be specified"
 
         if self.kwargs is None:
             self.kwargs = {}
@@ -108,13 +108,14 @@ class AcceleratorRuleReplace:
             k in RULE_SPECIAL_KWARGS[RULE_KIND_REPLACEMENT] for k in self.kwargs
         ), f"Invalid special behavior kwargs in '{self.kwargs.keys()}'"
 
-
     def pre_req_check(self, to_be_replaced: Any):
         if self.pre_req is None:
             return
 
-        assert self.pre_req(to_be_replaced), \
-            f"Rule '{self.rule_id}' failed pre-requisite check for type '{type(to_be_replaced)}'."
+        assert self.pre_req(
+            to_be_replaced
+        ), f"Rule '{self.rule_id}' failed pre-requisite check for type '{type(to_be_replaced)}'."
+
 
 # Sigleton AcceleratorPatcher
 class AcceleratorPatcher:
@@ -127,23 +128,23 @@ class AcceleratorPatcher:
 
     @staticmethod
     def replace(
-        rule_id: str, 
+        rule_id: str,
         component: AcceleratorPatcherComponent,
-        replacement: Any = None, 
+        replacement: Any = None,
         replacement_builder: Callable = None,
-        pre_requisite_check : Callable = None,
-        **kwargs
+        pre_requisite_check: Callable = None,
+        **kwargs,
     ):
         """replace a component. Note that once this method is called, the replacement
-        is expected to occur, that is there is no fallback behavior 
+        is expected to occur, that is there is no fallback behavior
         - if the pre_requisite_check fails will raise.
         - if there are two replace calls on the same component will raise.
 
         replacement: the replacement object, if not specified, then replacement builder
             must be specified.
-        replacement_builder (callable): the replacement builder object. If not specified, 
+        replacement_builder (callable): the replacement builder object. If not specified,
             then replacement must be specified.
-        pre_requisite_check (callable): the component to be replaced is expected to 
+        pre_requisite_check (callable): the component to be replaced is expected to
             pass this check, otherwise raises.
         kwargs (dict): These control special behaviors of the replacement rules, see
             RULE_SPECIAL_KWARGS above.
@@ -154,35 +155,37 @@ class AcceleratorPatcher:
             h.rule_id == rule_id for h in AcceleratorPatcher.history
         ), f"Rule '{rule_id}' has already been added"
 
-        assert component.value not in AcceleratorPatcher.replacement_rules, \
-            f"replace has already been called once on component '{component.name}'"
+        assert (
+            component.value not in AcceleratorPatcher.replacement_rules
+        ), f"replace has already been called once on component '{component.name}'"
 
-        # handle the replacement 
+        # handle the replacement
         # - if replacement is not None, ensure replacement object is of the correct type
         if replacement is not None:
             comp_cls = REPLACEABLE_COMPONENTS.get(component.value)
             if comp_cls:
                 assert isinstance(replacement, comp_cls), (
                     f"Rule '{rule_id}' replacing component '{component}' with wrong ",
-                    f"type '{type(replacement)}'"
+                    f"type '{type(replacement)}'",
                 )
         elif replacement_builder is not None:
             # NOTE: there is no class check for the replacement builder pattern
             pass
 
         # - register the replacement rule
-        AcceleratorPatcher.replacement_rules[
-            component.value
-        ] = AcceleratorRuleReplace(
-            rule_id, component,
-            replacement, replacement_builder, pre_requisite_check, 
+        AcceleratorPatcher.replacement_rules[component.value] = AcceleratorRuleReplace(
+            rule_id,
+            component,
+            replacement,
+            replacement_builder,
+            pre_requisite_check,
             kwargs=kwargs,
         )
 
-        # - record the history. This is done in advance for replacements even 
-        #   the pre-req check has not been run. 
+        # - record the history. This is done in advance for replacements even
+        #   the pre-req check has not been run.
         # - This advanced registration simplifies logic in the patch, and its ok
-        #   because we will raise in the pre-req if fails, as the semantics for 
+        #   because we will raise in the pre-req if fails, as the semantics for
         #   replace is that it is expected to occur once called.
         AcceleratorPatcher.history.append(
             AcceleratorPatcherHistory(component, RULE_KIND_REPLACEMENT, rule_id)
@@ -194,10 +197,10 @@ class AcceleratorPatcher:
         # some rules will require patching the prepare function
         # - e.g., if replacements are required.
         if any(
-            key in (
+            key
+            in (
                 AcceleratorPatcherComponent.data_collator.value,
-                AcceleratorPatcherComponent.data_loader.value
-
+                AcceleratorPatcherComponent.data_loader.value,
             )
             for key in AcceleratorPatcher.replacement_rules
         ):
@@ -241,8 +244,9 @@ class AcceleratorPatcher:
                 collator_replacement_rule.pre_req_check(dataloader.collate_fn)
 
                 # FIXME: for now we just disable the replacement_builder
-                assert collator_replacement_rule.replacement_builder is None, \
-                    "Currently, replacement_builder not allowed for data collator"
+                assert (
+                    collator_replacement_rule.replacement_builder is None
+                ), "Currently, replacement_builder not allowed for data collator"
 
                 # Replace the collate_fn in dataloader
                 dataloader.collate_fn = collator_replacement_rule.replacement
@@ -250,12 +254,12 @@ class AcceleratorPatcher:
             # - special behavior for dataloader replacements
             # - need to know if we run the original prepare
             if (
-                dataloader_replacement_rule is not None 
+                dataloader_replacement_rule is not None
                 and dataloader_replacement_rule.kwargs.get("skip_prepare", False)
             ):
                 return dataloader
-            else:
-                return _old_prepare(dataloader)
+
+            return _old_prepare(dataloader)
 
         accelerator.prepare = MethodType(prepare, accelerator)
 

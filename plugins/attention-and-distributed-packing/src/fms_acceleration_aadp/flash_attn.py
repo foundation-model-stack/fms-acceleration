@@ -12,21 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-import inspect
+# Standard
 from functools import partial
-import torch
+from typing import Optional
+import inspect
+import os
 
+# Third Party
 # pylint: disable=no-name-in-module
 from transformers.utils import is_flash_attn_2_available, is_flash_attn_greater_or_equal
-from typing import Optional
+import torch
 
 if is_flash_attn_2_available():
     # pylint: disable=import-error
-    from flash_attn import (
-        flash_attn_func,
-        flash_attn_varlen_func,
-    )
+    # Third Party
+    from flash_attn import flash_attn_func, flash_attn_varlen_func
 
     _flash_supports_window_size = "window_size" in list(
         inspect.signature(flash_attn_func).parameters
