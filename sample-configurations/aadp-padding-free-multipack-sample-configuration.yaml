@@ -1,0 +1,28 @@
+# FMS Acceleration Plugin Configuration. 
+#
+# Each stanza incorporates various configurations for 
+# different fine-tuning / training tasks.
+plugins:
+    # Configurations to accelerate data packing/padding in training
+  training:
+
+      # attention module configurations
+      # e.g. padding-free modifications to attention layer
+    attention:
+
+        # this controls the confgurations for padding free computation of flash attention
+      padding_free:
+        method: huggingface
+    dataloader:
+
+      # multipack dataloader
+      multipack:
+
+        # multipack will try to achieve this effective batchsize by
+        # packing the devices to the extent possible, and then leveraging
+        # gradient accumulation steps
+        effective_batch_size: 3840
+
+        # the maximum number of tokens per device, set accordingly to the
+        # GPU hardware
+        max_number_tokens: 60000

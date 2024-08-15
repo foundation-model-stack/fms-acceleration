@@ -80,7 +80,10 @@ class AcceleratorRuleReplace:
     component: AcceleratorPatcherComponent
 
     # replacement:
-    replacement: Any
+    replacement: Any = None
+
+    # replacement builder
+    replacement_builder: Callable[[Any, Accelerator], Any] = None
 
     # pre-req check on the object to be replaced
     pre_req: Callable = None
@@ -90,6 +93,14 @@ class AcceleratorRuleReplace:
     kwargs: Dict = None
 
     def __post_init__(self):
+
+        assert (
+            (self.replacement is None and self.replacement_builder is not None)
+            or 
+            (self.replacement is not None and self.replacement_builder is None)
+        ), \
+            "either replacement or replacement should be specified"
+
         if self.kwargs is None:
             self.kwargs = {}
 
@@ -118,16 +129,20 @@ class AcceleratorPatcher:
     def replace(
         rule_id: str, 
         component: AcceleratorPatcherComponent,
-        replacement: Any, 
+        replacement: Any = None, 
+        replacement_builder: Callable = None,
         pre_requisite_check : Callable = None,
-        kwargs: Dict = None
+        **kwargs
     ):
         """replace a component. Note that once this method is called, the replacement
         is expected to occur, that is there is no fallback behavior 
         - if the pre_requisite_check fails will raise.
         - if there are two replace calls on the same component will raise.
 
-        replacement: the replacement object.
+        replacement: the replacement object, if not specified, then replacement builder
+            must be specified.
+        replacement_builder (callable): the replacement builder object. If not specified, 
+            then replacement must be specified.
         pre_requisite_check (callable): the component to be replaced is expected to 
             pass this check, otherwise raises.
         kwargs (dict): These control special behaviors of the replacement rules, see
@@ -140,22 +155,28 @@ class AcceleratorPatcher:
         ), f"Rule '{rule_id}' has already been added"
 
         assert component.value not in AcceleratorPatcher.replacement_rules, \
-            f"replace has already been called once on component '{component.value}'"
+            f"replace has already been called once on component '{component.name}'"
 
-        # - ensure replacement object is of the correct type
-        comp_cls = REPLACEABLE_COMPONENTS.get(component.value)
-        if comp_cls:
-            assert isinstance(replacement, comp_cls), (
-                f"Rule '{rule_id}' replacing component '{component}' with wrong ",
-                f"type '{type(replacement)}'"
-            )
+        # handle the replacement 
+        # - if replacement is not None, ensure replacement object is of the correct type
+        if replacement is not None:
+            comp_cls = REPLACEABLE_COMPONENTS.get(component.value)
+            if comp_cls:
+                assert isinstance(replacement, comp_cls), (
+                    f"Rule '{rule_id}' replacing component '{component}' with wrong ",
+                    f"type '{type(replacement)}'"
+                )
+        elif replacement_builder is not None:
+            # NOTE: there is no class check for the replacement builder pattern
+            pass
 
         # - register the replacement rule
         AcceleratorPatcher.replacement_rules[
             component.value
         ] = AcceleratorRuleReplace(
             rule_id, component,
-            replacement, pre_requisite_check, kwargs
+            replacement, replacement_builder, pre_requisite_check, 
+            kwargs=kwargs,
         )
 
         # - record the history. This is done in advance for replacements even 
@@ -202,7 +223,12 @@ class AcceleratorPatcher:
 
             if dataloader_replacement_rule:
                 dataloader_replacement_rule.pre_req_check(dataloader)
-                dataloader = dataloader_replacement_rule.replacement
+                if dataloader_replacement_rule.replacement is not None:
+                    dataloader = dataloader_replacement_rule.replacement
+                else:
+                    dataloader = dataloader_replacement_rule.replacement_builder(
+                        dataloader, accelerator
+                    )
 
             # if there is dataloader replacment
             collator_replacement_rule = AcceleratorPatcher.replacement_rules.get(
@@ -213,6 +239,11 @@ class AcceleratorPatcher:
                 # - first we run the check on the rule (if any)
                 # - then we replace
                 collator_replacement_rule.pre_req_check(dataloader.collate_fn)
+
+                # FIXME: for now we just disable the replacement_builder
+                assert collator_replacement_rule.replacement_builder is None, \
+                    "Currently, replacement_builder not allowed for data collator"
+
                 # Replace the collate_fn in dataloader
                 dataloader.collate_fn = collator_replacement_rule.replacement
 
@@ -240,7 +271,3 @@ class AcceleratorPatcher:
             )
 
         return "\n".join(result)
-
-# patch_accelerator should only be called once
-def patch_accelerator(accelerator: Accelerator):
-    AcceleratorPatcher.patch(accelerator)
