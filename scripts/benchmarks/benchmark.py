@@ -165,6 +165,7 @@ class BenchmarkDataset:
         input_field: str = "input",
         dataset_text_field: str = "output",
         chat_template: str = None,
+        response_template: str = None,
         additional_dataset_kwargs: Dict = {},
     ) -> None:
 
@@ -183,7 +184,7 @@ class BenchmarkDataset:
         }
         self.training_paths = {}  # cache to store the training paths
         self.data_save_path = data_save_path
-        self.is_pretokenized = False
+        self.response_template = response_template
 
     def prepare_dataset(
         self,
@@ -192,6 +193,14 @@ class BenchmarkDataset:
     ):
         if model_name in self.training_paths:
             return self.training_paths[model_name]
+
+        if self.response_template:
+            if response_template is not None:
+                warnings.warn(
+                    "Response Template detected in data processing field, "
+                    "overriding response template."
+                )
+            response_template = self.response_template
 
         if self.kwargs["tokenize"]:
             tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -227,8 +236,6 @@ class BenchmarkDataset:
 
         # call the map
         ds = self.dataset_split.map(format_fn, **kwargs)
-        # set an attribute to indicate dataset has already been tokenized
-        self.is_pretokenized = 'input_ids' in ds.column_names and 'labels' in ds.column_names
 
         # save it
         ds.to_json(save_path)
@@ -266,8 +273,8 @@ class ConfigUtils:
             # otherwise if a regular argument
             if val is None:
                 warnings.warn(
-                    f"Argument '{arg}' is not a true/false argument andhad a 'None' value "\
-                    "and thus will be ignored.",
+                    f"Argument '{arg}' is not a true/false argument and "
+                    "had a 'None' value and thus will be ignored.",
                 )
                 continue
 
@@ -680,7 +687,7 @@ def prepare_arguments(args, benchmark_dataset: BenchmarkDataset):
         # scenario-specific constants should overwrite any similar values in defaults
         defaults = {k:v for k, v in defaults.items() if k not in scenario_constants}
         # update defaults with scenario constants
-        constants = {**scenario_constants, **defaults}
+        constants = {**defaults, **scenario_constants}
         # Remove any empty variables and combine matrices to dictionary to cartesian product on
         combined_matrices = {**scenario_matrices, **experiment_matrices}
         products = ConfigUtils.cartesian_product_on_dict(combined_matrices)
@@ -695,20 +702,8 @@ def prepare_arguments(args, benchmark_dataset: BenchmarkDataset):
             # prepare the dataset
             training_path = benchmark_dataset.prepare_dataset(
                 x["model_name_or_path"],
-                (
-                    x[HF_ARG_RESPONSE_TEMPLATE]
-                    if HF_ARG_RESPONSE_TEMPLATE in x
-                    else constants.get(HF_ARG_RESPONSE_TEMPLATE)
-                ),
+                constants.get(HF_ARG_RESPONSE_TEMPLATE),
             )
-            # Check to remove all template arguments if dataset is pretokenized at this stage
-            if benchmark_dataset.is_pretokenized:
-                # if `prepare_dataset` has formatted and tokenized the dataset,
-                # Update the following args to ensure SFTTrainer
-                # recognizes it as a pretokenized dataset
-                constants[HF_ARG_RESPONSE_TEMPLATE] = None
-                constants[HF_ARG_DATASET_TEXT_FIELD] = None
-                x["packing"] = False
 
             # update
             x[HF_ARG_TRAINING_DATA_PATH] = training_path

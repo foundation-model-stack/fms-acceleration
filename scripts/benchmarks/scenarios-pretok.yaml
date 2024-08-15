@@ -36,6 +36,7 @@ data_processing:
         {%- endfor %}
     dataset_split: "train[:2000]"
     tokenize: True
+    response_template: "\n### Response:"
   
 # scenarios
 scenarios:
@@ -45,8 +46,12 @@ scenarios:
             torch_dtype: float16
             gradient_accumulation_steps: 2
             max_steps: null
+            packing: False
             model_name_or_path: 
                 - 'mistralai/Mistral-7B-v0.1'
+            response_template: null
+            dataset_text_field: null
+
 
     -   name: padding-free
         framework_config: 
@@ -56,13 +61,16 @@ scenarios:
             torch_dtype: float16
             gradient_accumulation_steps: 2
             max_steps: null
-            #remove_unused_columns: False # used only for refactor
+            packing: False
             model_name_or_path: 
                 - 'mistralai/Mistral-7B-v0.1'
+            response_template: null
+            dataset_text_field: null
 
     -   name: accelerated-peft-bnb
         framework_config: 
             - accelerated-peft-bnb
+            - accelerated-peft-bnb-padding-free
             - accelerated-peft-bnb-foak
             - accelerated-peft-bnb-foak-padding-free
         arguments:
@@ -76,12 +84,16 @@ scenarios:
             target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
             max_steps: null
             gradient_accumulation_steps: 2
+            packing: False
             model_name_or_path: 
                 - 'mistralai/Mistral-7B-v0.1'
+            response_template: null
+            dataset_text_field: null
 
     -   name: accelerated-peft-gptq
         framework_config: 
             - accelerated-peft-autogptq
+            - accelerated-peft-autogptq-padding-free
             - accelerated-peft-autogptq-foak
             - accelerated-peft-autogptq-foak-padding-free
         arguments:
@@ -95,5 +107,8 @@ scenarios:
             target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
             max_steps: null
             gradient_accumulation_steps: 2
+            packing: False
             model_name_or_path: 
                 - 'TheBloke/Mistral-7B-v0.1-GPTQ'
+            response_template: null
+            dataset_text_field: null

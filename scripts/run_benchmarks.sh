@@ -36,7 +36,6 @@ PIP_REQUIREMENTS_FILE=requirements.txt
 # ------------- DROP COLUMNS FRO RESULTS -----------------
 # env inputs
 DRY_RUN=${DRY_RUN:-"false"}
-NO_COMPARE=${NO_COMPARE:-"false"}
 NO_DATA_PROCESSING=${NO_DATA_PROCESSING:-"false"}
 NO_OVERWRITE=${NO_OVERWRITE:-"false"}
 MEMORY_LOGGING=${MEMORY_LOGGING:-"all"}
@@ -46,6 +45,7 @@ NUM_GPUS_MATRIX=${1-"1 2"}
 RESULT_DIR=${2:-"benchmark_outputs"}
 SCENARIOS_CONFIG=${3:-$SCENARIOS_CONFIG}
 SCENARIOS_FILTER=${4-$SCNTAG_PEFT_AUTOGPTQ}
+DEFAULTS_CONFIG=${5:-$DEFAULTS_CONFIG}
 
 echo "NUM_GPUS_MATRIX: $NUM_GPUS_MATRIX"
 echo "RESULT_DIR: $RESULT_DIR"
@@ -139,9 +139,18 @@ PYTHONPATH=. \
         'error_messages' \
         'acceleration_framework_config_file'
 
-if [ "$DRY_RUN" = "true" ]; then 
-    echo "DRY_RUN=True, will skip compare with reference logic"    
-elif [ "$NO_COMPARE" = "false" ]; then
-    PYTHONPATH=. \
-        python $WORKING_DIR/compare_with_reference.py --result_dir $RESULT_DIR
-fi
+
+# For every new benchmark run, it is good practice to perform a regression check
+# against a previous known set of benchmark results. This repo provides a convenient comparison
+# tool that analyses the differences of metrics like loss and throughput between an old and new set 
+# of benchmark results.
+# To use this tool simply run the following python command
+# PYTHONPATH=. \
+#     python $WORKING_DIR/compare_with_reference.py
+# The following arguments can be used to further configure the analysis, otherwise it uses default values
+#   arguments:
+#   --result_dir <Output directory to save comparison artifacts>
+#   --reference_benchmark_filepath <filepath of the old benchmark results to compare againts>
+#   --threshold_ratio <to define an acceptable difference between old and new results>
+#   --indices <defines the set of column names used as unique identifier to merge the 2 sets of results>
+#   --plot_columns <specifies the metric name to be compared and vizualized>
