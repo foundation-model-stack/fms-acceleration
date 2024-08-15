@@ -13,21 +13,19 @@
 # limitations under the License.
 
 # Standard
+from types import MethodType
 from typing import Dict, Tuple
 
 # Third Party
+from accelerate import Accelerator
 from fms_acceleration import AccelerationPlugin
 from peft import LoraConfig
+from torch.utils.data import DataLoader
 from transformers import TrainingArguments
-from accelerate import Accelerator
-# from accelerate.data_loader import DataLoaderShard
-import torch
 import numpy as np
 
-from torch.utils.data import DataLoader
-
-from types import MethodType
-
+# from accelerate.data_loader import DataLoaderShard
+import torch
 
 
 class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
@@ -35,7 +33,8 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
     require_packages = {"numba"}
 
     def __init__(
-        self, configurations: Dict[str, Dict], 
+        self,
+        configurations: Dict[str, Dict],
         seed: int = 42,
     ):
         super().__init__(configurations)
@@ -43,7 +42,7 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
         multipack = self._check_config_and_maybe_check_values(
             key="training.dataloader.multipack",
         )
-    
+
         # multipack settings
         self._effective_batch_size = multipack["effective_batch_size"]
         self._max_batch_len = multipack["max_number_tokens"]
@@ -54,7 +53,7 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
         )
 
         # internal flags
-        self._seed = seed 
+        self._seed = seed
         self._collate_fn = None
         self._padding_free = False
         self._pad_token_id = None
@@ -64,8 +63,7 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
             self._padding_free = True
         else:
             # NOTE: need to get this from somewhere
-            assert self._pad_token_id is not None, \
-                "need to get pad token id"
+            assert self._pad_token_id is not None, "need to get pad token id"
 
     @property
     def requires_agumentation(self):
@@ -79,12 +77,17 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
     ):
 
         # guarded because multipack has numba dependencies
-        from .multipack_sampler import (
-            find_packing_max_batch_len_and_grad_accum, 
-            MultipackDistributedBatchSampler
+        # Third Party
+        from fms_acceleration.accelerator_patcher import (
+            AcceleratorPatcher,
+            AcceleratorPatcherComponent,
         )
 
-        from fms_acceleration.accelerator_patcher import AcceleratorPatcher, AcceleratorPatcherComponent
+        # Local
+        from .multipack_sampler import (
+            MultipackDistributedBatchSampler,
+            find_packing_max_batch_len_and_grad_accum,
+        )
 
         rank, num_bins = 0, 1
         if torch.distributed.is_initialized():
@@ -92,18 +95,23 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
             rank = torch.distributed.get_rank()
         else:
             # NOTE: or should we do a silent fallback
-            raise AssertionError("Multipack dataloader only works for distributed training.")
+            raise AssertionError(
+                "Multipack dataloader only works for distributed training."
+            )
 
         # some checks
         def _prereq(dataloader: DataLoader):
             return hasattr(dataloader, "dataset")
 
-        def _build_multipack_dataloader(dataloader: DataLoader, accelerator: Accelerator):
+        def _build_multipack_dataloader(
+            dataloader: DataLoader, accelerator: Accelerator
+        ):
 
-            # NOTE: for now we disable support for deepspeed, but can be added in 
+            # NOTE: for now we disable support for deepspeed, but can be added in
             # future if needed
-            assert not accelerator.state.deepspeed_plugin, \
-                "Currently, multipack not supported for deepspeed"
+            assert (
+                not accelerator.state.deepspeed_plugin
+            ), "Currently, multipack not supported for deepspeed"
 
             # 1. get the dataset
             dataset = dataloader.dataset
@@ -115,32 +123,34 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
             )
 
             # 2. compute packing
-            packing_max_batch_len, grad_accum = find_packing_max_batch_len_and_grad_accum(
-                num_gpus=num_bins,
-                avg_sample_len=lengths.mean(),
-                effective_batch_size=self._effective_batch_size,
-                max_batch_len_per_gpu=self._max_batch_len,
-                is_padding=not self._padding_free,
-                dataset=dataset,
-                pad_id=self._pad_token_id, # should be used only in padding
-                seed=self._seed,
+            packing_max_batch_len, grad_accum = (
+                find_packing_max_batch_len_and_grad_accum(
+                    num_gpus=num_bins,
+                    avg_sample_len=lengths.mean(),
+                    effective_batch_size=self._effective_batch_size,
+                    max_batch_len_per_gpu=self._max_batch_len,
+                    is_padding=not self._padding_free,
+                    dataset=dataset,
+                    pad_id=self._pad_token_id,  # should be used only in padding
+                    seed=self._seed,
+                )
             )
 
             # unfortunately this update is late, so the following will not
             # be properly updated. But maybe it will have little effect
-            # - trainer._train_batch_size 
+            # - trainer._train_batch_size
             # - trainer.state.train_batch_size
             # NOTE: as such I think it does not work with max_steps > 0 anymore
 
             # 3. update the train args
             # train_args is a dataclass, so needs to be updated this way
-            train_args.__dict__['gradient_accumulation_steps'] = grad_accum
+            train_args.__dict__["gradient_accumulation_steps"] = grad_accum
             batch_size_per_device = self._effective_batch_size // grad_accum // num_bins
-            train_args.__dict__['per_gpu_train_batch_size'] = batch_size_per_device
+            train_args.__dict__["per_gpu_train_batch_size"] = batch_size_per_device
 
             # 4. have to update the accelerator gradient state also
             # - because the train args update is late
-            accelerator.gradient_state.plugin_kwargs['num_steps'] = grad_accum
+            accelerator.gradient_state.plugin_kwargs["num_steps"] = grad_accum
 
             # 5. prepare the multipack distributed batch sampler
             sampler = MultipackDistributedBatchSampler(
@@ -154,7 +164,7 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
 
             # NOTE: also handle the printouts later
 
-            # wanted to use this but its abit annoying, 
+            # wanted to use this but its abit annoying,
             # from accelerate.data_loader import DataLoaderShard
             # - so will just patch for now, but lets have a better
             #   solution later
@@ -166,7 +176,7 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
                 collate_fn=dataloader.collate_fn,
             )
 
-            # patch a set epoch function to delegate the call to the 
+            # patch a set epoch function to delegate the call to the
             # batch_sampler
             def _set_epoch(self, epoch: int):
                 self.batch_sampler.set_epoch(epoch)
@@ -179,9 +189,9 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
             "multipack-{ebs}-{mbl}".format(
                 ebs=self._effective_batch_size,
                 mbl=self._max_batch_len,
-            ), 
+            ),
             AcceleratorPatcherComponent.data_loader,
-            replacement_builder=_build_multipack_dataloader, 
+            replacement_builder=_build_multipack_dataloader,
             pre_requisite_check=_prereq,
             skip_prepare=True,
         )
@@ -190,11 +200,12 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
         self._train_args = train_args
         return model, modifiable_args
 
+
 # register
 AccelerationPlugin.register_plugin(
     MultipackDataloaderAccelerationPlugin,
     configuration_and_paths=[
-        "training.dataloader.multipack", # activate if multipack config
-        "training.attention", # currently we require multipack to work with padding free
+        "training.dataloader.multipack",  # activate if multipack config
+        "training.attention",  # currently we require multipack to work with padding free
     ],
 )
