@@ -3,13 +3,15 @@
 This library contains plugins to accelerate finetuning with the following optimizations:
 
 1. Padding-Free Flash Attention Computation
+2. Multipack Distributed Sampling
 
 
 ## Plugins
 
 Plugin | Description | Depends | Loading | Augmentation | Callbacks
 --|--|--|--|--|--
-[padding_free](./src/fms_acceleration_ilab/framework_plugin_padding_free.py) | Padding-Free Flash Attention Computation | flash_attn | | ✅ | ✅
+[padding_free](./src/fms_acceleration_aadp/framework_plugin_padding_free.py) | Padding-Free Flash Attention Computation | flash_attn | | ✅ | 
+[multipack sampler](./src/fms_acceleration_aadp/framework_plugin_multipack.py) | Multipack Distributed Sampling | numba | | ✅ | 
 
 
 ## Native Transformers Support from v4.44.0
@@ -32,3 +34,9 @@ In the meantime, the plugin expects the user to provide a pretokenized dataset t
 - is tokenized
 - has template labels that are masked to exclude from loss computation
 - has eos token appended
+
+### Currenly Only Supports Multipack with Padding-Free
+
+The multipack plugin currently also requires the padding-free plugin to work.
+This may change in the future if there is demand for multipack to work standalone without padding free.
+
