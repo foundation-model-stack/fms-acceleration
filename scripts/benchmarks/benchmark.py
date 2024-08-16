@@ -166,6 +166,7 @@ class BenchmarkDataset:
         dataset_text_field: str = "output",
         chat_template: str = None,
         response_template: str = None,
+        response_field: str = None,
         additional_dataset_kwargs: Dict = {},
     ) -> None:
 
@@ -180,6 +181,7 @@ class BenchmarkDataset:
             "tokenize": tokenize,
             "input_field": input_field,
             "dataset_text_field": dataset_text_field,
+            "response_field": response_field,
             "chat_template": chat_template,
         }
         self.training_paths = {}  # cache to store the training paths
