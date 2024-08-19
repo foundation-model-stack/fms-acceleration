@@ -79,6 +79,7 @@ KEYWORD_PEAKED_DELTA = "peaked_delta"
 KEYWORD_ALLOC_DELTA = "alloc_delta"
 HF_ARG_TRAINING_DATA_PATH = "training_data_path"
 HF_ARG_RESPONSE_TEMPLATE = "response_template"
+HF_ARG_DATASET_TEXT_FIELD = "dataset_text_field"
 HF_ARG_SKIP_MEMORY_METRIC = "skip_memory_metrics"
 RESULT_FIELD_ALLOCATED_GPU_MEM = "mem_torch_mem_alloc_in_bytes"
 RESULT_FIELD_PEAK_ALLOCATED_GPU_MEM = "mem_peak_torch_mem_alloc_in_bytes"
@@ -164,9 +165,15 @@ class BenchmarkDataset:
         input_field: str = "input",
         dataset_text_field: str = "output",
         chat_template: str = None,
+        response_template: str = None,
+        additional_dataset_kwargs: Dict = {},
     ) -> None:
 
-        self.dataset_split = datasets.load_dataset(dataset_name, split=dataset_split)
+        self.dataset_split = datasets.load_dataset(
+            dataset_name,
+            split=dataset_split,
+            **additional_dataset_kwargs
+        )
 
         self.kwargs = {
             "formatting": formatting,
@@ -177,6 +184,7 @@ class BenchmarkDataset:
         }
         self.training_paths = {}  # cache to store the training paths
         self.data_save_path = data_save_path
+        self.response_template = response_template
 
     def prepare_dataset(
         self,
@@ -185,6 +193,16 @@ class BenchmarkDataset:
     ):
         if model_name in self.training_paths:
             return self.training_paths[model_name]
+
+        if self.response_template:
+            if response_template is not None:
+                warnings.warn(
+                    "Response Template detected in data processing field, "
+                    "overriding response template. "
+                    "*** Old ***\n{response_template}\n"
+                    "*** New ***\n{self.response_template}"
+                )
+            response_template = self.response_template
 
         if self.kwargs["tokenize"]:
             tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -257,8 +275,8 @@ class ConfigUtils:
             # otherwise if a regular argument
             if val is None:
                 warnings.warn(
-                    f"Argument '{arg}' is not a true/false argument andhad a 'None' value ",
-                    "and thus will be ignored.",
+                    f"Argument '{arg}' is not a true/false argument and "
+                    "had a 'None' value and thus will be ignored.",
                 )
                 continue
 
@@ -668,8 +686,10 @@ def prepare_arguments(args, benchmark_dataset: BenchmarkDataset):
             print(f"Scenario '{_scn_name}' has matrix '{k}' of len {len(v)}")
             scn_factor *= len(v)
 
+        # scenario-specific constants should overwrite any similar values in defaults
+        defaults = {k:v for k, v in defaults.items() if k not in scenario_constants}
         # update defaults with scenario constants
-        constants = {**scenario_constants, **defaults}
+        constants = {**defaults, **scenario_constants}
         # Remove any empty variables and combine matrices to dictionary to cartesian product on
         combined_matrices = {**scenario_matrices, **experiment_matrices}
         products = ConfigUtils.cartesian_product_on_dict(combined_matrices)
@@ -684,12 +704,9 @@ def prepare_arguments(args, benchmark_dataset: BenchmarkDataset):
             # prepare the dataset
             training_path = benchmark_dataset.prepare_dataset(
                 x["model_name_or_path"],
-                (
-                    x[HF_ARG_RESPONSE_TEMPLATE]
-                    if HF_ARG_RESPONSE_TEMPLATE in x
-                    else constants.get(HF_ARG_RESPONSE_TEMPLATE)
-                ),
+                constants.get(HF_ARG_RESPONSE_TEMPLATE),
             )
+
             # update
             x[HF_ARG_TRAINING_DATA_PATH] = training_path
 

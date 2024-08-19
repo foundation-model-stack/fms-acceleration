@@ -21,6 +21,7 @@ import argparse
 import logging
 import os
 import re
+from copy import deepcopy
 
 # Third Party
 from ruamel.yaml import YAML
@@ -182,6 +183,10 @@ COMBINATIONS = [
     ("accelerated-peft-autogptq-foak", (KEY_AUTO_GPTQ, KEY_AUTO_GPTQ_FOAK)),
     ("accelerated-peft-bnb-nf4-foak", (KEY_BNB_NF4, KEY_BNB_NF4_FOAK)),
     ("aadp-padding-free", (KEY_AADP_PADDING_FREE,)),
+    ("accelerated-peft-autogptq-padding-free", (KEY_AADP_PADDING_FREE,KEY_AUTO_GPTQ)),
+    ("accelerated-peft-bnb-nf4-padding-free", (KEY_AADP_PADDING_FREE,KEY_BNB_NF4)),
+    ("accelerated-peft-autogptq-foak-padding-free", (KEY_AADP_PADDING_FREE,KEY_AUTO_GPTQ, KEY_AUTO_GPTQ_FOAK)),
+    ("accelerated-peft-bnb-nf4-foak-padding-free", (KEY_AADP_PADDING_FREE,KEY_BNB_NF4, KEY_BNB_NF4_FOAK)),
 ]
 
 
@@ -265,9 +270,9 @@ if __name__ == "__main__":
     # now merge contents in CONFIGURATIONS to form the final
     # sample configuration
     for combi_tag, combi in COMBINATIONS:
-
         # merging the configuration contents for this particular combination
-        config = merge_configs([CONFIGURATIONS[tag] for tag in combi])
+        # if keys are not the same separate the merges
+        config = merge_configs([deepcopy(CONFIGURATIONS[tag]) for tag in combi])
         indent_yaml(config)  # add the indent
 
         # writing the configuration contents

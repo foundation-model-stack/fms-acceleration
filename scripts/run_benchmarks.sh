@@ -105,6 +105,7 @@ if [ ! "$NO_OVERWRITE" = "true" ]; then
 fi
 
 # run the bench
+PYTHONPATH=. \
 python $WORKING_DIR/benchmark.py \
    --num_gpus $NUM_GPUS_MATRIX \
    --scenarios_config_path $SCENARIOS_CONFIG \
@@ -137,9 +138,18 @@ PYTHONPATH=. \
         'error_messages' \
         'acceleration_framework_config_file'
 
-if [ "$DRY_RUN" = "true" ]; then 
-    echo "DRY_RUN=True, will skip compare with reference logic"
-else
-    PYTHONPATH=. \
-        python $WORKING_DIR/compare_with_reference.py --result_dir $RESULT_DIR
-fi
+
+# For every new benchmark run, it is good practice to perform a regression check
+# against a previous known set of benchmark results. This repo provides a convenient comparison
+# tool that analyses the differences of metrics like loss and throughput between an old and new set 
+# of benchmark results.
+# To use this tool simply run the following python command
+# PYTHONPATH=. \
+#     python $WORKING_DIR/compare_with_reference.py
+# The following arguments can be used to further configure the analysis, otherwise it uses default values
+#   arguments:
+#   --result_dir <Output directory to save comparison artifacts>
+#   --reference_benchmark_filepath <filepath of the old benchmark results to compare againts>
+#   --threshold_ratio <to define an acceptable difference between old and new results>
+#   --indices <defines the set of column names used as unique identifier to merge the 2 sets of results>
+#   --plot_columns <specifies the metric name to be compared and vizualized>

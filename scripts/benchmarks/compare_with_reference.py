@@ -172,9 +172,19 @@ if __name__ == "__main__":
         help="the acceptable relative difference from the reference value.",
     )
 
-    parser.add_argument("--indices", default=DEFAULT_INDICES, nargs="+")
+    parser.add_argument(
+        "--indices",
+        default=DEFAULT_INDICES,
+        nargs="+",
+        help="list of column names to use as index for merging between old and new benchmark results",
+    )
 
-    parser.add_argument("--plot_columns", default=DEFAULT_PLOT_COLUMNS, nargs="+")
+    parser.add_argument(
+        "--plot_columns", 
+        default=DEFAULT_PLOT_COLUMNS, 
+        nargs="+"
+        help="list of metric names in benchmark results to analyze visually",
+    )
 
     args = parser.parse_args()
     main(

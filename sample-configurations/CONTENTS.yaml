@@ -37,3 +37,29 @@ framework_configs:
       plugins:
         - attention-and-distributed-packing
       filename: aadp-padding-free-sample-configuration.yaml
+
+    - shortname: accelerated-peft-bnb-padding-free
+      plugins:
+        - accelerated-peft
+        - attention-and-distributed-packing
+      filename: accelerated-peft-bnb-nf4-padding-free-sample-configuration.yaml
+      
+    - shortname: accelerated-peft-autogptq-padding-free
+      plugins:
+        - accelerated-peft
+        - attention-and-distributed-packing
+      filename: accelerated-peft-autogptq-padding-free-sample-configuration.yaml
+      
+    - shortname: accelerated-peft-bnb-foak-padding-free
+      plugins:
+        - accelerated-peft
+        - attention-and-distributed-packing
+        - fused-ops-and-kernels
+      filename: accelerated-peft-bnb-nf4-foak-padding-free-sample-configuration.yaml
+      
+    - shortname: accelerated-peft-autogptq-foak-padding-free
+      plugins:
+        - accelerated-peft
+        - attention-and-distributed-packing
+        - fused-ops-and-kernels
+      filename: accelerated-peft-autogptq-foak-padding-free-sample-configuration.yaml
