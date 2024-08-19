@@ -9,8 +9,12 @@ from .sparse_mlp2 import SparseMLPv2
 from megablocks.layers.moe import ParallelMLP
 import torch
 
+# this function ensures that the megablocks packaged is configured to use
+# the correct SparseMLP implementation
+# - at the moment not considering the GroupedMLP implementations
 def update_mlp_registry():
-    # patch the registry to point to our v2
+
+    # replace the registry to point to the 
     _REGISTRY['mlp']['sparse'] = SparseMLPv2
 
     def forward(self, x, scores, expert_weights, top_experts):
@@ -32,6 +36,12 @@ def update_mlp_registry():
         # we return None as the placeholder.
         return x, None
 
-    # patch the forward function
+    # patch the forward function. Willing to do this because ParallelMLP
+    # is only used here and not anywhere else, hence:
+    # 1. we do not care about reversing the patch
+    # 2. we have control on where this is called, and we know to call it
+    #    before our code accesses this function. Hence, we view this as
+    #    a hardcoded modification to the megablocks package more than a 
+    #    patch.
     ParallelMLP.forward = forward
     

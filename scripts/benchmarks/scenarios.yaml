@@ -94,20 +94,12 @@ scenarios:
                 - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
                 - 'NousResearch/Llama-2-70b-hf'
 
-    -   name: accelerated-peft-gptq
+    -   name: accelerated-moe-megablocks
         framework_config: 
-            - accelerated-peft-autogptq
-            - accelerated-peft-autogptq-foak
+            - moe-megablocks
         arguments:
             learning_rate: 2e-4
-            fp16: True
-            torch_dtype: float16
-            peft_method: lora
-            r: 16
-            lora_alpha: 16
-            lora_dropout: 0.1
-            target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
+            bf16: True
+            torch_dtype: bfloat16
             model_name_or_path: 
-                - 'TheBloke/Mistral-7B-v0.1-GPTQ'
-                - 'TheBloke/Mixtral-8x7B-Instruct-v0.1-GPTQ'
-                - 'TheBloke/Llama-2-70B-GPTQ'
+                - 'mistralai/Mixtral-8x7B-Instruct-v0.1'

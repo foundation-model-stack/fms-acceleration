@@ -44,7 +44,7 @@ class MegablocksMoEAccelerationPlugin(AccelerationPlugin):
     def model_loader(self, model_name: str, **kwargs):
         # guarded
         from .megablocks_utils.config_utils import update_mlp_registry
-        from megablocks_utils.shard_moe_utils import shard_moe, get_moe_kwargs
+        from .megablocks_utils.shard_moe_utils import shard_moe, get_moe_kwargs
 
         # this one does a forward patching on MLP, but needs to be fixed
         # properly as the load balancing loss is currently not properly
@@ -86,7 +86,10 @@ class MegablocksMoEAccelerationPlugin(AccelerationPlugin):
                 fp16=torch_dtype == torch.float16,
                 bf16=torch_dtype == torch.bfloat16,
             ),
+            shared_mesh_dim=True, # FIXME: this can be passed in?
         )
+
+        return model
 
     def get_callbacks_and_ready_for_train(
         self, model: torch.nn.Module = None, accelerator=None

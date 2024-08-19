@@ -1,0 +1,14 @@
+# FMS Acceleration Plugin Configuration. 
+#
+# Each stanza incorporates various configurations for 
+# different fine-tuning / training tasks.
+plugins:
+  training:
+
+    # mixture-of-experts configurations
+    moe:
+
+      # expert-parallel for MoE
+      megablocks:
+
+        dummy: 1

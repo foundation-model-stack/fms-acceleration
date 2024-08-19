@@ -68,3 +68,8 @@ framework_configs:
         - attention-and-distributed-packing
         - fused-ops-and-kernels
       filename: accelerated-peft-autogptq-foak-padding-free-sample-configuration.yaml
+
+    - shortname: moe-megablocks
+      plugins:
+        - accelerated-moe
+      filename: moe-megablocks-sample-configuration.yaml

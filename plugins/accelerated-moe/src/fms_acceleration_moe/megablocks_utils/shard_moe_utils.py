@@ -178,17 +178,20 @@ def shard_moe(
     device_type: str = 'cuda',
     key_dp: str = KEY_DATA_PARALLEL,
     key_ep: str = KEY_EXPERT_PARALLEL,
+    shared_mesh_dim: bool = True,
 ):
     # guarded import
     from megablocks.layers import dmoe, arguments, mpu
 
-    assert ep_size > 1, "this function is used for sharding moe" 
+    assert ep_size > 1, "expert_parallel dimension must be set larger than 1" 
+    assert world_size % ep_size == 0, (
+        f"world_size ({world_size}) not divisible by ep_size ({ep_size})."
+    )
 
     # this function will shard the MOE on this rank
     device = torch.device(f'cuda:{rank}')
-    dp_size = world_size // ep_size
 
-    if dp_size == 1:
+    if shared_mesh_dim:
         # in this case we will have a 1D mesh and collapse the 
         # expert parallel with data_parallel
 
@@ -200,12 +203,18 @@ def shard_moe(
         key_ep = key_dp
         placements: List[Placement] = [Shard(DIM_EXPERT)]
     else:
-        # in this case it will be a 2D mesh
+        # in this case it will distribute experts on a different
+        # mesh dimension than dp. 
+        # - this will achieve the effect that the expert sharding can be
+        #   hierachical (e.g., can be over a slower network plane since
+        #   the communication overhead is less
+        dp_size = world_size // ep_size
         device_mesh = init_device_mesh(
             device_type,
             (dp_size, ep_size),
             mesh_dim_names=(key_dp, key_ep),
         )
+        # - experts will replicate over the first dimension
         placements: List[Placement] = [Replicate(), Shard(DIM_EXPERT)]
 
     mp_dmoe_args = arguments.Arguments(
@@ -213,8 +222,10 @@ def shard_moe(
         expert_parallel_group=device_mesh[key_ep].get_group(0)
     )
 
-    assert mp_dmoe_args.moe_num_experts % world_size == 0, \
-        "number of moe experts not divisible by world_size"
+    assert mp_dmoe_args.moe_num_experts % ep_size == 0, (
+        f"number of moe experts ({mp_dmoe_args.moe_num_experts}) "
+        f"not divisible by ep_size ({ep_size})."
+    )
 
     # for all the MoE related params, e.g., gate, experts
     # get a dictc
