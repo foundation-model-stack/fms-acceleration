@@ -198,7 +198,9 @@ class BenchmarkDataset:
             if response_template is not None:
                 warnings.warn(
                     "Response Template detected in data processing field, "
-                    "overriding response template."
+                    "overriding response template. "
+                    "*** Old ***\n{response_template}\n"
+                    "*** New ***\n{self.response_template}"
                 )
             response_template = self.response_template
 
