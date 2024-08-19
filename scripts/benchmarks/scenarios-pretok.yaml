@@ -25,19 +25,15 @@ data_processing:
     chat_template: |
         {%- for message in messages %}
         USER:
-            {% if message['question'] != '' %}
         {{ message['question'] }}
-            {% endif %}
 
         ASSISTANT:
-            {% if message['answer'] != '' %}
         {{ message['answer'] }}
-            {% endif %}
         {%- endfor %}
     dataset_split: "train[:2000]"
     tokenize: True
-    response_template: "\n### Response:"
-  
+    response_template: "\n\nASSISTANT:"
+
 # scenarios
 scenarios:
     -   name: full-finetuning
@@ -51,7 +47,6 @@ scenarios:
                 - 'mistralai/Mistral-7B-v0.1'
             response_template: null
             dataset_text_field: null
-
 
     -   name: padding-free
         framework_config: 
