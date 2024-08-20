@@ -3,6 +3,11 @@
 This library contains plugins to accelerate finetuning with the following optimizations:
 1. Expert-Parallel MoE with Megablocks
 
+## Known Issues with Megablocks
+
+Known Issues
+- Currently we do not pass the data parallel `dp_mesh` to the `FSDP` constructor, so `FSDP` will always shard over the default process group (over world_size).
+
 
 ## Megablocks Dependencies
 

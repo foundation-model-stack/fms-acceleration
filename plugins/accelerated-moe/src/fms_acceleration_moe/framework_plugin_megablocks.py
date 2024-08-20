@@ -13,14 +13,13 @@
 # limitations under the License.
 
 # Standard
-from typing import Dict, Tuple
+from typing import Dict
 import torch
 import warnings
 
 # Third Party
 from fms_acceleration import AccelerationPlugin
-from peft import LoraConfig
-from transformers import TrainingArguments, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM
 
 
 class MegablocksMoEAccelerationPlugin(AccelerationPlugin):
@@ -32,10 +31,20 @@ class MegablocksMoEAccelerationPlugin(AccelerationPlugin):
         super().__init__(configurations)
 
         # args
-        self._dummy = self._check_config_and_maybe_check_values(
-            key="training.moe.megablocks",
-            values=["dummy"],
+        self._shard_along_dp = self._check_config_and_maybe_check_values(
+            key="training.moe.megablocks.shard_along_dp",
+            values=[True, False],
+            default=True,
         )
+
+        # ep_size determines the expert parallel sharding
+        # - ep_size is ignored if _shard_along_dp=True
+        self._ep_size = None
+        if not self._shard_along_dp:
+            self._ep_size = self._check_config_and_maybe_check_values(
+                key="training.moe.megablocks.ep_size",
+                default=1,
+            )
 
     @property
     def requires_custom_loading(self):
@@ -79,15 +88,19 @@ class MegablocksMoEAccelerationPlugin(AccelerationPlugin):
             checkpoint_name_or_path=model_name,
             rank=rank,
             world_size=world_size,
-            ep_size=world_size, # FIXME: this can be passed in?
+            ep_size=self._ep_size, 
             moe_kwargs=get_moe_kwargs(
                 model.config, 
                 has_bias=False, # FIXME: is this true in general?
                 fp16=torch_dtype == torch.float16,
                 bf16=torch_dtype == torch.bfloat16,
             ),
-            shared_mesh_dim=True, # FIXME: this can be passed in?
+            shared_mesh_dim=self._shard_along_dp,
         )
+        # NOTE: Currently, it is a bit troublesome to pass the device_mesh to 
+        #  the FSDP constructor, so we do not do that.
+        # - therefore FSDP will always shard on world_size over the default process
+        #   group
 
         return model
 

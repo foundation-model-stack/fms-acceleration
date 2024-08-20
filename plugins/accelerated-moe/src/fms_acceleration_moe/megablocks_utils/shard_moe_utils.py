@@ -173,15 +173,28 @@ def shard_moe(
     checkpoint_name_or_path: str,
     rank: int, 
     world_size: int,
-    ep_size: int,
     moe_kwargs: Dict,
     device_type: str = 'cuda',
     key_dp: str = KEY_DATA_PARALLEL,
     key_ep: str = KEY_EXPERT_PARALLEL,
     shared_mesh_dim: bool = True,
+    ep_size: int = 1,
 ):
     # guarded import
     from megablocks.layers import dmoe, arguments, mpu
+
+    if shared_mesh_dim:
+        # if sharing mesh with dp, then the ep_size must be the world_size
+        # - in this case ep_shard_factor is ignored
+        ep_size = world_size
+    else:
+
+        # - moe_kwargs is the constructed by get_moe_kwargs above
+        _num_experts = moe_kwargs['moe_num_experts']
+        assert _num_experts % ep_size == 0, (
+            f"ep_shard factor '{ep_size}' does not divide "
+            f"number of experts '{_num_experts}'."
+        )
 
     assert ep_size > 1, "expert_parallel dimension must be set larger than 1" 
     assert world_size % ep_size == 0, (
