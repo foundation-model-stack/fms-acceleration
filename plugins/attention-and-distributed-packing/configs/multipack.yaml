@@ -7,11 +7,10 @@ training:
     # multipack dataloader
     multipack:
 
-      # multipack will try to achieve this effective batchsize by
-      # packing the devices to the extent possible, and then leveraging
-      # gradient accumulation steps
-      effective_batch_size: 3840
-
       # the maximum number of tokens per device, set accordingly to the
-      # GPU hardware
+      # GPU hardware. The below number is for A100_80gb
       max_number_tokens: 60000
+
+      # this is for future where we may need to configure
+      # a pad_token_id if we eventually support the padded case
+      pad_token_id: null
