@@ -18,6 +18,12 @@ Plugin | Description | Depends | Loading | Augmentation | Callbacks
 Transformers natively supports padding-free from v4.44.0 [see here](https://github.com/huggingface/transformers/pull/31629). The padding-free plugin will use the transformers library if compatible, 
 otherwise if `transformers < v4.44.0` the plugin will use an internal implementation instead.
 
+## Running Benchmarks
+
+To reproduce the benchmarks, simply run this command,
+
+`bash scripts/run_benchmarks.sh "2 4 8" "16 32 64" benchmark_outputs scenarios-<dataset>.yaml "padding-free"`
+
 ## Known Issues
 
 ### Currently Only Supports Pre-Tokenized Dataset

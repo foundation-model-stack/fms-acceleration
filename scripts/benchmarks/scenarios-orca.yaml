@@ -51,6 +51,7 @@ scenarios:
     -   name: padding-free
         framework_config: 
             - aadp-padding-free
+            - aadp-padding-free-multipack
         arguments:
             learning_rate: 2e-5
             torch_dtype: float16

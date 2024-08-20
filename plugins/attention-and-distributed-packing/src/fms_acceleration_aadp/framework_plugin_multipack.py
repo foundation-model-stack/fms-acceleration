@@ -23,6 +23,7 @@ from peft import LoraConfig
 from torch.utils.data import DataLoader
 from transformers import TrainingArguments
 import numpy as np
+import warnings
 
 # from accelerate.data_loader import DataLoaderShard
 import torch
@@ -44,8 +45,7 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
         )
 
         # multipack settings
-        self._effective_batch_size = multipack["effective_batch_size"]
-        self._max_batch_len = multipack["max_number_tokens"]
+        self.num_workers = multipack["num_workers"]
 
         # see about the collator
         attention = self._check_config_and_maybe_check_values(
@@ -88,7 +88,6 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
         # pylint: disable=import-outside-toplevel
         from .multipack_sampler import (
             MultipackDistributedBatchSampler,
-            find_packing_max_batch_len_and_grad_accum,
         )
 
         rank, num_bins = 0, 1
@@ -115,48 +114,35 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
                 not accelerator.state.deepspeed_plugin
             ), "Currently, multipack not supported for deepspeed"
 
-            # 1. get the dataset
+            # accelerator.even_batches = False
+
+            # get the dataset
             dataset = dataloader.dataset
-            # TODO: make this line neater
-            # or do the computation only on the main process if we are sure it can be cached
-            # by dataset.map
+            if torch.distributed.get_rank() > 0:
+                warnings.warn(
+                    "Waiting for main process to perform the mapping."
+                    "If the dataset is large, some processes might time out,"
+                    "You may need to increase the timeout limit or the number "
+                    f"of workers processing the dataset > {self.num_workers}."
+                    )
+                torch.distributed.barrier()
+
             lengths = np.array(
-                dataset.map(lambda x: {"len": len(x["input_ids"])}, num_proc=16)["len"]
+                dataset.map(
+                    lambda x: {"len": len(x["input_ids"])},
+                    num_proc=self.num_workers,
+                    load_from_cache_file=True,
+                )["len"]
             )
+            
+            if torch.distributed.get_rank() == 0:
+                torch.distributed.barrier()
 
-            # 2. compute packing
-            packing_max_batch_len, grad_accum = (
-                find_packing_max_batch_len_and_grad_accum(
-                    num_gpus=num_bins,
-                    avg_sample_len=lengths.mean(),
-                    effective_batch_size=self._effective_batch_size,
-                    max_batch_len_per_gpu=self._max_batch_len,
-                    is_padding=not self._padding_free,
-                    dataset=dataset,
-                    pad_id=self._pad_token_id,  # should be used only in padding
-                    seed=self._seed,
-                )
-            )
+            self._max_number_tokens  = train_args.per_device_train_batch_size * lengths.mean()
 
-            # unfortunately this update is late, so the following will not
-            # be properly updated. But maybe it will have little effect
-            # - trainer._train_batch_size
-            # - trainer.state.train_batch_size
-            # NOTE: as such I think it does not work with max_steps > 0 anymore
-
-            # 3. update the train args
-            # train_args is a dataclass, so needs to be updated this way
-            train_args.__dict__["gradient_accumulation_steps"] = grad_accum
-            batch_size_per_device = self._effective_batch_size // grad_accum // num_bins
-            train_args.__dict__["per_gpu_train_batch_size"] = batch_size_per_device
-
-            # 4. have to update the accelerator gradient state also
-            # - because the train args update is late
-            accelerator.gradient_state.plugin_kwargs["num_steps"] = grad_accum
-
-            # 5. prepare the multipack distributed batch sampler
+            # prepare the multipack distributed batch sampler
             sampler = MultipackDistributedBatchSampler(
-                batch_max_length=packing_max_batch_len,
+                batch_max_length=self._max_number_tokens,
                 lengths=lengths,
                 num_replicas=num_bins,
                 rank=rank,
@@ -164,13 +150,10 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
                 padding=not self._padding_free,
             )
 
-            # NOTE: also handle the printouts later
-
             # wanted to use this but its abit annoying,
             # from accelerate.data_loader import DataLoaderShard
             # - so will just patch for now, but lets have a better
             #   solution later
-
             dataloader = DataLoader(
                 dataset,
                 batch_sampler=sampler,
@@ -184,14 +167,10 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
                 self.batch_sampler.set_epoch(epoch)
 
             dataloader.set_epoch = MethodType(_set_epoch, dataloader)
-
             return dataloader
 
         AcceleratorPatcher.replace(
-            "multipack-{ebs}-{mbl}".format(
-                ebs=self._effective_batch_size,
-                mbl=self._max_batch_len,
-            ),
+            "multipack",
             AcceleratorPatcherComponent.data_loader,
             replacement_builder=_build_multipack_dataloader,
             pre_requisite_check=_prereq,

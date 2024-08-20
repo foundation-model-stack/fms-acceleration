@@ -42,9 +42,10 @@ MEMORY_LOGGING=${MEMORY_LOGGING:-"all"}
 
 # inputs
 NUM_GPUS_MATRIX=${1-"1 2"}
-RESULT_DIR=${2:-"benchmark_outputs"}
-SCENARIOS_CONFIG=${3:-$SCENARIOS_CONFIG}
-SCENARIOS_FILTER=${4-$SCNTAG_PEFT_AUTOGPTQ}
+EFFECTIVE_BS_MATRIX=${2-"4 8"}
+RESULT_DIR=${3:-"benchmark_outputs"}
+SCENARIOS_CONFIG=${4:-$SCENARIOS_CONFIG}
+SCENARIOS_FILTER=${5-$SCNTAG_PEFT_AUTOGPTQ}
 
 echo "NUM_GPUS_MATRIX: $NUM_GPUS_MATRIX"
 echo "RESULT_DIR: $RESULT_DIR"
@@ -108,6 +109,7 @@ fi
 PYTHONPATH=. \
 python $WORKING_DIR/benchmark.py \
    --num_gpus $NUM_GPUS_MATRIX \
+   --effective_batch_size_matrix $EFFECTIVE_BS_MATRIX \
    --scenarios_config_path $SCENARIOS_CONFIG \
    --accelerate_config $ACCELERATE_CONFIG \
    --defaults_config_path $DEFAULTS_CONFIG \

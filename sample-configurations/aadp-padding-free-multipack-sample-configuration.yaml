@@ -18,11 +18,5 @@ plugins:
       # multipack dataloader
       multipack:
 
-        # multipack will try to achieve this effective batchsize by
-        # packing the devices to the extent possible, and then leveraging
-        # gradient accumulation steps
-        effective_batch_size: 3840
-
-        # the maximum number of tokens per device, set accordingly to the
-        # GPU hardware
-        max_number_tokens: 60000
+        # number of processes to map
+        num_workers: 16
