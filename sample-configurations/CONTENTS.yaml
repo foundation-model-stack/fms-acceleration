@@ -38,6 +38,11 @@ framework_configs:
         - attention-and-distributed-packing
       filename: aadp-padding-free-sample-configuration.yaml
 
+    - shortname: aadp-padding-free-multipack
+      plugins:
+        - attention-and-distributed-packing
+      filename: aadp-padding-free-multipack-sample-configuration.yaml
+
     - shortname: accelerated-peft-bnb-padding-free
       plugins:
         - accelerated-peft
