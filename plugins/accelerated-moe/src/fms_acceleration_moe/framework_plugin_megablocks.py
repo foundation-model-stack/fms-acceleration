@@ -21,6 +21,17 @@ import warnings
 from fms_acceleration import AccelerationPlugin
 from transformers import AutoModelForCausalLM
 
+from transformers.models.mixtral.modeling_mixtral import MixtralSparseMoeBlock
+
+# Different Models
+# - MoE Class
+# - has_bias
+# - gate module name
+MODEL_MEGABLOCKS = {
+    "MixtralForCausalLM": (
+        MixtralSparseMoeBlock, False, "gate", "experts"
+    )
+}
 
 class MegablocksMoEAccelerationPlugin(AccelerationPlugin):
 
@@ -78,24 +89,29 @@ class MegablocksMoEAccelerationPlugin(AccelerationPlugin):
                 "Megablocks expert parallel only works for distributed training."
             )
 
-        # FIXME: have some way to search out the MOE block
-        from transformers.models.mixtral.modeling_mixtral import MixtralSparseMoeBlock
+        # - get model specific items
+        (
+            moe_cls, has_bias, router_name, expert_name, 
+        ) = MODEL_MEGABLOCKS[model.__class__.__name__]
 
         # FIXME: the dtype checks below are too brittle
         dp_mesh = shard_moe(
             model, 
-            MixtralSparseMoeBlock, 
+            moe_cls, 
             checkpoint_name_or_path=model_name,
             rank=rank,
             world_size=world_size,
             ep_size=self._ep_size, 
             moe_kwargs=get_moe_kwargs(
                 model.config, 
-                has_bias=False, # FIXME: is this true in general?
+                has_bias=has_bias,
                 fp16=torch_dtype == torch.float16,
                 bf16=torch_dtype == torch.bfloat16,
             ),
             shared_mesh_dim=self._shard_along_dp,
+            router_name=router_name, 
+            expert_name=expert_name,
+
         )
         # NOTE: Currently, it is a bit troublesome to pass the device_mesh to 
         #  the FSDP constructor, so we do not do that.

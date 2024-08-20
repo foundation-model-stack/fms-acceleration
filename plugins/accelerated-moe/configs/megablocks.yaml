@@ -1,9 +1,19 @@
 training:
 
   # mixture-of-experts configurations
-  moe: 
+  moe:
 
     # expert-parallel for MoE
     megablocks:
+    
+      # if True, then we shard experts across data parallel dimension
+      # - only feasible if world_size divides the number of experts
+      shard_along_dp: true
 
-      dummy: 1
+      # to be specified only if shard_along_dp == False. This will influence
+      # the level of sharding, which indicates how many experts per device
+      # - the number of experts per device will be num_experts / ep_size
+      # - we disable the ability to set ep_size=1 since this means no sharding
+      # - NOTE: ep_size=1 does not mean shard_along_dp=True, which would otherwise
+      #   be contradictory since ep_size suggests no expert parallel.
+      # ep_size: 2

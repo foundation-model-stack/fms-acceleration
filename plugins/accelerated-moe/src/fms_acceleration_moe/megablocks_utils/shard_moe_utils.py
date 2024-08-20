@@ -1,9 +1,9 @@
 
 import torch
-from transformers import TrainingArguments, PretrainedConfig
-from typing import Union, Dict, List, Type
+from transformers import PretrainedConfig
+from typing import Tuple, Dict, List, Type
 from torch.distributed._tensor import Placement, Replicate, Shard, distribute_tensor
-from torch.distributed._tensor.device_mesh import init_device_mesh
+from torch.distributed._tensor.device_mesh import init_device_mesh, DeviceMesh
 import os
 from tqdm import tqdm
 
@@ -20,8 +20,9 @@ KEY_DATA_PARALLEL = 'data_parallel'
 KEY_EXPERT_PARALLEL = 'expert_parallel'
 DIM_EXPERT = 0
 
-KEY_ROUTER = 'router.layer.weight'
-KEY_EXPERTS = 'experts.mlp'
+# these depend on the namings in the dMOE
+KEY_DMOE_ROUTER = 'router.layer.weight'
+KEY_DMOE_EXPERTS = 'experts.mlp'
 
 def get_moe_kwargs(
     config: PretrainedConfig,
@@ -59,18 +60,44 @@ def get_resolved_checkpoint_location(model_name_or_path: str):
     PretrainedConfig._dict_from_json_file = _old_func
     return os.path.dirname(result)
 
-# see https://github.com/mosaicml/llm-foundry/blob/main/tests/models/layers/test_dmoe.py
-# for a basic example
 
-# this one is called for one layer
-# e.g., 'model.layers.0, block_sparse_moe
-def get_router_experts_sharded_safetensor(
+# This function creates a dictionary of keys and paths into the the sharded
+# safetensors checkpoint file, that are relevant to the "prefix" and "instance_name"
+# being pased in.
+# - the keys point to modules found in megablocks.layers.dmoe.dMoE, the distributed
+#   expert module provided by megablocks.
+# - the values are tuples pointing to the keys within the checkpoint file.
+# 
+# Example: if prefix="module.layers.0" and instance_name="block_sparse_moe", then a dictionary
+# of the following will be returned:
+# {
+#   'experts.mlp.w1': [
+#      (
+#        'model.layers.0.block_sparse_moe.experts.0.w1.weight', 
+#        'model-00001-of-00019.safetensors'
+#      ), 
+#      (
+#         'model.layers.0.block_sparse_moe.experts.1.w1.weight', 
+#         'model-00001-of-00019.safetensors'
+#      ),  
+#      ...
+#    ]
+#    'experts.mlp.w2': [...], 
+#    'experts.mlp.w3': [...],
+#    'router.layer.weight': [
+#       (
+#          'model.layers.0.block_sparse_moe.gate.weight', 
+#          'model-00001-of-00019.safetensors'
+#       )
+#     ]
+# }
+def get_checkpoint_meta_from_sharded_safetensor(
     weight_map: Dict,
     prefix: str, # e.g., 'model.layers.0,
     instance_name: str, # e.g., block_sparse_moe
-    router_name: str = 'gate',
-    expert_name: str = 'experts'
-):
+    router_name: str = 'gate', # e.g., named "gate" within block_sparse_moe
+    expert_name: str = 'experts' # e.g., named "experts" within block_sparse_moe
+) -> Dict[str, List[Tuple]]:
     # insert in order
     def _insert(L: List, i: int, v):
         n = len(L)
@@ -107,12 +134,11 @@ def get_router_experts_sharded_safetensor(
                 f"'{router_name}' or expert_name '{expert_name}'"
             )
         if m.group(1) == router_name:
-            _map[KEY_ROUTER].append((k, stfile))
+            _map[KEY_DMOE_ROUTER].append((k, stfile))
         elif m.group(1) == expert_name:
             index = int(m.group(2))
             mod = m.group(3)
-            # expert_map[stfile].append((mod, index, k))
-            _insert(_map[f'{KEY_EXPERTS}.{mod}'], index, (k, stfile))
+            _insert(_map[f'{KEY_DMOE_EXPERTS}.{mod}'], index, (k, stfile))
 
     if len(_map) == 0:
         raise ValueError(
@@ -121,47 +147,53 @@ def get_router_experts_sharded_safetensor(
 
     return _map
 
-# for megablocks.SparseMLPv2
-# assign dmoe with mlp_v2
-# settings is: 
-# experts.mlp.w1: [(k, file)]
-def assign_mlp_v2_weights(
+# this function will load the sharded experts onto the device. 
+# - this assumes that the "dmoe" module is the megablocks.layers.dmoe.dMoE distributed
+#   implementation of the mixture of experts.
+def load_sharded_experts_onto_device(
     dmoe: torch.nn.Module,
     directory: str,
-    settings: Dict,
-    device_mesh, 
-    placements,
+    checkpoint_metadata: Dict[str, List[Tuple]],
+    device_mesh: DeviceMesh, 
+    placements: Placement,
+    expert_name: str = 'experts' # e.g., named "experts" within block_sparse_moe
 ):
-    # typically they all should be same file
+    # typically they all should be same file, but to play safe, load the checkpoint file onto
+    # cpu first since we may not need all weights in that file.
     with ExitStack() as stack:
         files = {}
-        for _, vs in settings.items():
+        for _, vs in checkpoint_metadata.items():
             for _, fi in vs:
                 if fi not in files:
                     files[fi] = stack.enter_context(
                         safe_open(os.path.join(directory, fi), framework='pt', device='cpu')
                     )
             
-        # go by one weight
-        for weight_name, vs in settings.items():
+        # go by one weight at a time.
+        # - weight_name: points to megablocks.dmoe
+        for weight_name, vs in checkpoint_metadata.items():
             data = []
             for k, fi in vs:
                 T = files[fi].get_tensor(k)
-                if 'experts' in k:
+                if expert_name in k:
                     if T.shape[1] > T.shape[0]:
                         T = T.t()
                 data.append(T)
 
-            # concat on dim 0 and distribute
+            # the megablocks dmoe experts the expert features to be on DIM_EXPERT.
+            # - concat on dim 0 and distribute
             param = torch.concat(data, dim=DIM_EXPERT)
-            if KEY_ROUTER not in weight_name:
+            if KEY_DMOE_ROUTER not in weight_name:
                 param = torch.nn.Parameter(
                     distribute_tensor(param, device_mesh, placements)
                 )
             else:
+                # - do not shard the router but load onto device as well
                 param = torch.nn.Parameter(
                     param.to(torch.cuda.current_device())
                 )
+                
+            # register the sharded parameter onto the megablocks.dmoe
             name = weight_name.split('.')
             path, name = ".".join(name[:-1]), name[-1]
             mod = dmoe.get_submodule(path)
@@ -169,7 +201,7 @@ def assign_mlp_v2_weights(
 
 def shard_moe(
     model: torch.nn.Module,
-    moe_cls: Union[str, Type],
+    moe_cls: Type,
     checkpoint_name_or_path: str,
     rank: int, 
     world_size: int,
@@ -177,11 +209,47 @@ def shard_moe(
     device_type: str = 'cuda',
     key_dp: str = KEY_DATA_PARALLEL,
     key_ep: str = KEY_EXPERT_PARALLEL,
+    router_name: str = 'gate',
+    expert_name: str = 'experts',
     shared_mesh_dim: bool = True,
     ep_size: int = 1,
 ):
+    """shard_moe takes a mixture-of-experts huggingface model and shards the experts
+    on the current device. All layers layers that have a MoE module will be sharded.
+
+    The function requires "checkpoint_name_or_path" to point to the checkpoint that
+    the model has been loaded from, because model could have been loaded on the meta
+    device, and in which case would be missing the weights. This function will
+    instialize the sharded weights onto the device.
+
+    The sharding has two modes, and depends on world_size and number_of_experts the model
+    has. This depends on the setting "shared_mesh_dim" to True or False:
+    - if True: then dp and ep will happen on the same device_mesh dimension. This is only possible
+        if world_size divides number_of_experts (which requires world_size < num_of_experts).
+    - if False: then dp and ep will be seperate device_mesh dimensions. The ep_size will be determined
+        by the argument passed in (which needs to be properly set ep_size > 1; the default
+        value will raise an assertion).
+
+    Parameters:
+
+        model (module): A valid mixture-of-experts Huggingface model.
+        moe_cls (type): A module class used to identify the MoE components.
+        checkpoint_name_or_path (str): name or path pointing to the weight checkpoint.
+        rank (int): rank of the current device.
+        world_size (int): total world size.
+        moe_kwargs (dict): kwargs to be passed to construct megablocks.layers.arguments for 
+            constructing the megablocks.layer.dmoe.dMOE.
+        device_type (str): the current device to load the sharded model into.
+        key_dp (str): name of the data parallel mesh
+        key_ep (str): name of the expert parallel mesh (if initialized).
+        router_name (str): module name of the router in moe_cls (e.g., "gate").
+        expert_name (str): module name of the experts in moe_cls (e.g., "experts").
+        shared_mesh_dim (bool): for the sharding mode, see explanation above.
+        ep_size (int): for shard_mesh_dim=False only, see explanation above.
+
+    """
     # guarded import
-    from megablocks.layers import dmoe, arguments, mpu
+    from megablocks.layers import dmoe, arguments
 
     if shared_mesh_dim:
         # if sharing mesh with dp, then the ep_size must be the world_size
@@ -266,19 +334,20 @@ def shard_moe(
         # e.g., prefix: 'model.layers.0',
         #       module_name: 'block_sparse_moe'
         for prefix, (module_name, relevant_keys) in tqdm(
-            found.items(), 
-            disable=torch.distributed.get_rank() > 0,
-            desc='Sharding MoE'
+            found.items(), disable=(rank > 0), desc='Sharding MoE'
         ):
-            settings = get_router_experts_sharded_safetensor(
+            checkpoint_metadata = get_checkpoint_meta_from_sharded_safetensor(
                 index['weight_map'], prefix, module_name,
+                router_name, expert_name
             )
+
+            # - will replace the MoE module with the megablocks sharded dMoE
             with init_empty_weights():
                 mp_dmoe = dmoe.dMoE(mp_dmoe_args) # drop in replacement for now
 
-            assign_mlp_v2_weights(
-                mp_dmoe, loc, settings, 
-                device_mesh, placements
+            load_sharded_experts_onto_device(
+                mp_dmoe, loc, checkpoint_metadata, 
+                device_mesh, placements, expert_name
             )
             parent = model.get_submodule(prefix)
             setattr(parent, module_name, mp_dmoe)
@@ -286,7 +355,7 @@ def shard_moe(
     except ValueError as e:
         raise ValueError(
             f"Unable to load checkpoint_path '{checkpoint_name_or_path}'. "
-            "Currently only support safetensor checkpoints. "
+            "Currently only support non-GGUF safetensor checkpoints. "
             f": {e}"
         )
 
