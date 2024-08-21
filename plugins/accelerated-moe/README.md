@@ -15,5 +15,5 @@ Known Issues
 Currently databricks megablocks does not have a PyPi repository and does not have a proper release, so we have to install from the github repository as below. Please note that installing from github will require CUDA Toolkit to build.
 
 ```
-pip install git+https://github.com/databricks/megablocks.git@bce5d7b2aaf5038bc93b36f76c2baf51c2939bd2
+pip install -r requirements_mb.txt
 ```
