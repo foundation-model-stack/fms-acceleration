@@ -1,10 +1,12 @@
 
 import torch
 from transformers import PretrainedConfig
-from typing import Tuple, Dict, List, Type
+from transformers.activations import ACT2FN
+from typing import Tuple, Dict, List, Type, Union
 from torch.distributed._tensor import Placement, Replicate, Shard, distribute_tensor
 from torch.distributed._tensor.device_mesh import init_device_mesh, DeviceMesh
 import os
+from copy import copy
 from tqdm import tqdm
 
 from safetensors import safe_open
@@ -26,7 +28,6 @@ KEY_DMOE_EXPERTS = 'experts.mlp'
 
 def get_moe_kwargs(
     config: PretrainedConfig,
-    has_bias: bool = False, # if the MOE has bias
     fp16: bool = False,
     bf16: bool = False,
 ):
@@ -37,8 +38,9 @@ def get_moe_kwargs(
         "moe_top_k": config.num_experts_per_tok,
         "moe_expert_model_parallelism": True,
         "memory_optimized_mlp": False,
-        "bias": has_bias,
+        "activation_fn": ACT2FN[config.hidden_act],
         "moe_normalize_expert_weights": True,
+        "return_bias": False,
         "fp16": fp16,
         "bf16": bf16,
     }
@@ -175,7 +177,7 @@ def load_sharded_experts_onto_device(
             data = []
             for k, fi in vs:
                 T = files[fi].get_tensor(k)
-                if expert_name in k:
+                if expert_name in k and k.endswith("weight"):
                     if T.shape[1] > T.shape[0]:
                         T = T.t()
                 data.append(T)
@@ -201,7 +203,7 @@ def load_sharded_experts_onto_device(
 
 def shard_moe(
     model: torch.nn.Module,
-    moe_cls: Type,
+    moe_cls: Union[str,Type],
     checkpoint_name_or_path: str,
     rank: int, 
     world_size: int,
@@ -233,7 +235,7 @@ def shard_moe(
     Parameters:
 
         model (module): A valid mixture-of-experts Huggingface model.
-        moe_cls (type): A module class used to identify the MoE components.
+        moe_cls (str,type): A module class used to identify the MoE components.
         checkpoint_name_or_path (str): name or path pointing to the weight checkpoint.
         rank (int): rank of the current device.
         world_size (int): total world size.
@@ -309,20 +311,36 @@ def shard_moe(
     )
 
     # for all the MoE related params, e.g., gate, experts
-    # get a dictc
+    # get a dictionary
     # parent_mod: (child_instance_name, [list of fqdn keys])
     found = {}
     for name, mod in model.named_modules():
         name = name.split('.')
         parent, child = ".".join(name[:-1]), name[-1]
-        if isinstance(mod, moe_cls):
-            found[parent] = (
-                child,
-                [ # all params, including childs'
-                    f'{parent}.{child}.{n}'
-                    for n, _ in mod.named_parameters()
-                ]
+
+        # check the module depending if moe_cls is a str or class
+        if (
+            mod.__class__.__name__ == moe_cls if
+            isinstance(moe_cls, str) else
+            isinstance(mod, moe_cls)
+        ):
+            fqdn_keys = [ # all params, including childs'
+                f'{parent}.{child}.{n}'
+                for n, _ in mod.named_parameters()
+            ]
+
+            # check if there are any biases in any of the experts
+            # if there are biases
+            # Assumption: assume that if one expert has bias,then the others
+            # will have it to
+            has_bias = any(
+                expert_name in k and k.endswith('bias') 
+                for k in fqdn_keys
             )
+
+            found[parent] = (child, fqdn_keys, has_bias)
+
+    moe_module_names = set()
 
     # NOTE: for now we only support sharded safetensors
     # - most MOE models should be used using this checkpoint format
@@ -333,7 +351,7 @@ def shard_moe(
 
         # e.g., prefix: 'model.layers.0',
         #       module_name: 'block_sparse_moe'
-        for prefix, (module_name, relevant_keys) in tqdm(
+        for prefix, (module_name, relevant_keys, has_bias) in tqdm(
             found.items(), disable=(rank > 0), desc='Sharding MoE'
         ):
             checkpoint_metadata = get_checkpoint_meta_from_sharded_safetensor(
@@ -341,9 +359,12 @@ def shard_moe(
                 router_name, expert_name
             )
 
+            _args = copy(mp_dmoe_args)
+            _args.bias = has_bias
+
             # - will replace the MoE module with the megablocks sharded dMoE
             with init_empty_weights():
-                mp_dmoe = dmoe.dMoE(mp_dmoe_args) # drop in replacement for now
+                mp_dmoe = dmoe.dMoE(_args) # drop in replacement for now
 
             load_sharded_experts_onto_device(
                 mp_dmoe, loc, checkpoint_metadata, 
@@ -351,6 +372,9 @@ def shard_moe(
             )
             parent = model.get_submodule(prefix)
             setattr(parent, module_name, mp_dmoe)
+
+            # - keep track of the name for returning
+            moe_module_names.add(module_name)
 
     except ValueError as e:
         raise ValueError(
@@ -360,4 +384,4 @@ def shard_moe(
         )
 
 
-    return device_mesh[key_dp]
+    return device_mesh[key_dp], moe_module_names

@@ -2,13 +2,15 @@ import torch
 from megablocks.layers import common
 from megablocks.layers.arguments import Arguments
 from megablocks.layers import mpu
+from megablocks.layers.activation_fn import act_fn
 from megablocks.layers.mlp import (
     create_dmoe_expert_weights, scale_gradient,
     resolve_dtensor
 )
-import torch.nn.functional as F
 import stk
 
+# This is the different MLP class used for models that have up_proj, down_proj
+# and gate_proj like Mixtral
 class SparseMLPv2(torch.nn.Module):
 
     def __init__(self, args : Arguments):
@@ -73,8 +75,10 @@ class SparseMLPv2(torch.nn.Module):
         # Perform the expert computation
         hidden_states = stk.Matrix(  # type: ignore
             topo.size(),
-            F.silu(stk.ops.sdd(hidden_states, w1.t(), topo).data)
-            * stk.ops.sdd(hidden_states, w3.t(), topo).data,
+            act_fn(
+                stk.ops.sdd(hidden_states, w1.t(), topo),
+                self.args.activation_fn
+            ).data * stk.ops.sdd(hidden_states, w3.t(), topo).data,
             topo.row_indices,
             topo.column_indices,
             topo.offsets,

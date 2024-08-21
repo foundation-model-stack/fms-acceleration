@@ -5,6 +5,20 @@ training:
 
     # expert-parallel for MoE
     megablocks:
+
+      # The name of the mixture-of-experts class
+      moe_component_class: MixtralSparseMoeBlock
+
+      # The module name of the router in moe_component_class above
+      moe_gate_module_name: gate
+
+      # The module name of the experts in moe_component_class above
+      moe_experts_module_name: experts
+
+      # the mlp version
+      # - for those with only up and down projs, use "v1"
+      # - for those with only up, down and gate projs, use "v2"
+      moe_mlp_impl: v2
     
       # if True, then we shard experts across data parallel dimension
       # - only feasible if world_size divides the number of experts
@@ -17,3 +31,7 @@ training:
       # - NOTE: ep_size=1 does not mean shard_along_dp=True, which would otherwise
       #   be contradictory since ep_size suggests no expert parallel.
       # ep_size: 2
+
+      # the MoE dropless implementation. Currently we only support "dropless_sparse", but
+      # in the future we may support others
+      moe_implementation: dropless_sparse

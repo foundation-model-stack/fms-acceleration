@@ -23,25 +23,39 @@ from transformers import AutoModelForCausalLM
 
 from transformers.models.mixtral.modeling_mixtral import MixtralSparseMoeBlock
 
-# Different Models
-# - MoE Class
-# - has_bias
-# - gate module name
-MODEL_MEGABLOCKS = {
-    "MixtralForCausalLM": (
-        MixtralSparseMoeBlock, False, "gate", "experts"
-    )
-}
 
 class MegablocksMoEAccelerationPlugin(AccelerationPlugin):
 
-    restricted_model_archs = {"MixtralForCausalLM"}
     require_packages = {"megablocks"}
 
     def __init__(self, configurations: Dict[str, Dict]):
         super().__init__(configurations)
 
-        # args
+        # arguments for configuring the mixture-of-experts model with defaults
+        # shown below for Mixtral 7x8b
+        # - 1. component class 
+        self._moe_component_cls = self._check_config_and_maybe_check_values(
+            key="training.moe.megablocks.moe_component_class",
+            default="MixtralSparseMoeBlock",
+        )
+        # - 2. gate_module_name
+        self._gate_module_name = self._check_config_and_maybe_check_values(
+            key="training.moe.megablocks.moe_gate_module_name",
+            default="gate"
+        )
+        # - 3. experts_module_name
+        self._experts_module_name = self._check_config_and_maybe_check_values(
+            key="training.moe.megablocks.moe_experts_module_name",
+            default="experts"
+        )
+        # - 4. mlp version
+        self._mlp_version = self._check_config_and_maybe_check_values(
+            key="training.moe.megablocks.moe_mlp_impl",
+            values=["v1", "v2"],
+            default="v2"
+        )
+
+        # for controlling the type of sharding
         self._shard_along_dp = self._check_config_and_maybe_check_values(
             key="training.moe.megablocks.shard_along_dp",
             values=[True, False],
@@ -56,6 +70,14 @@ class MegablocksMoEAccelerationPlugin(AccelerationPlugin):
                 key="training.moe.megablocks.ep_size",
                 default=1,
             )
+
+        # for the moe_implementation, currently we only use the megablocks
+        # dropless sparse implementation
+        self._shard_along_dp = self._check_config_and_maybe_check_values(
+            key="training.moe.megablocks.moe_implementation",
+            values=["dropless_sparse"],
+            default="dropless_sparse",
+        )
 
     @property
     def requires_custom_loading(self):
@@ -89,28 +111,25 @@ class MegablocksMoEAccelerationPlugin(AccelerationPlugin):
                 "Megablocks expert parallel only works for distributed training."
             )
 
-        # - get model specific items
+        # shard the MOE, and store products required for 
+        # FSDP configuration
         (
-            moe_cls, has_bias, router_name, expert_name, 
-        ) = MODEL_MEGABLOCKS[model.__class__.__name__]
-
-        # FIXME: the dtype checks below are too brittle
-        dp_mesh = shard_moe(
+            dp_mesh, self._moe_component_module_names
+        ) = shard_moe(
             model, 
-            moe_cls, 
+            self._moe_component_cls, 
             checkpoint_name_or_path=model_name,
             rank=rank,
             world_size=world_size,
             ep_size=self._ep_size, 
             moe_kwargs=get_moe_kwargs(
                 model.config, 
-                has_bias=has_bias,
                 fp16=torch_dtype == torch.float16,
                 bf16=torch_dtype == torch.bfloat16,
             ),
             shared_mesh_dim=self._shard_along_dp,
-            router_name=router_name, 
-            expert_name=expert_name,
+            router_name=self._gate_module_name, 
+            expert_name=self._experts_module_name,
 
         )
         # NOTE: Currently, it is a bit troublesome to pass the device_mesh to 
@@ -129,13 +148,10 @@ class MegablocksMoEAccelerationPlugin(AccelerationPlugin):
             accelerator is not None
             and getattr(accelerator.state, "fsdp_plugin", None) is not None
         ):
-            # lora_adapters_switch_ddp_from_fsdp(
-            #     [mod for mod in model.modules() if isinstance(mod, LoraLayer)],
-            #     accelerator.state.fsdp_plugin,
-            # )
-            # FIXME: should be 
             accelerator.state.fsdp_plugin.ignored_modules = [
-                layer.block_sparse_moe for layer in model.model.layers
+                getattr(layer, name)
+                for name in self._moe_component_module_names
+                for layer in model.model.layers
             ]
 
         return callbacks
