@@ -7,6 +7,7 @@ from megablocks.layers.dmlp_registry import _REGISTRY
 from megablocks.layers.mlp import SparseMLP
 from .sparse_mlp2 import SparseMLPv2
 from megablocks.layers.moe import ParallelMLP
+import torch
 
 SPARSE_MLP_IMPL = {
     "v1": SparseMLP,
@@ -19,6 +20,7 @@ SPARSE_MLP_IMPL = {
 def update_mlp_registry(
     mlp_type: str = 'sparse',
     mlp_version: str = 'v2',
+    load_balancing_loss: bool = False,
 ):
 
     # replace the registry to point to the the correct sparse implementation
@@ -42,10 +44,11 @@ def update_mlp_registry(
             return x + self.bias
 
         # in this case we should be returning the router
-        # logits out of the MoeE forward. However, since
-        # the way the code is written now, it si difficult 
-        # to extract these logits out, so at the moment,
-        # we return None as the placeholder.
+        # logits out of the MoE forward. 
+        if load_balancing_loss:
+            return x, torch.log(scores)
+        
+        # otherwise just return None
         return x, None
 
     # replace the forward function. Willing to do this because ParallelMLP

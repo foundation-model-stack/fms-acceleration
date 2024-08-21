@@ -19,9 +19,7 @@ import warnings
 
 # Third Party
 from fms_acceleration import AccelerationPlugin
-from transformers import AutoModelForCausalLM
-
-from transformers.models.mixtral.modeling_mixtral import MixtralSparseMoeBlock
+from transformers import AutoConfig, AutoModelForCausalLM
 
 
 class MegablocksMoEAccelerationPlugin(AccelerationPlugin):
@@ -73,10 +71,17 @@ class MegablocksMoEAccelerationPlugin(AccelerationPlugin):
 
         # for the moe_implementation, currently we only use the megablocks
         # dropless sparse implementation
-        self._shard_along_dp = self._check_config_and_maybe_check_values(
+        self._moe_implementation = self._check_config_and_maybe_check_values(
             key="training.moe.megablocks.moe_implementation",
             values=["dropless_sparse"],
             default="dropless_sparse",
+        )
+        self._moe_implementation = self._moe_implementation.split("_")[1]
+
+        self._load_balancing_loss = self._check_config_and_maybe_check_values(
+            key="training.moe.megablocks.load_balancing_loss",
+            values=[True, False],
+            default=False,
         )
 
     @property
@@ -88,10 +93,27 @@ class MegablocksMoEAccelerationPlugin(AccelerationPlugin):
         from .megablocks_utils.config_utils import update_mlp_registry
         from .megablocks_utils.shard_moe_utils import shard_moe, get_moe_kwargs
 
+        # - check the config
+        if self._load_balancing_loss and not hasattr(
+            AutoConfig.from_pretrained(model_name),
+            "output_router_logits"
+        ):
+            warnings.warn(
+                "load_balancing_loss=True but "
+                "the model '{model_name}' config not have 'output_router_logits' "
+                "in its config, hence it might not support load balancing and "
+                "fallback to load_balancing_loss=False."
+            )
+            self._load_balancing_loss = False
+
         # this one does a forward patching on MLP, but needs to be fixed
         # properly as the load balancing loss is currently not properly
         # handled
-        update_mlp_registry()
+        update_mlp_registry(
+            self._moe_implementation,
+            self._mlp_version,
+            self._load_balancing_loss
+        )
 
         # get additional parameters
         torch_dtype = kwargs.get("torch_dtype", torch.float32)
@@ -100,6 +122,10 @@ class MegablocksMoEAccelerationPlugin(AccelerationPlugin):
         model = AutoModelForCausalLM.from_pretrained(
             model_name, **kwargs
         )
+
+        # set this in the config, which will be picked up by the forward
+        # function to go into the load_balancing loss
+        model.config.output_router_logits = self._load_balancing_loss
 
         rank, world_size = 0, 1
         if torch.distributed.is_initialized():
