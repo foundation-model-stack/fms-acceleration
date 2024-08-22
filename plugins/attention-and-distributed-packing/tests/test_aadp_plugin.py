@@ -13,27 +13,28 @@
 # limitations under the License.
 
 # Standard
+from random import randint
 import os
 
 # Third Party
+from datasets import Dataset  # pylint: disable=import-error
 from fms_acceleration.utils import instantiate_framework, read_configuration
+import numpy as np
+import torch
 
 # First Party
 from fms_acceleration_aadp import (
+    MultipackDataloaderAccelerationPlugin,
     PaddingFreeAccelerationPlugin,
-    MultipackDataloaderAccelerationPlugin
 )
-from fms_acceleration_aadp.multipack_sampler import MultipackDistributedBatchSampler
 from fms_acceleration_aadp.aadp_utils import calculate_token_lengths
-from datasets import Dataset
-from random import randint
-import torch
-import numpy as np
+from fms_acceleration_aadp.multipack_sampler import MultipackDistributedBatchSampler
 
 # configuration
 DIRNAME = os.path.dirname(__file__)
 CONFIG_PATH_PADDINGFREE = os.path.join(DIRNAME, "../configs/padding_free.yaml")
 CONFIG_PATH_MULTIPACK = os.path.join(DIRNAME, "../configs/multipack.yaml")
+
 
 def test_framework_installs_aadp_padding_free_plugin():
     """
@@ -45,23 +46,22 @@ def test_framework_installs_aadp_padding_free_plugin():
         for plugin in framework.active_plugins:
             assert isinstance(plugin[1], PaddingFreeAccelerationPlugin)
 
+
 def test_framework_installs_aadp_multipack_and_paddingfree_plugins():
     """
     Test framework installs both multipack and paddingfree plugins
     """
     pf_config = read_configuration(CONFIG_PATH_PADDINGFREE)
     mp_config = read_configuration(CONFIG_PATH_MULTIPACK)
-    config = {"training": {**pf_config['training'], **mp_config['training']}}
-    with instantiate_framework(
-        config, require_packages_check=False
-    ) as framework:
+    config = {"training": {**pf_config["training"], **mp_config["training"]}}
+    with instantiate_framework(config, require_packages_check=False) as framework:
         assert len(framework.active_plugins) == 2
         for plugin in framework.active_plugins:
-            assert (
-                isinstance(plugin[1], PaddingFreeAccelerationPlugin)
-                or
-                isinstance(plugin[1], MultipackDataloaderAccelerationPlugin)
+            assert isinstance(
+                plugin[1],
+                (MultipackDataloaderAccelerationPlugin, PaddingFreeAccelerationPlugin),
             )
+
 
 def test_multipack_sampler_assigns_balanced_tokens():
     """
@@ -87,18 +87,18 @@ def test_multipack_sampler_assigns_balanced_tokens():
     tokens_across_rank_multipack = []
     for rank in range(num_gpus):
         sampler = MultipackDistributedBatchSampler(
-                    batch_max_length=max_batch_len,
-                    lengths=lengths,
-                    num_replicas=num_gpus,
-                    rank=rank,
-                    seed=seed,
-                    padding=False,
-                )
+            batch_max_length=max_batch_len,
+            lengths=lengths,
+            num_replicas=num_gpus,
+            rank=rank,
+            seed=seed,
+            padding=False,
+        )
         batches = sampler.generate_batches()
         tokens_across_batches = []
         for batch in batches:
             # count all the tokens in the batch
-            num_tokens_across_one_batch = sum([lengths[idx] for idx in batch])
+            num_tokens_across_one_batch = sum(lengths[idx] for idx in batch)
             tokens_across_batches.append(num_tokens_across_one_batch)
         # take average number of tokens across the batches
         average_tokens_across_batches = np.ceil(np.mean(tokens_across_batches))
@@ -111,12 +111,11 @@ def test_multipack_sampler_assigns_balanced_tokens():
     split_indices_to_ranks = np.array_split(perm_indices, num_gpus)
     # bin indices in each rank to respective batches
     split_indices_to_batches = [
-        np.array_split(split, batch_size_per_device) 
-        for split in split_indices_to_ranks
+        np.array_split(split, batch_size_per_device) for split in split_indices_to_ranks
     ]
     for rank in split_indices_to_batches:
         # count all the tokens in the batch
-        token_length_in_batch = [sum([lengths[idx] for idx in batch]) for batch in rank]
+        token_length_in_batch = [sum(lengths[idx] for idx in batch) for batch in rank]
         # take average number of tokens across the batches
         tokens_across_rank_random.append(np.ceil(np.mean(token_length_in_batch)))
 

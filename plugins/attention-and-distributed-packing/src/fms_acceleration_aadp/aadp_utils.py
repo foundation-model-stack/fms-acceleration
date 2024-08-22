@@ -20,6 +20,7 @@ import warnings
 from transformers import DefaultDataCollator, default_data_collator
 import numpy as np
 
+
 @dataclass
 class DataCollatorWithFlattening(DefaultDataCollator):
     """
@@ -55,6 +56,7 @@ class DataCollatorWithFlattening(DefaultDataCollator):
             else:
                 ret["labels"] += [-100] + feature["input_ids"][1:]
         return default_data_collator([ret], return_tensors)
+
 
 def calculate_token_lengths(dataset, num_workers):
     lengths = np.array(
