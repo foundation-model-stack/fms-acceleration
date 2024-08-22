@@ -182,9 +182,16 @@ def load_sharded_experts_onto_device(
                         T = T.t()
                 data.append(T)
 
+            # get the module we want to shard
+            name = weight_name.split('.')
+            path, name = ".".join(name[:-1]), name[-1]
+            mod = dmoe.get_submodule(path)
+            mod_dtype = getattr(mod, name).dtype
+
             # the megablocks dmoe experts the expert features to be on DIM_EXPERT.
             # - concat on dim 0 and distribute
-            param = torch.concat(data, dim=DIM_EXPERT)
+            # - cast to the correct dtype for the module
+            param = torch.concat(data, dim=DIM_EXPERT).to(mod_dtype)
             if KEY_DMOE_ROUTER not in weight_name:
                 param = torch.nn.Parameter(
                     distribute_tensor(param, device_mesh, placements)
@@ -196,9 +203,6 @@ def load_sharded_experts_onto_device(
                 )
                 
             # register the sharded parameter onto the megablocks.dmoe
-            name = weight_name.split('.')
-            path, name = ".".join(name[:-1]), name[-1]
-            mod = dmoe.get_submodule(path)
             mod.register_parameter(name, param)
 
 def shard_moe(
