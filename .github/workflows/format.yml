@@ -30,6 +30,7 @@ jobs:
           - "accelerated-peft"
           - "fused-ops-and-kernels"
           - "attention-and-distributed-packing"
+          - "accelerated-moe"
 
     steps:
       - uses: actions/checkout@v4

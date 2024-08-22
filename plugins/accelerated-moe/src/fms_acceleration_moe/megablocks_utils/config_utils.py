@@ -1,33 +1,39 @@
-# utilities to update megablocks to register the MLP_v2 that 
-# handles gate, up, down projections
+# utilities to update megablocks to register various things
+# e.g, the MLP_v2 that handles gate, up, down projections
 
-from megablocks.layers.dmlp_registry import _REGISTRY
-
-
-from megablocks.layers.mlp import SparseMLP
-from .sparse_mlp2 import SparseMLPv2
-from megablocks.layers.moe import ParallelMLP
+# Third Party
 import torch
 
-SPARSE_MLP_IMPL = {
-    "v1": SparseMLP,
-    "v2": SparseMLPv2,
-}
 
 # this function ensures that the megablocks packaged is configured to use
 # the correct SparseMLP implementation
 # - at the moment not considering the GroupedMLP implementations
 def update_mlp_registry(
-    mlp_type: str = 'sparse',
-    mlp_version: str = 'v2',
+    mlp_type: str = "sparse",
+    mlp_version: str = "v2",
     load_balancing_loss: bool = False,
 ):
+    # guarded
+    # Third Party
+    # pylint: disable=import-error,import-outside-toplevel
+    from megablocks.layers.dmlp_registry import _REGISTRY
+    from megablocks.layers.mlp import SparseMLP
+    from megablocks.layers.moe import ParallelMLP
+
+    # Local
+    from .sparse_mlp2 import SparseMLPv2
+
+    SPARSE_MLP_IMPL = {
+        "v1": SparseMLP,
+        "v2": SparseMLPv2,
+    }
 
     # replace the registry to point to the the correct sparse implementation
-    if mlp_type == 'sparse':
-        assert mlp_version in SPARSE_MLP_IMPL, \
-            f"Megablocks only support sparse mlp versions: {','.join(SPARSE_MLP_IMPL.keys())}"
-        _REGISTRY['mlp']['sparse'] = SPARSE_MLP_IMPL[mlp_version]
+    if mlp_type == "sparse":
+        assert (
+            mlp_version in SPARSE_MLP_IMPL
+        ), f"Megablocks only support sparse mlp versions: {','.join(SPARSE_MLP_IMPL.keys())}"
+        _REGISTRY["mlp"]["sparse"] = SPARSE_MLP_IMPL[mlp_version]
     else:
         raise NotImplementedError("Currently only supports sparse MLP implementations.")
 
@@ -44,10 +50,10 @@ def update_mlp_registry(
             return x + self.bias
 
         # in this case we should be returning the router
-        # logits out of the MoE forward. 
+        # logits out of the MoE forward.
         if load_balancing_loss:
             return x, torch.log(scores)
-        
+
         # otherwise just return None
         return x, None
 
@@ -56,7 +62,6 @@ def update_mlp_registry(
     # 1. we do not care about reversing the patch
     # 2. we have control on where this is called, and we know to call it
     #    before our code accesses this function. Hence, we view this as
-    #    a hardcoded modification to the megablocks package more than a 
+    #    a hardcoded modification to the megablocks package more than a
     #    patch.
     ParallelMLP.forward = forward
-    

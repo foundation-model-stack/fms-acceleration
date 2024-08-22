@@ -14,14 +14,15 @@
 
 # Standard
 from typing import Dict
-import torch
 import warnings
 
 # Third Party
 from fms_acceleration import AccelerationPlugin
 from transformers import AutoConfig, AutoModelForCausalLM
+import torch
 
 
+# pylint: disable=too-many-instance-attributes
 class MegablocksMoEAccelerationPlugin(AccelerationPlugin):
 
     require_packages = {"megablocks"}
@@ -31,26 +32,24 @@ class MegablocksMoEAccelerationPlugin(AccelerationPlugin):
 
         # arguments for configuring the mixture-of-experts model with defaults
         # shown below for Mixtral 7x8b
-        # - 1. component class 
+        # - 1. component class
         self._moe_component_cls = self._check_config_and_maybe_check_values(
             key="training.moe.megablocks.moe_component_class",
             default="MixtralSparseMoeBlock",
         )
         # - 2. gate_module_name
         self._gate_module_name = self._check_config_and_maybe_check_values(
-            key="training.moe.megablocks.moe_gate_module_name",
-            default="gate"
+            key="training.moe.megablocks.moe_gate_module_name", default="gate"
         )
         # - 3. experts_module_name
         self._experts_module_name = self._check_config_and_maybe_check_values(
-            key="training.moe.megablocks.moe_experts_module_name",
-            default="experts"
+            key="training.moe.megablocks.moe_experts_module_name", default="experts"
         )
         # - 4. mlp version
         self._mlp_version = self._check_config_and_maybe_check_values(
             key="training.moe.megablocks.moe_mlp_impl",
             values=["v1", "v2"],
-            default="v2"
+            default="v2",
         )
 
         # for controlling the type of sharding
@@ -90,13 +89,14 @@ class MegablocksMoEAccelerationPlugin(AccelerationPlugin):
 
     def model_loader(self, model_name: str, **kwargs):
         # guarded
+        # Local
+        # pylint: disable=import-outside-toplevel
         from .megablocks_utils.config_utils import update_mlp_registry
-        from .megablocks_utils.shard_moe_utils import shard_moe, get_moe_kwargs
+        from .megablocks_utils.shard_moe_utils import get_moe_kwargs, shard_moe
 
         # - check the config
         if self._load_balancing_loss and not hasattr(
-            AutoConfig.from_pretrained(model_name),
-            "output_router_logits"
+            AutoConfig.from_pretrained(model_name), "output_router_logits"
         ):
             warnings.warn(
                 "load_balancing_loss=True but "
@@ -110,18 +110,14 @@ class MegablocksMoEAccelerationPlugin(AccelerationPlugin):
         # properly as the load balancing loss is currently not properly
         # handled
         update_mlp_registry(
-            self._moe_implementation,
-            self._mlp_version,
-            self._load_balancing_loss
+            self._moe_implementation, self._mlp_version, self._load_balancing_loss
         )
 
         # get additional parameters
         torch_dtype = kwargs.get("torch_dtype", torch.float32)
 
         # load the model
-        model = AutoModelForCausalLM.from_pretrained(
-            model_name, **kwargs
-        )
+        model = AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
 
         # set this in the config, which will be picked up by the forward
         # function to go into the load_balancing loss
@@ -137,28 +133,26 @@ class MegablocksMoEAccelerationPlugin(AccelerationPlugin):
                 "Megablocks expert parallel only works for distributed training."
             )
 
-        # shard the MOE, and store products required for 
+        # shard the MOE, and store products required for
         # FSDP configuration
-        (
-            dp_mesh, self._moe_component_module_names
-        ) = shard_moe(
-            model, 
-            self._moe_component_cls, 
+        # pylint: disable=unused-variable
+        (dp_mesh, self._moe_component_module_names) = shard_moe(
+            model,
+            self._moe_component_cls,
             checkpoint_name_or_path=model_name,
             rank=rank,
             world_size=world_size,
-            ep_size=self._ep_size, 
+            ep_size=self._ep_size,
             moe_kwargs=get_moe_kwargs(
-                model.config, 
+                model.config,
                 fp16=torch_dtype == torch.float16,
                 bf16=torch_dtype == torch.bfloat16,
             ),
             shared_mesh_dim=self._shard_along_dp,
-            router_name=self._gate_module_name, 
+            router_name=self._gate_module_name,
             expert_name=self._experts_module_name,
-
         )
-        # NOTE: Currently, it is a bit troublesome to pass the device_mesh to 
+        # NOTE: Currently, it is a bit troublesome to pass the device_mesh to
         #  the FSDP constructor, so we do not do that.
         # - therefore FSDP will always shard on world_size over the default process
         #   group
@@ -181,6 +175,7 @@ class MegablocksMoEAccelerationPlugin(AccelerationPlugin):
             ]
 
         return callbacks
+
 
 # register
 AccelerationPlugin.register_plugin(
