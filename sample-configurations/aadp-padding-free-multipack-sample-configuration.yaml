@@ -3,14 +3,14 @@
 # Each stanza incorporates various configurations for 
 # different fine-tuning / training tasks.
 plugins:
-    # Configurations to accelerate data packing/padding in training
+  # Configurations to accelerate data packing/padding in training
   training:
 
-      # attention module configurations
-      # e.g. padding-free modifications to attention layer
+    # attention module configurations
+    # e.g. padding-free modifications to attention layer
     attention:
 
-        # this controls the confgurations for padding free computation of flash attention
+      # this controls the confgurations for padding free computation of flash attention
       padding_free:
         method: huggingface
     dataloader:
@@ -18,5 +18,5 @@ plugins:
       # multipack dataloader
       multipack:
 
-        # number of processes to map
+        # number of processes used to calculate dataset lengths
         num_workers: 16
