@@ -12,20 +12,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pytest
+# Third Party
+from accelerate import Accelerator
+import pytest  # pylint: disable=import-error
+import torch
 
+# First Party
 from fms_acceleration.accelerator_patcher import (
-    AcceleratorRuleReplace,
     AcceleratorPatcher,
     AcceleratorPatcherComponent,
+    AcceleratorRuleReplace,
 )
 from fms_acceleration.utils.test_utils import instantiate_accel_patcher
 
-from accelerate import Accelerator
-import torch
-from datasets import Dataset
-
 RULE_ID = "test"
+
 
 def test_AP_rule_raises_correct_errors():
     # not specifying any replacement objects will throw an error
@@ -34,10 +35,10 @@ def test_AP_rule_raises_correct_errors():
         match="either replacement or replacement should be specified",
     ):
         AcceleratorRuleReplace(
-            rule_id = RULE_ID,
-            component = AcceleratorPatcherComponent.data_loader,
-            replacement = None,
-            replacement_builder = None,
+            rule_id=RULE_ID,
+            component=AcceleratorPatcherComponent.data_loader,
+            replacement=None,
+            replacement_builder=None,
         )
 
     # Ensure that rule registration throws error when attempting
@@ -48,11 +49,14 @@ def test_AP_rule_raises_correct_errors():
         match="Invalid special behavior kwargs in",
     ):
         AcceleratorRuleReplace(
-            rule_id = RULE_ID,
-            component = AcceleratorPatcherComponent.data_loader,
-            replacement = torch.utils.data.DataLoader(Dataset),
-            kwargs = {'unsupported_kwarg': True},
+            rule_id=RULE_ID,
+            component=AcceleratorPatcherComponent.data_loader,
+            replacement=torch.utils.data.DataLoader(
+                torch.utils.data.Dataset(),
+            ),
+            kwargs={"unsupported_kwarg": True},
         )
+
 
 def test_AP_failing_prereq_check_raises_error():
     # 1. register AP rule
@@ -61,22 +65,23 @@ def test_AP_failing_prereq_check_raises_error():
     # 4. call accelerator prepare
     # 5. ensure that pre-req check raises error when condition not satisfied
     message = "pre-requisite check failed"
+
     def pre_req_check(dataloader):
-        raise Exception(message)
+        raise ValueError(message)
 
     with pytest.raises(
-        Exception,
+        ValueError,
         match=message,
     ):
         with instantiate_accel_patcher():
-            dummy_dataloader = torch.utils.data.DataLoader(Dataset)
+            dummy_dataloader = torch.utils.data.DataLoader(torch.utils.data.Dataset())
 
             # register the replacement rule
             AcceleratorPatcher.replace(
-                rule_id = RULE_ID,
-                component = AcceleratorPatcherComponent.data_loader,
-                replacement = dummy_dataloader,
-                pre_requisite_check = pre_req_check,
+                rule_id=RULE_ID,
+                component=AcceleratorPatcherComponent.data_loader,
+                replacement=dummy_dataloader,
+                pre_requisite_check=pre_req_check,
             )
             # instantiate an accelerator object
             accelerator = Accelerator()
@@ -84,6 +89,7 @@ def test_AP_failing_prereq_check_raises_error():
             AcceleratorPatcher.patch(accelerator)
             # call accelerator prepare
             accelerator.prepare(dummy_dataloader)
+
 
 def test_AP_patch_correctly_with_simple_replacement():
     # 1. register rule to replace collate fn
@@ -94,14 +100,12 @@ def test_AP_patch_correctly_with_simple_replacement():
         return "replacement successful"
 
     with instantiate_accel_patcher():
-        dataloader = torch.utils.data.DataLoader(
-            torch.utils.data.Dataset()
-        )
+        dataloader = torch.utils.data.DataLoader(torch.utils.data.Dataset())
         # register the replacement rule for new collate fn
         AcceleratorPatcher.replace(
-            rule_id = RULE_ID,
-            component = AcceleratorPatcherComponent.data_collator,
-            replacement = replaced_collater,
+            rule_id=RULE_ID,
+            component=AcceleratorPatcherComponent.data_collator,
+            replacement=replaced_collater,
         )
         # instantiate an accelerator object
         accelerator = Accelerator()
@@ -110,6 +114,7 @@ def test_AP_patch_correctly_with_simple_replacement():
         # call accelerator prepare
         dataloader = accelerator.prepare(dataloader)
         assert dataloader.collate_fn() == "replacement successful"
+
 
 def test_AP_patch_correctly_with_replacement_builder():
     # 1. Create a builder function for a new dataloader class
@@ -122,22 +127,19 @@ def test_AP_patch_correctly_with_replacement_builder():
             super().__init__(*args, **kwargs)
 
     def build_new_dataloader(
-        dataloader: torch.utils.data.DataLoader,
-        accelerator: Accelerator
+        dataloader: torch.utils.data.DataLoader, accelerator: Accelerator
     ):
         return NewDataLoader(
             torch.utils.data.Dataset(),
         )
 
     with instantiate_accel_patcher():
-        original_dataloader = torch.utils.data.DataLoader(
-            torch.utils.data.Dataset()
-        )
+        original_dataloader = torch.utils.data.DataLoader(torch.utils.data.Dataset())
         # register the replacement rule
         AcceleratorPatcher.replace(
-            rule_id = RULE_ID,
-            component = AcceleratorPatcherComponent.data_loader,
-            replacement_builder = build_new_dataloader,
+            rule_id=RULE_ID,
+            component=AcceleratorPatcherComponent.data_loader,
+            replacement_builder=build_new_dataloader,
             skip_prepare=True,
         )
         # instantiate an accelerator object
