@@ -15,6 +15,7 @@
 # Standard
 from types import MethodType
 from typing import Dict, Tuple
+import warnings
 
 # Third Party
 from accelerate import Accelerator
@@ -25,7 +26,6 @@ from transformers import TrainingArguments
 
 # from accelerate.data_loader import DataLoaderShard
 import torch
-import warnings
 
 
 class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
@@ -84,10 +84,12 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
         )
 
         # Local
-        from .multipack_sampler import ( # pylint: disable=import-outside-toplevel
+        from .aadp_utils import (  # pylint: disable=import-outside-toplevel
+            calculate_token_lengths,
+        )
+        from .multipack_sampler import (  # pylint: disable=import-outside-toplevel
             MultipackDistributedBatchSampler,
         )
-        from .aadp_utils import calculate_token_lengths # pylint: disable=import-outside-toplevel
 
         rank, num_bins = 0, 1
         if torch.distributed.is_initialized():
@@ -122,8 +124,8 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
                     "Waiting for main process to perform the mapping."
                     "If the dataset is large, some processes might time out,"
                     "You may need to increase the timeout limit or the number "
-                    f"of workers processing the dataset > {num_workers}."
-                    )
+                    f"of workers processing the dataset > {self.num_workers}."
+                )
                 torch.distributed.barrier()
 
             lengths = calculate_token_lengths(dataset, num_workers=self.num_workers)
@@ -131,8 +133,9 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
             if torch.distributed.get_rank() == 0:
                 torch.distributed.barrier()
 
-
-            self._max_number_tokens  = train_args.per_device_train_batch_size * lengths.mean()
+            self._max_number_tokens = (
+                train_args.per_device_train_batch_size * lengths.mean()
+            )
 
             # prepare the multipack distributed batch sampler
             sampler = MultipackDistributedBatchSampler(
