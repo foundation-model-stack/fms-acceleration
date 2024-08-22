@@ -22,11 +22,10 @@ from fms_acceleration import AccelerationPlugin
 from peft import LoraConfig
 from torch.utils.data import DataLoader
 from transformers import TrainingArguments
-import numpy as np
-import warnings
 
 # from accelerate.data_loader import DataLoaderShard
 import torch
+import warnings
 
 
 class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
@@ -85,10 +84,10 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
         )
 
         # Local
-        # pylint: disable=import-outside-toplevel
-        from .multipack_sampler import (
+        from .multipack_sampler import ( # pylint: disable=import-outside-toplevel
             MultipackDistributedBatchSampler,
         )
+        from .aadp_utils import calculate_token_lengths # pylint: disable=import-outside-toplevel
 
         rank, num_bins = 0, 1
         if torch.distributed.is_initialized():
@@ -123,20 +122,15 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
                     "Waiting for main process to perform the mapping."
                     "If the dataset is large, some processes might time out,"
                     "You may need to increase the timeout limit or the number "
-                    f"of workers processing the dataset > {self.num_workers}."
+                    f"of workers processing the dataset > {num_workers}."
                     )
                 torch.distributed.barrier()
 
-            lengths = np.array(
-                dataset.map(
-                    lambda x: {"len": len(x["input_ids"])},
-                    num_proc=self.num_workers,
-                    load_from_cache_file=True,
-                )["len"]
-            )
-            
+            lengths = calculate_token_lengths(dataset, num_workers=self.num_workers)
+
             if torch.distributed.get_rank() == 0:
                 torch.distributed.barrier()
+
 
             self._max_number_tokens  = train_args.per_device_train_batch_size * lengths.mean()
 
