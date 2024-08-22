@@ -24,7 +24,7 @@ import logging
 import torch
 
 # want to use the transformers logger, but a bit of pain
-logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
+logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 # logger.setLevel(logging._get_default_logging_level())
 logger.setLevel(logging.DEBUG)
 # logger.addHandler(logging._default_handler)
