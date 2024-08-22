@@ -22,13 +22,15 @@ from fms_acceleration.model_patcher import (
     ModelPatcherTrigger,
     patch_target_module,
 )
-
-from .model_patcher_test_utils import create_module_class, isolate_test_module_fixtures
-from .model_patcher_fixtures import module4
 from fms_acceleration.utils.test_utils import instantiate_model_patcher
+
+# Local
+from .model_patcher_fixtures import module4
+from .model_patcher_test_utils import create_module_class, isolate_test_module_fixtures
 from .test_model_patcher_helpers import DUMMY_RULE_ID
 
-#Test patching of model attribute
+
+# Test patching of model attribute
 def test_simple_forward_rule_with_mp_replaces_old_forward():
     """
     Ensure that a child submodule forward function
@@ -71,8 +73,8 @@ def test_simple_forward_rule_with_mp_replaces_old_forward():
         with instantiate_model_patcher():
             model = module4.Module4Class()
             SubModule1 = create_module_class(
-                "SubModule1", 
-                namespaces={"forward": lambda self: "unpatched_forward_function"}
+                "SubModule1",
+                namespaces={"forward": lambda self: "unpatched_forward_function"},
             )
             model.add_module("submodule_1", SubModule1())
             rule = ModelPatcherRule(
@@ -84,6 +86,7 @@ def test_simple_forward_rule_with_mp_replaces_old_forward():
             ModelPatcher.patch(model)
 
             assert model.submodule_1.forward() == "patched_forward_function"
+
 
 def test_import_and_maybe_reload_rule_with_mp_replaces_old_attribute():
     """
@@ -118,6 +121,7 @@ def test_import_and_maybe_reload_rule_with_mp_replaces_old_attribute():
             )
             ModelPatcher.patch(model)
             assert isinstance(module4.Module4Class().attribute, PatchedModuleClass)
+
 
 def test_mp_throws_error_with_multiple_reloads_on_same_target():
     """
@@ -176,7 +180,7 @@ def test_mp_throws_error_with_multiple_reloads_on_same_target():
         patch_target_module(
             "tests.model_patcher_fixtures.module4.module5.module5_1.Module5Class",
             PatchedModuleClass,
-            "tests.model_patcher_fixtures.module4.module5"
+            "tests.model_patcher_fixtures.module4.module5",
         )
 
         assert isinstance(module4.module5.Module5Class(), PatchedModuleClass)
@@ -223,6 +227,7 @@ def test_mp_throws_error_with_multiple_reloads_on_same_target():
                 # longer target path
                 ModelPatcher.patch(model)
 
+
 def test_mp_throws_warning_with_multiple_patches():
     """
     Ensure for each module, only one forward patch is implemented on it.
@@ -247,21 +252,21 @@ def test_mp_throws_warning_with_multiple_patches():
 
                 model = module4.Module4Class()
                 SubModule1 = create_module_class(
-                    "SubModule1", 
-                    namespaces={"forward": lambda self: "unpatched_forward_function"}
+                    "SubModule1",
+                    namespaces={"forward": lambda self: "unpatched_forward_function"},
                 )
                 model.add_module("submodule_1", SubModule1())
 
                 ModelPatcher.register(
                     ModelPatcherRule(
-                        rule_id=DUMMY_RULE_ID+".1",
+                        rule_id=DUMMY_RULE_ID + ".1",
                         trigger=ModelPatcherTrigger(check=SubModule1),
                         forward=lambda self: "patched_forward_function",
                     )
                 )
                 ModelPatcher.register(
                     ModelPatcherRule(
-                        rule_id=DUMMY_RULE_ID+".2",
+                        rule_id=DUMMY_RULE_ID + ".2",
                         trigger=ModelPatcherTrigger(check=SubModule1),
                         forward=lambda self: "patched_forward_function_2",
                     )
@@ -274,6 +279,7 @@ def test_forward_builder_rule_with_mp_replaces_old_forward():
     Ensure that patching a model with a rule using forward_builder argument will
     replace the children module forwards
     """
+
     def is_module_type_B(module):
         if hasattr(module, "B"):
             return True
@@ -296,7 +302,8 @@ def test_forward_builder_rule_with_mp_replaces_old_forward():
             # 4. Ensure all submodule forwards are patched
 
             SubModule1 = create_module_class(
-                "SubModule1", namespaces={"forward": lambda X: "unpatched_forward_function"}
+                "SubModule1",
+                namespaces={"forward": lambda X: "unpatched_forward_function"},
             )
             SubModule1A = create_module_class(
                 "SubModule1A", parent_class=SubModule1, namespaces={"A": "attributeA"}
@@ -305,8 +312,11 @@ def test_forward_builder_rule_with_mp_replaces_old_forward():
                 "SubModule1B", parent_class=SubModule1, namespaces={"B": "attributeB"}
             )
             SubModule2 = create_module_class(
-                "SubModule2", 
-                namespaces={"C": "attributeC", "forward": lambda X: "unpatched_forward_function"}
+                "SubModule2",
+                namespaces={
+                    "C": "attributeC",
+                    "forward": lambda X: "unpatched_forward_function",
+                },
             )
 
             model = module4.module5.Module5Class()
@@ -320,8 +330,14 @@ def test_forward_builder_rule_with_mp_replaces_old_forward():
             ):
                 return [
                     (ModelPatcherTrigger(check=SubModule1A), patched_forward_function),
-                    (ModelPatcherTrigger(check=is_module_type_B), patched_forward_function),
-                    (ModelPatcherTrigger(check=is_module_type_C), patched_forward_function),
+                    (
+                        ModelPatcherTrigger(check=is_module_type_B),
+                        patched_forward_function,
+                    ),
+                    (
+                        ModelPatcherTrigger(check=is_module_type_C),
+                        patched_forward_function,
+                    ),
                 ]
 
             ModelPatcher.register(
@@ -329,7 +345,7 @@ def test_forward_builder_rule_with_mp_replaces_old_forward():
                     rule_id=DUMMY_RULE_ID,
                     trigger=ModelPatcherTrigger(check=module4.module5.Module5Class),
                     forward_builder=build_list_of_triggers,
-                    )
+                )
             )
 
             ModelPatcher.patch(model)
