@@ -64,10 +64,9 @@ def test_framework_installs_aadp_multipack_and_paddingfree_plugins():
 
 def test_multipack_sampler_assigns_balanced_tokens():
     """
-    Ensure that the multipack sampler produces even batches
-    1. 
+    Ensure that the multipack sampler load balances the tokens amongst the GPUS 
     """
-    # Build a test dataset
+    # 1. Build a test dataset
     dataset = Dataset.from_list(
         [
             {"input_ids": torch.randint(0, 1000, (randint(256, 1024),))}
