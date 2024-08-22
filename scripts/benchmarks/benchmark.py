@@ -360,10 +360,18 @@ class ScenarioMatrix:
             if key == "framework_config":
                 # if acceleration_config_map is None, then do not do mapping
                 if acceleration_config_map:
+
+                    # - we allow k to be None to indicate we do not wish to 
+                    #   set a config for that matrix entry. However, we do not
+                    #   check for multiple None's, so be careful.
                     val = [
-                        acceleration_config_map[k]
+                        (
+                            acceleration_config_map[k] 
+                            if k is not None 
+                            else None
+                        )
                         for k in val
-                        if k in acceleration_config_map
+                        if k in acceleration_config_map or k is None
                     ]
             setattr(self, key, val)
 

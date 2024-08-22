@@ -96,6 +96,7 @@ scenarios:
 
     -   name: accelerated-moe-megablocks
         framework_config: 
+            - # without acceleration
             - moe-megablocks
         arguments:
             learning_rate: 5e-5
@@ -105,6 +106,5 @@ scenarios:
             logging_steps: 1
             packing: False
             adam_epsilon: 1e-8
-
             model_name_or_path: 
                 - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
