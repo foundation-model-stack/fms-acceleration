@@ -1,3 +1,17 @@
+# Copyright The FMS HF Tuning Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 # Standard
 from collections import defaultdict
 from contextlib import ExitStack
@@ -196,13 +210,15 @@ def load_sharded_experts_onto_device(
             # - concat on dim 0 and distribute
             # - cast to the correct dtype for the module
             param = torch.concat(data, dim=DIM_EXPERT).to(mod_dtype)
-            if KEY_DMOE_ROUTER not in weight_name:
-                param = torch.nn.Parameter(
-                    distribute_tensor(param, device_mesh, placements)
-                )
-            else:
-                # - do not shard the router but load onto device as well
-                param = torch.nn.Parameter(param.to(torch.cuda.current_device()))
+
+            _placements = placements
+            if KEY_DMOE_ROUTER in weight_name:
+                # - the router needs to be replicated
+                _placements = [Replicate() for _ in range(len(placements))]
+
+            param = torch.nn.Parameter(
+                distribute_tensor(param, device_mesh, _placements)
+            )
 
             # register the sharded parameter onto the megablocks.dmoe
             mod.register_parameter(name, param)
