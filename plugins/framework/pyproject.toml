@@ -22,11 +22,12 @@ classifiers=[
     "Programming Language :: Python :: 3.11",
 ]
 dependencies = [
-  "numpy<2.0", # numpy needs to be bounded due to incompatiblity with current torch<2.3
-  "torch>2.2",
-  "transformers<4.40",
+  "numpy",
+  "torch>2.3",
+  "transformers",
   "peft",
   "accelerate",
+  "pandas",
 ]
 
 [tool.hatch.build.targets.wheel]
