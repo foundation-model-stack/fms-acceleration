@@ -25,7 +25,7 @@ To reproduce the benchmarks, simply run the following commands,
 Reproduce [Padding Free on A100 80GB](scripts/benchmarks/refs_orca/a100_80gb_pf.csv)
 `bash scripts/run_benchmarks.sh "1 2" "4 8" benchmark_outputs scenarios-orca.yaml "none"`
 
-Reproduce [Multi Pack](scripts/benchmarks/refs_orca/multipack.csv)
+Reproduce [MultiPack on A100 80GB](scripts/benchmarks/refs_orca/a100_80gb_mp.csv)
 `bash scripts/run_benchmarks.sh "2 4 8" "16 32 64" benchmark_outputs scenarios-orca.yaml "padding-free"`
 
 ## Known Issues
