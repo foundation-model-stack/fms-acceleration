@@ -13,14 +13,12 @@
 # limitations under the License.
 
 # Standard
-from random import randint
 import os
 
 # Third Party
 from datasets import Dataset  # pylint: disable=import-error
 from fms_acceleration.utils import instantiate_framework, read_configuration
 import numpy as np
-import torch
 
 # First Party
 from fms_acceleration_aadp import (
@@ -72,15 +70,28 @@ def test_multipack_sampler_assigns_balanced_tokens():
     num_samples = 10000
     seed = 42
     num_processes = 4
+    min_token = 0
+    max_token = 1000
+    min_seq_len = 256
+    max_seq_len = 1024
+    rng = np.random.default_rng(seed=seed)
 
     # 1. Build a test dataset
     dataset = Dataset.from_list(
         [
-            {"input_ids": torch.randint(0, 1000, (randint(256, 1024),))}
+            {
+                "input_ids": rng.integers(
+                    low=min_token,
+                    high=max_token,
+                    size=(rng.integers(
+                        min_seq_len,
+                        max_seq_len
+                    )),
+            )}
             for _ in range(num_samples)
         ]
     )
-    lengths = calculate_token_lengths(dataset, num_workers=num_workers)
+    lengths = calculate_token_lengths(dataset, num_processes=num_processes)
 
     # 2.  generate a multipack subset of indices
     max_batch_len = batch_size_per_device * lengths.mean()
@@ -105,19 +116,25 @@ def test_multipack_sampler_assigns_balanced_tokens():
         tokens_across_rank_multipack.append(average_tokens_across_batches)
 
     # 3. generate a random sampled subset of indices
-    tokens_across_rank_random = []
-    perm_indices = torch.randperm(len(dataset)).numpy()
+    mean_tokens_per_rank_random = []
+    perm_indices = rng.permutation(len(dataset))
     # bin indices to respective ranks
+    # this is a list of list where each item is a list of indices
+    # assigned to the respective rank
     split_indices_to_ranks = np.array_split(perm_indices, num_gpus)
     # bin indices in each rank to respective batches
+    # the result should be a List[List[List]] where
+    # dim = 0 corresponds to the number of ranks
+    # dim = 1 corresponds to the number of batches
+    # dim = 2 corresponds to the number of indices in a batch
     split_indices_to_batches = [
         np.array_split(split, batch_size_per_device) for split in split_indices_to_ranks
     ]
-    for rank in split_indices_to_batches:
+    for indices_per_rank in split_indices_to_batches:
         # count all the tokens in the batch
-        token_length_in_batch = [sum(lengths[idx] for idx in batch) for batch in rank]
+        token_length_in_batch = [sum(lengths[idx] for idx in batch) for batch in indices_per_rank]
         # take average number of tokens across the batches
-        tokens_across_rank_random.append(np.ceil(np.mean(token_length_in_batch)))
+        mean_tokens_per_rank_random.append(np.ceil(np.mean(token_length_in_batch)))
 
     # expect std from multipack to be smaller
-    assert np.std(tokens_across_rank_multipack) < np.std(tokens_across_rank_random)
+    assert np.std(tokens_across_rank_multipack) < np.std(mean_tokens_per_rank_random)

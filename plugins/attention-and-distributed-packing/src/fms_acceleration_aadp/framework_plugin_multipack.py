@@ -39,12 +39,9 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
     ):
         super().__init__(configurations)
 
-        multipack = self._check_config_and_maybe_check_values(
-            key="training.dataloader.multipack",
+        self.num_processes = self._check_config_and_maybe_check_values(
+            key="training.dataloader.multipack.num_processes",
         )
-
-        # multipack settings
-        self.num_workers = multipack["num_workers"]
 
         # see about the collator
         attention = self._check_config_and_maybe_check_values(
@@ -53,7 +50,6 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
 
         # internal flags
         self._seed = seed
-        self._collate_fn = None
         self._padding_free = False
         self._pad_token_id = None
 
@@ -123,11 +119,11 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
                     "Waiting for main process to perform the mapping."
                     "If the dataset is large, some processes might time out,"
                     "You may need to increase the timeout limit or the number "
-                    f"of workers processing the dataset > {self.num_workers}."
+                    f"of workers processing the dataset > {self.num_processes}."
                 )
                 torch.distributed.barrier()
 
-            lengths = calculate_token_lengths(dataset, num_workers=self.num_workers)
+            lengths = calculate_token_lengths(dataset, num_processes=self.num_processes)
 
             if torch.distributed.get_rank() == 0:
                 torch.distributed.barrier()

@@ -8,4 +8,4 @@ training:
     multipack:
 
       # number of processes used to calculate dataset lengths
-      num_workers: 16
+      num_processes: 16

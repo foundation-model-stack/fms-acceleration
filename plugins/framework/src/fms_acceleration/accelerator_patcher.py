@@ -99,7 +99,7 @@ class AcceleratorRuleReplace:
 
         assert (self.replacement is None and self.replacement_builder is not None) or (
             self.replacement is not None and self.replacement_builder is None
-        ), "either replacement or replacement should be specified"
+        ), "either replacement or replacement_builder should be specified"
 
         if self.kwargs is None:
             self.kwargs = {}

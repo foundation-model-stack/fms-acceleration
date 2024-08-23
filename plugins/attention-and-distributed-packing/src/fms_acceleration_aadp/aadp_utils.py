@@ -58,11 +58,11 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         return default_data_collator([ret], return_tensors)
 
 
-def calculate_token_lengths(dataset, num_workers):
+def calculate_token_lengths(dataset, num_processes):
     lengths = np.array(
         dataset.map(
             lambda x: {"len": len(x["input_ids"])},
-            num_proc=num_workers,
+            num_proc=num_processes,
             load_from_cache_file=True,
         )["len"]
     )
