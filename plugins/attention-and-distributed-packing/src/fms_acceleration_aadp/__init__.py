@@ -13,4 +13,5 @@
 # limitations under the License.
 
 # Local
+from .framework_plugin_multipack import MultipackDataloaderAccelerationPlugin
 from .framework_plugin_padding_free import PaddingFreeAccelerationPlugin

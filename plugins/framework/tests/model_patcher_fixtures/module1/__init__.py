@@ -12,5 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .module3 import Module3Class
+# Local
 from .module1_1 import Module1Class, mod_1_function
+from .module3 import Module3Class

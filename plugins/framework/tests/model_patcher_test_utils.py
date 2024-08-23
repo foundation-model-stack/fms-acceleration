@@ -12,32 +12,34 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
+# Standard
+from contextlib import contextmanager
+from typing import Any, Dict, Type
+import importlib
 import os
 import sys
-import importlib
-from contextlib import contextmanager
-from typing import Dict, Any, Type
 
-ROOT = 'tests.model_patcher_fixtures'
+# Third Party
+import torch
+
+ROOT = "tests.model_patcher_fixtures"
 MODULE_PATHS = []
-for root, dirs, files in os.walk(ROOT.replace('.', os.path.sep)):
+for root, dirs, files in os.walk(ROOT.replace(".", os.path.sep)):
     for f in files:
         filename, ext = os.path.splitext(f)
         if ext != ".py":
             continue
-        if filename != '__init__':
+        if filename != "__init__":
             p = os.path.join(root, filename)
         else:
             p = root
 
-        MODULE_PATHS.append(p.replace(os.path.sep, '.'))
+        MODULE_PATHS.append(p.replace(os.path.sep, "."))
+
 
 @contextmanager
 def isolate_test_module_fixtures():
-    old_mod = {
-        k: sys.modules[k] for k in MODULE_PATHS if k in sys.modules
-    }
+    old_mod = {k: sys.modules[k] for k in MODULE_PATHS if k in sys.modules}
     yield
 
     # Reload only reloads the speicified module, but makes not attempt to reload
@@ -58,7 +60,7 @@ def isolate_test_module_fixtures():
 def create_module_class(
     class_name: str,
     namespaces: Dict[str, Any] = None,
-    parent_class: Type = torch.nn.Module
+    parent_class: Type = torch.nn.Module,
 ):
     if namespaces is None:
         namespaces = {}

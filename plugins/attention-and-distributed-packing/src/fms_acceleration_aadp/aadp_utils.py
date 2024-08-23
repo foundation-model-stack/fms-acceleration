@@ -12,9 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Standard
 from dataclasses import dataclass
 import warnings
+
+# Third Party
 from transformers import DefaultDataCollator, default_data_collator
+import numpy as np
 
 
 @dataclass
@@ -52,3 +56,13 @@ class DataCollatorWithFlattening(DefaultDataCollator):
             else:
                 ret["labels"] += [-100] + feature["input_ids"][1:]
         return default_data_collator([ret], return_tensors)
+
+
+def calculate_token_lengths(dataset, num_processes):
+    return np.array(
+        dataset.map(
+            lambda x: {"len": len(x["input_ids"])},
+            num_proc=num_processes,
+            load_from_cache_file=True,
+        )["len"]
+    )

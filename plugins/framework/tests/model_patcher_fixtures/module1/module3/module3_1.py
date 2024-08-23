@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Local
 from ..module1_1 import mod_1_function
+
 
 class Module3Class:
     def __init__(self) -> None:
