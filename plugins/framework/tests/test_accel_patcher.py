@@ -32,10 +32,10 @@ def test_AP_rule_raises_correct_errors():
     # not specifying any replacement objects will throw an error
     with pytest.raises(
         AssertionError,
-        match="either replacement or replacement should be specified",
+        match="either replacement or replacement_builder should be specified",
     ):
         AcceleratorRuleReplace(
-            rule_id=RULE_ID,
+            rule_id="bad-rule-empty-builders",
             component=AcceleratorPatcherComponent.data_loader,
             replacement=None,
             replacement_builder=None,
@@ -46,10 +46,10 @@ def test_AP_rule_raises_correct_errors():
     # handling of the component by AP
     with pytest.raises(
         AssertionError,
-        match="Invalid special behavior kwargs in",
+        match=r"Invalid special behavior kwargs in '.*'",
     ):
         AcceleratorRuleReplace(
-            rule_id=RULE_ID,
+            rule_id="invalid-special-kwargs",
             component=AcceleratorPatcherComponent.data_loader,
             replacement=torch.utils.data.DataLoader(
                 torch.utils.data.Dataset(),
@@ -78,7 +78,7 @@ def test_AP_failing_prereq_check_raises_error():
 
             # register the replacement rule
             AcceleratorPatcher.replace(
-                rule_id=RULE_ID,
+                rule_id="pre-req-check-raises-error",
                 component=AcceleratorPatcherComponent.data_loader,
                 replacement=dummy_dataloader,
                 pre_requisite_check=pre_req_check,
@@ -96,14 +96,16 @@ def test_AP_patch_correctly_with_simple_replacement():
     # 2. patch the accelerator
     # 3. call accelerator.prepare with a dataloader
     # 4. verify that the dataloader's collate fn behaviour has updated
+    message = "replacement successful"
+
     def replaced_collater():
-        return "replacement successful"
+        return message
 
     with instantiate_accel_patcher():
         dataloader = torch.utils.data.DataLoader(torch.utils.data.Dataset())
         # register the replacement rule for new collate fn
         AcceleratorPatcher.replace(
-            rule_id=RULE_ID,
+            rule_id="simple-replacement-successful",
             component=AcceleratorPatcherComponent.data_collator,
             replacement=replaced_collater,
         )
@@ -137,7 +139,7 @@ def test_AP_patch_correctly_with_replacement_builder():
         original_dataloader = torch.utils.data.DataLoader(torch.utils.data.Dataset())
         # register the replacement rule
         AcceleratorPatcher.replace(
-            rule_id=RULE_ID,
+            rule_id="replacement-builder-successful",
             component=AcceleratorPatcherComponent.data_loader,
             replacement_builder=build_new_dataloader,
             skip_prepare=True,
