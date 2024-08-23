@@ -115,7 +115,6 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
                 not accelerator.state.deepspeed_plugin
             ), "Currently, multipack not supported for deepspeed"
 
-            # accelerator.even_batches = False
 
             # get the dataset
             dataset = dataloader.dataset
