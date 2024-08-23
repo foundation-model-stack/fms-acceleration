@@ -71,7 +71,7 @@ def test_multipack_sampler_assigns_balanced_tokens():
     batch_size_per_device = 32
     num_samples = 10000
     seed = 42
-    num_workers = 4
+    num_processes = 4
 
     # 1. Build a test dataset
     dataset = Dataset.from_list(

@@ -64,7 +64,7 @@ def test_AP_failing_prereq_check_raises_error():
     # 3. attempt to patch accelerator prepare function w a pre-req check
     # 4. call accelerator prepare
     # 5. ensure that pre-req check raises error when condition not satisfied
-    message = "pre-requisite check failed"
+    pre_req_error_message = "pre-requisite check failed"
 
     def pre_req_check(dataloader):
         raise ValueError(message)
