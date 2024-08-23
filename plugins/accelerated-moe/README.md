@@ -3,6 +3,19 @@
 This library contains plugins to accelerate finetuning with the following optimizations:
 1. Expert-Parallel MoE with Megablocks
 
+## Plugins
+
+Plugin | Description | Depends | Loading | Augmentation | Callbacks
+--|--|--|--|--|--
+[megablocks](./src/fms_acceleration_moe/framework_plugin_megablocks.py) | MoE Expert Parallel with megablocks | megablocks | ✅ | |  ✅
+
+
+## Running Benchmarks
+
+```
+tox -e run-benches -- 8 8 scenarios.yaml accelerated-moe-megablocks
+```
+
 ## Expert-Parallel MoE with Megablocks
 
 Not all of the features of `megablocks` are being incorporated; listing down some of the restrictions of the current integration:
@@ -11,7 +24,6 @@ Not all of the features of `megablocks` are being incorporated; listing down som
 - only supports the *dropless sparse* MLPs in the megablocks package; the other variations like non-dropless and grouped computes are not currently integrated.
 - the `shard_moe` may not scale well with larger models as the current implementation `torch.concat` all the expert weights together before passing to `torch.distributed` to be sharded. This is redundently done in all devices, so it is inefficient.
 - currently only supports `StateDictType.SHARDED_STATE_DICT` because the implementation uses `DTensors` which have limited support for full state dicts. However for efficiency considerations, sharded state dicts are the most efficient. 
-
 
 ### Megablocks Dependencies
 
