@@ -20,9 +20,13 @@ otherwise if `transformers < v4.44.0` the plugin will use an internal implementa
 
 ## Running Benchmarks
 
-To reproduce the benchmarks, simply run this command,
+To reproduce the benchmarks, simply run the following commands,
 
-`bash scripts/run_benchmarks.sh "2 4 8" "16 32 64" benchmark_outputs scenarios-<dataset>.yaml "padding-free"`
+Reproduce [Padding Free](scripts/benchmarks/refs_orca/padding-free.csv)
+`bash scripts/run_benchmarks.sh "1 2" "4 8" benchmark_outputs scenarios-orca.yaml "none"`
+
+Reproduce [Multi Pack](scripts/benchmarks/refs_orca/multipack.csv)
+`bash scripts/run_benchmarks.sh "2 4 8" "16 32 64" benchmark_outputs scenarios-orca.yaml "padding-free"`
 
 ## Known Issues
 
