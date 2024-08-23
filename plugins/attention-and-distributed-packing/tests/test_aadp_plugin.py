@@ -95,7 +95,7 @@ def test_multipack_sampler_assigns_balanced_tokens():
 
     # 2.  generate a multipack subset of indices
     max_batch_len = batch_size_per_device * lengths.mean()
-    tokens_across_rank_multipack = []
+    mean_tokens_per_rank_multipack = []
     for rank in range(num_gpus):
         sampler = MultipackDistributedBatchSampler(
             batch_max_length=max_batch_len,
@@ -113,7 +113,7 @@ def test_multipack_sampler_assigns_balanced_tokens():
             tokens_across_batches.append(num_tokens_across_one_batch)
         # take average number of tokens across the batches
         average_tokens_across_batches = np.ceil(np.mean(tokens_across_batches))
-        tokens_across_rank_multipack.append(average_tokens_across_batches)
+        mean_tokens_per_rank_multipack.append(average_tokens_across_batches)
 
     # 3. generate a random sampled subset of indices
     mean_tokens_per_rank_random = []
@@ -137,4 +137,4 @@ def test_multipack_sampler_assigns_balanced_tokens():
         mean_tokens_per_rank_random.append(np.ceil(np.mean(token_length_in_batch)))
 
     # expect std from multipack to be smaller
-    assert np.std(tokens_across_rank_multipack) < np.std(mean_tokens_per_rank_random)
+    assert np.std(mean_tokens_per_rank_multipack) < np.std(mean_tokens_per_rank_random)

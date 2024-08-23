@@ -25,9 +25,6 @@ from fms_acceleration.accelerator_patcher import (
 )
 from fms_acceleration.utils.test_utils import instantiate_accel_patcher
 
-RULE_ID = "test"
-
-
 def test_AP_rule_raises_correct_errors():
     # not specifying any replacement objects will throw an error
     with pytest.raises(
