@@ -25,6 +25,7 @@ from fms_acceleration.accelerator_patcher import (
 )
 from fms_acceleration.utils.test_utils import instantiate_accel_patcher
 
+
 def test_AP_rule_raises_correct_errors():
     # not specifying any replacement objects will throw an error
     with pytest.raises(
@@ -64,11 +65,11 @@ def test_AP_failing_prereq_check_raises_error():
     pre_req_error_message = "pre-requisite check failed"
 
     def pre_req_check(dataloader):
-        raise ValueError(message)
+        raise ValueError(pre_req_error_message)
 
     with pytest.raises(
         ValueError,
-        match=message,
+        match=pre_req_error_message,
     ):
         with instantiate_accel_patcher():
             dummy_dataloader = torch.utils.data.DataLoader(torch.utils.data.Dataset())

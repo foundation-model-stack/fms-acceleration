@@ -111,7 +111,6 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
                 not accelerator.state.deepspeed_plugin
             ), "Currently, multipack not supported for deepspeed"
 
-
             # get the dataset
             dataset = dataloader.dataset
             if torch.distributed.get_rank() > 0:

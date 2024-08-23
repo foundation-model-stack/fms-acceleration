@@ -83,11 +83,9 @@ def test_multipack_sampler_assigns_balanced_tokens():
                 "input_ids": rng.integers(
                     low=min_token,
                     high=max_token,
-                    size=(rng.integers(
-                        min_seq_len,
-                        max_seq_len
-                    )),
-            )}
+                    size=(rng.integers(min_seq_len, max_seq_len)),
+                )
+            }
             for _ in range(num_samples)
         ]
     )
@@ -132,7 +130,9 @@ def test_multipack_sampler_assigns_balanced_tokens():
     ]
     for indices_per_rank in split_indices_to_batches:
         # count all the tokens in the batch
-        token_length_in_batch = [sum(lengths[idx] for idx in batch) for batch in indices_per_rank]
+        token_length_in_batch = [
+            sum(lengths[idx] for idx in batch) for batch in indices_per_rank
+        ]
         # take average number of tokens across the batches
         mean_tokens_per_rank_random.append(np.ceil(np.mean(token_length_in_batch)))
 
