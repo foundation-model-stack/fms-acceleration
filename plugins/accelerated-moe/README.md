@@ -12,6 +12,9 @@ Plugin | Description | Depends | Loading | Augmentation | Callbacks
 
 ## Running Benchmarks
 
+See the benchmarks [a100_80gb_mb.csv](../../scripts/benchmarks/refs/a100_80gb_mb.csv)
+
+
 Run the below in the top-level directory of this repo:
 - the `megablocks` dep is not included by default, so the `-x` switch installs it.
 
