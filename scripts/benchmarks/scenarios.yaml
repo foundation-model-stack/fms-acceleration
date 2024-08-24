@@ -98,6 +98,7 @@ scenarios:
         framework_config: 
             - # without acceleration
             - moe-megablocks
+        slow: True
         arguments:
             learning_rate: 5e-5
             torch_dtype: bfloat16
