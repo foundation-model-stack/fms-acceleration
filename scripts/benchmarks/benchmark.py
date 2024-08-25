@@ -698,7 +698,7 @@ def prepare_arguments(args, benchmark_dataset: BenchmarkDataset):
         scenario = ScenarioMatrix(scenario_config, acceleration_config_map)
 
         if (
-            not args.run_only_scenarios and 
+            not args.run_only_scenarios
             and scenarios.slow
         ):
             # unfiltered runs omit all "slow" marked scenarios
