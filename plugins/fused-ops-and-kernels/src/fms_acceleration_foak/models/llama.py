@@ -16,16 +16,16 @@
 from functools import partial
 
 # Third Party
-from transformers.models.llama.modeling_llama import (
-    LlamaAttention,
-    LlamaMLP,
-    LlamaRMSNorm,
-)
 from fms_acceleration.model_patcher import (
     ModelPatcherRule,
     ModelPatcherTrigger,
     combine_functions,
     combine_triggers,
+)
+from transformers.models.llama.modeling_llama import (
+    LlamaAttention,
+    LlamaMLP,
+    LlamaRMSNorm,
 )
 
 # Local
@@ -33,6 +33,7 @@ from ..kernels.unsloth.cross_entropy_loss import FastCrossEntropyLoss
 from ..kernels.unsloth.rms_layernorm import fast_rms_layernorm
 from ..kernels.unsloth.rope_embedding import fast_rope_embedding
 from .utils import KEY_MLP, KEY_O, KEY_QKV, build_lora_fused_ops, trigger_fused_ops
+
 
 def get_mp_rules(base_type: str):
     """
@@ -125,5 +126,5 @@ def get_mp_rules(base_type: str):
                 fast_rope_embedding,
                 None,
             ),
-        )
+        ),
     ]
