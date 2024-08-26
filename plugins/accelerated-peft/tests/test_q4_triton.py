@@ -29,14 +29,17 @@ import torch  # noqa: E402
 
 CUDA_AVAILABLE = False
 if torch.cuda.is_available():
+    # First Party
     from fms_acceleration_peft.gptqmodel import Backend, GPTQModel  # noqa: E402
     from fms_acceleration_peft.gptqmodel.nn_modules.qlinear.qlinear_tritonv2 import (  # noqa: E402
         QuantLinear as TritonV2QuantLinear,
     )
+
     CUDA_AVAILABLE = True
 
 
 GENERATE_EVAL_SIZE = 100
+
 
 class TestsQ4Triton(unittest.TestCase):
     @unittest.skipIf(

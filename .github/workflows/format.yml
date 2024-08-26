@@ -48,7 +48,7 @@ jobs:
       - name: Run formatter
         run: |
           cd plugins/${{ matrix.plugin_name }}
-          tox -e fmt
+          tox -e fmt -- . --check
       - name: Run pytest
         run: |
           cd plugins/${{ matrix.plugin_name }}

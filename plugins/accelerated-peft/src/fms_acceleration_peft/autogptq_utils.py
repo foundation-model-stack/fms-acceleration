@@ -16,19 +16,23 @@
 # https://spdx.dev/learn/handling-license-info/
 
 # Standard
+from functools import partial
 from typing import Callable, List
 
 # Third Party
+from fms_acceleration.model_patcher import (
+    ModelPatcher,
+    ModelPatcherRule,
+    ModelPatcherTrigger,
+)
 from peft import LoraConfig
 from peft.tuners.lora.gptq import QuantLinear as LoraLinearGPTQ
 import torch
 
-from fms_acceleration.model_patcher import ModelPatcher, ModelPatcherRule, ModelPatcherTrigger
-from functools import partial
-
 # these parameters are to be patched for triton v2
 # consider making a map if patching more kernels
 PATCH_FOR_FSDP_TRITON_V2 = ["qweight", "qzeros"]
+
 
 def build_patch_to_view_tensor_to_parameter_for_fsdp_gptq(
     module,
@@ -38,9 +42,7 @@ def build_patch_to_view_tensor_to_parameter_for_fsdp_gptq(
     # so FSDP can shard them
     for attr_name in PATCH_FOR_FSDP_TRITON_V2:
         attr = getattr(module, attr_name)
-        attr = torch.nn.Parameter(
-            attr.view(torch_dtype), requires_grad=False
-        )
+        attr = torch.nn.Parameter(attr.view(torch_dtype), requires_grad=False)
         setattr(module, attr_name, attr)
 
     # this patches the forward to convert them back to original
@@ -51,17 +53,20 @@ def build_patch_to_view_tensor_to_parameter_for_fsdp_gptq(
         torch_dtype=torch.int32,  # patch it back to
     )
 
+
 def register_tensors_as_parameters_patch_rule(target_module, torch_dtype):
     # Register patch
     ModelPatcher.register(
         ModelPatcherRule(
             rule_id="autogptq_patch_tensors_as_float_parameters",
             trigger=ModelPatcherTrigger(check=target_module),
-            forward_builder = partial(
-                build_patch_to_view_tensor_to_parameter_for_fsdp_gptq, torch_dtype=torch_dtype
+            forward_builder=partial(
+                build_patch_to_view_tensor_to_parameter_for_fsdp_gptq,
+                torch_dtype=torch_dtype,
             ),
         )
     )
+
 
 def make_sure_no_tensor_in_meta_device(
     model,
@@ -132,6 +137,7 @@ def create_new_module_peft(
 
     # if module cannot be found, return None which results in a raise in the call-stack
     return new_module
+
 
 # consider to move this somewhere more general
 def patch_forward_to_view_attributes_before_call(

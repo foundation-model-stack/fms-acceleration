@@ -31,8 +31,10 @@ import torch.utils.benchmark as benchmark  # noqa: E402
 
 CUDA_AVAILABLE = False
 if torch.cuda.is_available():
+    # First Party
     from fms_acceleration_peft.gptqmodel import Backend, GPTQModel  # noqa: E402
-    CUDA_AVAILABLE = True    
+
+    CUDA_AVAILABLE = True
 
 MODEL_ID = "TheBloke/Llama-7B-GPTQ"
 DATASET_ID = "timdettmers/openassistant-guanaco"

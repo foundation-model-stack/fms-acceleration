@@ -23,10 +23,10 @@ otherwise if `transformers < v4.44.0` the plugin will use an internal implementa
 To reproduce the benchmarks, simply run the following commands,
 
 Reproduce [Padding Free on A100 80GB](scripts/benchmarks/refs_orca/a100_80gb_pf.csv)
-`bash scripts/run_benchmarks.sh "1 2" "4 8" benchmark_outputs scenarios-orca.yaml "none"`
+`tox -e run-benches -- "1 2" "4 8" benchmark_outputs scenarios-orca.yaml "none"`
 
 Reproduce [MultiPack on A100 80GB](scripts/benchmarks/refs_orca/a100_80gb_mp.csv)
-`bash scripts/run_benchmarks.sh "2 4 8" "16 32 64" benchmark_outputs scenarios-orca.yaml "padding-free"`
+`tox -e run-benches -- "2 4 8" "16 32 64" benchmark_outputs scenarios-orca.yaml "padding-free"`
 
 ## Known Issues
 
