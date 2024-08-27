@@ -119,6 +119,8 @@ class MegablocksMoEAccelerationPlugin(AccelerationPlugin):
         # load the model
         model = AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
 
+        model.model.layers = model.model.layers[:2]
+
         # set this in the config, which will be picked up by the forward
         # function to go into the load_balancing loss
         model.config.output_router_logits = self._load_balancing_loss
@@ -164,19 +166,54 @@ class MegablocksMoEAccelerationPlugin(AccelerationPlugin):
     ):
 
         callbacks = []
-        if (
-            accelerator is not None
-            and getattr(accelerator.state, "fsdp_plugin", None) is not None
-        ):
-            # - use an internal function call to get the no split
-            # module names, which are typically layers
-            _layers = model._get_no_split_modules('')
-            accelerator.state.fsdp_plugin.ignored_modules = [
-                getattr(layer, name)
-                for name in self._moe_component_module_names
-                for layer in model.modules()
-                if layer.__class__.__name__ in _layers
-            ]
+
+        from deepspeed.moe.layer import MoE
+
+        cfg = model.config
+        from transformers.models.mixtral.modeling_mixtral import MixtralBlockSparseTop2MLP
+
+
+        for layer in model.model.layers:
+            mod = MoE(
+                cfg.hidden_size, 
+                torch.nn.Module(),
+                num_experts=8,
+                ep_size=8,
+                k = 2
+            )
+            mlp = MixtralBlockSparseTop2MLP(cfg)
+
+            mod.deepspeed_moe.gate.wg.weight.data = layer.block_sparse_moe.router.layer.weight._local_tensor
+
+            mlp.w1.weight.data = layer.block_sparse_moe.experts.mlp.w1._local_tensor
+            mlp.w2.weight.data = layer.block_sparse_moe.experts.mlp.w2._local_tensor.T
+            mlp.w3.weight.data = layer.block_sparse_moe.experts.mlp.w3._local_tensor
+            mod.deepspeed_moe.experts.deepspeed_experts[0] = mlp
+
+            for expert in mod.deepspeed_moe.experts.deepspeed_experts:
+                # TODO: Create param groups to handle expert + data case (e.g. param.group = moe_group)
+                for param in expert.parameters():
+                    param.allreduce = False
+                    param.group_name = "ep_size_8"
+            
+            # replae
+            layer.block_sparse_moe = mod
+            torch.distributed.breakpoint()
+
+
+        # if (
+        #     accelerator is not None
+        #     and getattr(accelerator.state, "fsdp_plugin", None) is not None
+        # ):
+        #     # - use an internal function call to get the no split
+        #     # module names, which are typically layers
+        #     _layers = model._get_no_split_modules('')
+        #     accelerator.state.fsdp_plugin.ignored_modules = [
+        #         getattr(layer, name)
+        #         for name in self._moe_component_module_names
+        #         for layer in model.modules()
+        #         if layer.__class__.__name__ in _layers
+        #     ]
 
         return callbacks
 
