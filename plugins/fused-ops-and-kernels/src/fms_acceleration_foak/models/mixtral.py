@@ -16,23 +16,23 @@
 from functools import partial
 
 # Third Party
-from transformers.models.mixtral.modeling_mixtral import (
-    MixtralAttention,
-    MixtralRMSNorm,
-)
 from fms_acceleration.model_patcher import (
     ModelPatcherRule,
     ModelPatcherTrigger,
     combine_functions,
     combine_triggers,
 )
+from transformers.models.mixtral.modeling_mixtral import (
+    MixtralAttention,
+    MixtralRMSNorm,
+)
 
 # Local
 from ..kernels.unsloth.cross_entropy_loss import FastCrossEntropyLoss
 from ..kernels.unsloth.rms_layernorm import fast_rms_layernorm
 from ..kernels.unsloth.rope_embedding import fast_rope_embedding
-
 from .utils import KEY_O, KEY_QKV, build_lora_fused_ops, trigger_fused_ops
+
 
 def get_mp_rules(base_type):
     """
@@ -100,5 +100,5 @@ def get_mp_rules(base_type):
                 fast_rope_embedding,
                 None,
             ),
-        )
+        ),
     ]

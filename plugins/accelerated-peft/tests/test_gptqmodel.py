@@ -64,10 +64,10 @@ def load_autogptq_plugin_model(
             "peft": {
                 "quantization": {
                     "auto_gptq": {
-                        "kernel": "triton_v2", 
-                        "from_quantized": True, 
+                        "kernel": "triton_v2",
+                        "from_quantized": True,
                         "use_external_lib": use_external_lib,
-                        }
+                    }
                 }
             }
         },
@@ -292,10 +292,10 @@ def test_quantizing_pretrained_model_outputs_match(
     loss_fn = torch.nn.KLDivLoss(reduction="sum")
     # input should be a distribution in the log space
     input = torch.nn.functional.log_softmax(refactored_logits, dim=-1)
-    input = input.view(BS*SEQLEN, -1)
+    input = input.view(BS * SEQLEN, -1)
     # target must be prob distribution
     target = torch.nn.functional.softmax(original_logits, dim=-1)
-    target = target.view(BS*SEQLEN, -1)
+    target = target.view(BS * SEQLEN, -1)
     error = loss_fn(input, target)
     assert error.lt(
         LOSS_TOLERANCE

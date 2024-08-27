@@ -24,6 +24,7 @@ from transformers import TrainingArguments
 import torch
 import torch.distributed as dist
 
+
 # consider moving this somewhere else later
 def lora_adapters_switch_ddp_from_fsdp(modules, fsdp_plugin):
     """
@@ -58,9 +59,20 @@ def lora_adapters_switch_ddp_from_fsdp(modules, fsdp_plugin):
         if not B.weight.is_cuda:
             set_module_tensor_to_device(B, "weight", "cuda")
 
+
 def register_foak_model_patch_rules(base_type):
-    from fms_acceleration.model_patcher import ModelPatcher # pylint: disable=import-outside-toplevel
-    from .models import llama, mistral, mixtral # pylint: disable=import-outside-toplevel
+    # Third Party
+    from fms_acceleration.model_patcher import (  # pylint: disable=import-outside-toplevel
+        ModelPatcher,
+    )
+
+    # Local
+    from .models import (  # pylint: disable=import-outside-toplevel
+        llama,
+        mistral,
+        mixtral,
+    )
+
     rules = [
         *llama.get_mp_rules(base_type),
         *mistral.get_mp_rules(base_type),
@@ -68,6 +80,7 @@ def register_foak_model_patch_rules(base_type):
     ]
     for _rule in rules:
         ModelPatcher.register(_rule)
+
 
 class FastQuantizedPeftAccelerationPlugin(AccelerationPlugin):
 
@@ -122,7 +135,7 @@ class FastQuantizedPeftAccelerationPlugin(AccelerationPlugin):
         ), "need to run in fp16 mixed precision or load model in fp16"
 
         # wrapper function to register foak patches
-        register_foak_model_patch_rules(base_type = self._base_layer)
+        register_foak_model_patch_rules(base_type=self._base_layer)
         return model, modifiable_args
 
     def get_callbacks_and_ready_for_train(

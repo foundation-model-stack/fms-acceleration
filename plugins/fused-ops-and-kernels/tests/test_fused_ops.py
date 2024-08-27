@@ -3,15 +3,13 @@ from copy import deepcopy
 from itertools import product
 
 # Third Party
+from fms_acceleration.model_patcher import patch_model
 from peft import LoraConfig
 from transformers import AutoConfig
 from transformers.models.llama.modeling_llama import LlamaAttention
 from transformers.utils.import_utils import _is_package_available
 import pytest  # pylint: disable=import-error
 import torch
-
-# First Party
-from fms_acceleration.model_patcher import patch_model
 
 BNB = "bitsandbytes"
 GPTQ = "auto_gptq"

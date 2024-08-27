@@ -35,6 +35,7 @@ import torch.distributed
 # Local
 from .autogptq_utils import register_tensors_as_parameters_patch_rule
 
+
 class AutoGPTQAccelerationPlugin(AccelerationPlugin):
 
     require_packages = []
@@ -57,11 +58,13 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
         )
 
         if self.use_external_lib:
-            from transformers.utils.import_utils import _is_package_available # pylint: disable=import-outside-toplevel
-            assert (
-                _is_package_available("auto_gptq") is True
-            ),  (
-               "Unable to use external library, auto_gptq module not found. "
+            # Third Party
+            from transformers.utils.import_utils import (  # pylint: disable=import-outside-toplevel
+                _is_package_available,
+            )
+
+            assert _is_package_available("auto_gptq") is True, (
+                "Unable to use external library, auto_gptq module not found. "
                 "Refer to README for installation instructions  "
                 "as a specific version might be required."
             )
@@ -71,18 +74,27 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
         # Third Party
         if self.use_external_lib:
             # Third Party
-            from auto_gptq import ( # pylint: disable=import-outside-toplevel,import-error
-                AutoGPTQForCausalLM as GPTQModel,
-            )
-            from auto_gptq import BaseQuantizeConfig as QuantizeConfig # pylint: disable=import-outside-toplevel,import-error
             from auto_gptq.nn_modules.qlinear.qlinear_tritonv2 import (  # pylint: disable=import-outside-toplevel,import-error
                 QuantLinear,
             )
+
+            from auto_gptq import (  # isort:skip pylint: disable=import-outside-toplevel,import-error
+                AutoGPTQForCausalLM as GPTQModel,
+            )
+            from auto_gptq import (  # isort:skip pylint: disable=import-outside-toplevel,import-error
+                BaseQuantizeConfig as QuantizeConfig,
+            )
         else:
-            from .gptqmodel import GPTQModel, QuantizeConfig # pylint: disable=import-outside-toplevel,import-error
-            from .gptqmodel.utils import Backend # pylint: disable=import-outside-toplevel,import-error
-            from .gptqmodel.nn_modules.qlinear.qlinear_tritonv2 import ( # pylint: disable=import-outside-toplevel,import-error
+            # Local
+            from .gptqmodel import (  # pylint: disable=import-outside-toplevel,import-error
+                GPTQModel,
+                QuantizeConfig,
+            )
+            from .gptqmodel.nn_modules.qlinear.qlinear_tritonv2 import (  # pylint: disable=import-outside-toplevel,import-error
                 QuantLinear,
+            )
+            from .gptqmodel.utils import (  # pylint: disable=import-outside-toplevel,import-error
+                Backend,
             )
 
         # Currently we allow only a quantized checkpoint to be loaded, we do not
@@ -141,7 +153,9 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
             kwargs["low_cpu_mem_usage"] = True
             if self.use_external_lib:
                 # Local
-                from .autogptq_utils import make_sure_no_tensor_in_meta_device # pylint: disable=import-outside-toplevel
+                from .autogptq_utils import (  # pylint: disable=import-outside-toplevel
+                    make_sure_no_tensor_in_meta_device,
+                )
 
                 # We patch `make_sure_no_tensor_in_meta_device`
                 # from autogptq to avoid errors on models without bias
@@ -250,7 +264,9 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
             )
         else:
             # Local
-            from .gptqmodel.utils.peft import get_gptq_peft_model # pylint: disable=import-outside-toplevel,import-error
+            from .gptqmodel.utils.peft import (  # pylint: disable=import-outside-toplevel,import-error
+                get_gptq_peft_model,
+            )
 
         (peft_config,) = modifiable_args  # unpack modifiable args
 
