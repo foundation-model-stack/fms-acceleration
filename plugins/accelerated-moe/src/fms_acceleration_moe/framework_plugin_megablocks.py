@@ -170,7 +170,7 @@ class MegablocksMoEAccelerationPlugin(AccelerationPlugin):
         ):
             # - use an internal function call to get the no split
             # module names, which are typically layers
-            _layers = model._get_no_split_modules('')
+            _layers = model._get_no_split_modules("")
             accelerator.state.fsdp_plugin.ignored_modules = [
                 getattr(layer, name)
                 for name in self._moe_component_module_names
