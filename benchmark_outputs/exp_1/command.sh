@@ -7,6 +7,7 @@ export ACCELERATION_FRAMEWORK_CONFIG_FILE=/workspace/fms-acceleration/scripts/be
 
 
 # deepspeed
+# - need to turn on MP or the forward datatype will be wrong
 TRANSFORMERS_VERBOSITY=info \
 accelerate launch --config_file scripts/benchmarks/accelerate-ds.yaml \
     --num_processes=8 --main_process_port=29500 -m tuning.sft_trainer --model_name_or_path mistralai/Mixtral-8x7B-Instruct-v0.1 --packing False --max_seq_len 4096 --training_data_path benchmark_outputs/data/cache_all.json --use_flash_attn True --response_template '

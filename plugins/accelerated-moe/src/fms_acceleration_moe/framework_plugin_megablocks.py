@@ -186,7 +186,7 @@ class MegablocksMoEAccelerationPlugin(AccelerationPlugin):
             mod.deepspeed_moe.gate.wg.weight.data = layer.block_sparse_moe.router.layer.weight._local_tensor
 
             mlp.w1.weight.data = layer.block_sparse_moe.experts.mlp.w1._local_tensor
-            mlp.w2.weight.data = layer.block_sparse_moe.experts.mlp.w2._local_tensor.T
+            mlp.w2.weight.data = layer.block_sparse_moe.experts.mlp.w2._local_tensor.T.contiguous()
             mlp.w3.weight.data = layer.block_sparse_moe.experts.mlp.w3._local_tensor
             mod.deepspeed_moe.experts.deepspeed_experts[0] = mlp
 
@@ -198,7 +198,6 @@ class MegablocksMoEAccelerationPlugin(AccelerationPlugin):
             
             # replae
             layer.block_sparse_moe = mod
-            torch.distributed.breakpoint()
 
 
         # if (
