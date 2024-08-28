@@ -20,6 +20,7 @@ from typing import Dict, List, Tuple, Type, Union
 import json
 import os
 import re
+import warnings
 
 # Third Party
 from accelerate import init_empty_weights
@@ -175,6 +176,7 @@ def load_sharded_experts_onto_device(
     device_mesh: DeviceMesh,
     placements: Placement,
     expert_name: str = "experts",  # e.g., named "experts" within block_sparse_moe
+    mixed_precision: bool = False,
 ):
     # typically they all should be same file, but to play safe, load the checkpoint file onto
     # cpu first since we may not need all weights in that file.
@@ -191,6 +193,7 @@ def load_sharded_experts_onto_device(
 
         # go by one weight at a time.
         # - weight_name: points to megablocks.dmoe
+        upcasted = set()
         for weight_name, vs in checkpoint_metadata.items():
             data = []
             for k, fi in vs:
@@ -204,11 +207,18 @@ def load_sharded_experts_onto_device(
             name = weight_name.split(".")
             path, name = ".".join(name[:-1]), name[-1]
             mod = dmoe.get_submodule(path)
-            mod_dtype = getattr(mod, name).dtype
+
+            # if mixed_precision and KEY_DMOE_ROUTER not in weight_name:
+            if mixed_precision:
+                mod_dtype = torch.float32
+                upcasted.add(weight_name)
+            else:
+                mod_dtype = getattr(mod, name).dtype
 
             # the megablocks dmoe experts the expert features to be on DIM_EXPERT.
             # - concat on dim 0 and distribute
             # - cast to the correct dtype for the module
+            # - if mixed precision is enabled, then sharded params are cased
             param = torch.concat(data, dim=DIM_EXPERT).to(mod_dtype)
 
             _placements = placements
@@ -222,6 +232,9 @@ def load_sharded_experts_onto_device(
 
             # register the sharded parameter onto the megablocks.dmoe
             mod.register_parameter(name, param)
+
+    upcasted = ", ".join(sorted(upcasted))
+    warnings.warn(f"Mixed precision turned on, upcasted MoE parameters: {upcasted}")
 
 
 def shard_moe(
@@ -238,6 +251,7 @@ def shard_moe(
     expert_name: str = "experts",
     shared_mesh_dim: bool = True,
     ep_size: int = 1,
+    mixed_precision: bool = False,
 ):
     """shard_moe takes a mixture-of-experts huggingface model and shards the experts
     on the current device. All layers layers that have a MoE module will be sharded.
@@ -272,6 +286,7 @@ def shard_moe(
         expert_name (str): module name of the experts in moe_cls (e.g., "experts").
         shared_mesh_dim (bool): for the sharding mode, see explanation above.
         ep_size (int): for shard_mesh_dim=False only, see explanation above.
+        mixed_precision (bool): activate mixed precision and upcasts sharded params
 
     """
     # guarded import
@@ -389,7 +404,13 @@ def shard_moe(
                 mp_dmoe = dmoe.dMoE(_args)  # drop in replacement for now
 
             load_sharded_experts_onto_device(
-                mp_dmoe, loc, checkpoint_metadata, device_mesh, placements, expert_name
+                mp_dmoe,
+                loc,
+                checkpoint_metadata,
+                device_mesh,
+                placements,
+                expert_name,
+                mixed_precision,
             )
             parent = model.get_submodule(prefix)
             setattr(parent, module_name, mp_dmoe)

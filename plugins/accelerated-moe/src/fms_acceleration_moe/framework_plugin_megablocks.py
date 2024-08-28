@@ -151,7 +151,13 @@ class MegablocksMoEAccelerationPlugin(AccelerationPlugin):
             shared_mesh_dim=self._shard_along_dp,
             router_name=self._gate_module_name,
             expert_name=self._experts_module_name,
+            mixed_precision=False, # Currently this is hardcoded to OFF
         )
+
+        # NOTE: there is currently no good way to get the mixed precision
+        # flag from train_args. It will be better to handle this if
+        # when we move the sharding to augmentation.
+
         # NOTE: Currently, it is a bit troublesome to pass the device_mesh to
         #  the FSDP constructor, so we do not do that.
         # - therefore FSDP will always shard on world_size over the default process
