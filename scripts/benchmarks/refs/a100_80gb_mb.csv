@@ -1,0 +1,3 @@
+framework_config,mem_nvidia_mem_reserved,mem_peak_torch_mem_alloc_in_bytes,mem_torch_mem_alloc_in_bytes,torch_dtype,train_loss,train_runtime,train_samples_per_second,train_steps_per_second,train_tokens_per_second
+none,65598.5,58936741888,47259259904,bfloat16,0.859970542192459,4170.0391,3.07,0.024,80.575
+moe-megablocks,52284.0,48874301952,35987686400,bfloat16,0.8570401281118393,1404.3938,9.114,0.071,239.249

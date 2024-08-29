@@ -15,6 +15,7 @@ jobs:
           - "accelerated-peft"
           - "fused-ops-and-kernels"
           - "attention-and-distributed-packing"
+          - "accelerated-moe"
 
     permissions:
       id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
