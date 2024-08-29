@@ -109,3 +109,24 @@ scenarios:
             adam_epsilon: 1e-8
             model_name_or_path: 
                 - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
+
+    -   name: accelerated-moe-megablocks-peft
+        framework_config: 
+            - # without acceleration
+            - moe-megablocks
+        slow: True
+        arguments:
+            learning_rate: 5e-4
+            torch_dtype: bfloat16
+            accelerator_config: scripts/benchmarks/accelerator-config.json
+            gradient_accumulation_steps: 16
+            logging_steps: 1
+            packing: False
+            adam_epsilon: 1e-8
+            peft_method: lora
+            r: 16
+            lora_alpha: 16
+            lora_dropout: 0.1
+            target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
+            model_name_or_path: 
+                - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
