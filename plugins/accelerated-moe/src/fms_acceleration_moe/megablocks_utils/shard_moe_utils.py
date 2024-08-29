@@ -215,6 +215,8 @@ def load_sharded_experts_onto_device(
             else:
                 mod_dtype = getattr(mod, name).dtype
 
+            requires_grad = getattr(mod, name).requires_grad
+
             # the megablocks dmoe experts the expert features to be on DIM_EXPERT.
             # - concat on dim 0 and distribute
             # - cast to the correct dtype for the module
@@ -227,7 +229,8 @@ def load_sharded_experts_onto_device(
                 _placements = [Replicate() for _ in range(len(placements))]
 
             param = torch.nn.Parameter(
-                distribute_tensor(param, device_mesh, _placements)
+                distribute_tensor(param, device_mesh, _placements),
+                requires_grad=requires_grad,
             )
 
             # register the sharded parameter onto the megablocks.dmoe

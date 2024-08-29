@@ -151,7 +151,7 @@ class MegablocksMoEAccelerationPlugin(AccelerationPlugin):
             shared_mesh_dim=self._shard_along_dp,
             router_name=self._gate_module_name,
             expert_name=self._experts_module_name,
-            mixed_precision=False, # Currently this is hardcoded to OFF
+            mixed_precision=False,  # Currently this is hardcoded to OFF
         )
 
         # NOTE: there is currently no good way to get the mixed precision
