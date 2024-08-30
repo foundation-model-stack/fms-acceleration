@@ -18,7 +18,7 @@
 # Standard
 from contextlib import contextmanager
 from tempfile import NamedTemporaryFile
-from typing import Any, Callable, Dict, List, Set, Tuple, Type
+from typing import Any, Callable, Dict, List, Set, Tuple, Type, Union
 
 # Third Party
 import torch
@@ -67,7 +67,14 @@ def configure_framework_from_json(
 @contextmanager
 def build_framework_and_maybe_instantiate(
     plugins_to_be_registered: List[
-        Tuple[List[str], Type[AccelerationPlugin]]  # and_paths, plugin_class
+        Union[
+            Tuple[List[str], Type[AccelerationPlugin]],  # and_paths, plugin_class
+            Tuple[
+                List[str],
+                List[str],  # and_or_paths
+                Type[AccelerationPlugin],  # plugin_class
+            ],
+        ]
     ],
     configuration_contents: Dict = None,
     instantiate: bool = True,
@@ -89,10 +96,17 @@ def build_framework_and_maybe_instantiate(
     AccelerationFramework.active_plugins = []
     AccelerationFramework.plugins_require_custom_loading = []
 
-    for path, plugin in plugins_to_be_registered:
+    for paths_and_plugins in plugins_to_be_registered:
+        try:
+            and_paths, plugin = paths_and_plugins
+            or_paths = None
+        except ValueError:
+            and_paths, or_paths, plugin = paths_and_plugins
+
         AccelerationPlugin.register_plugin(
             plugin,
-            configuration_and_paths=path,
+            configuration_and_paths=and_paths,
+            configuration_or_paths=or_paths,
         )
 
     if instantiate:
