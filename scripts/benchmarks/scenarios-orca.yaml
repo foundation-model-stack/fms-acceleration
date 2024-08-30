@@ -20,6 +20,11 @@
 #   allows to configure many different datasets
 #  - there is an option of setting tokenize is True or False
 
+# NOTE: on tokenization
+# if tokenize = True then its a pretokenization flow, then below set
+# - response_template: null
+# - dataset_text_field: null
+# otherwise if tokenize = False, then do not set the above to null
 data_processing:
     dataset_name: microsoft/orca-math-word-problems-200k
     chat_template: |
