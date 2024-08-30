@@ -14,8 +14,8 @@
 
 # Standard
 from dataclasses import dataclass
-import warnings
 from types import MethodType
+import warnings
 
 # Third Party
 from transformers import DefaultDataCollator, default_data_collator
@@ -58,6 +58,7 @@ class DataCollatorWithFlattening(DefaultDataCollator):
                 ret["labels"] += [-100] + feature["input_ids"][1:]
         return default_data_collator([ret], return_tensors)
 
+
 # from https://github.com/huggingface/trl/pull/1887
 def patch_torch_call_remove_padding(collate_fn):
     _old_collate_torch_call = collate_fn.torch_call
@@ -76,6 +77,7 @@ def patch_torch_call_remove_padding(collate_fn):
 
     collate_fn.torch_call = MethodType(_torch_call_with_remove_pad, collate_fn)
     return collate_fn
+
 
 def calculate_token_lengths(dataset, num_processes):
     return np.array(

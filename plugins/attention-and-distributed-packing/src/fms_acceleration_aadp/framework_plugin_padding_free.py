@@ -20,7 +20,7 @@ import warnings
 from fms_acceleration import AccelerationPlugin
 from peft import LoraConfig
 from transformers import DataCollatorForSeq2Seq, TrainingArguments
-from trl import DataCollatorForCompletionOnlyLM
+from trl import DataCollatorForCompletionOnlyLM  # pylint: disable=import-error
 import torch
 
 
@@ -70,7 +70,9 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
             # "The padding-free plugin currently only works with a
             # `DataCollatorForSeq2Seq` collate_fn,
             # otherwise the collation can be unreliable"
-            return isinstance(collate_fn, (DataCollatorForSeq2Seq, DataCollatorForCompletionOnlyLM))
+            return isinstance(
+                collate_fn, (DataCollatorForSeq2Seq, DataCollatorForCompletionOnlyLM)
+            )
 
         # This check is done here to only patch the attention forward
         # the PR was merged here
@@ -98,18 +100,20 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
             # in this case, replace seq2seq with flattening collator
             if isinstance(collate_fn, DataCollatorForSeq2Seq):
                 return DataCollatorWithFlattening()
-            
+
             # otherwise it will be DataCollatorForCompletionOnlyLM
             # - see _collator_check above
-            if hasattr(collate_fn, 'padding_free'):
+            if hasattr(collate_fn, "padding_free"):
                 # in the later TRL releases there is a padding_free flag
-                # that turns on extra logic to support padding free. Just 
+                # that turns on extra logic to support padding free. Just
                 # turn it on
                 collate_fn.padding_free = True
             else:
-                # otherwise trl version is old, and we need to patch 
+                # otherwise trl version is old, and we need to patch
                 # in padding free logic
+                # Local
                 from .aadp_utils import patch_torch_call_remove_padding
+
                 collate_fn = patch_torch_call_remove_padding(collate_fn)
 
             return collate_fn

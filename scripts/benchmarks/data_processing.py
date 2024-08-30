@@ -64,6 +64,7 @@ def _build_data_formatting_func(
             "response_field must be specified if tokenize=True and response_template=None."
 
     def _format(example):
+        nonlocal loss_masking # reference to variable in _build_data_formatting_func
         formatted_and_maybe_tokenized = tokenizer.apply_chat_template(
             [example], tokenize=tokenize
         )

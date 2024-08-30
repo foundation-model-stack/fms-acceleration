@@ -243,13 +243,13 @@ class AcceleratorPatcher:
                 # - then we replace
                 collator_replacement_rule.pre_req_check(dataloader.collate_fn)
 
-                # FIXME: for now we just disable the replacement_builder
-                assert (
-                    collator_replacement_rule.replacement_builder is None
-                ), "Currently, replacement_builder not allowed for data collator"
-
                 # Replace the collate_fn in dataloader
-                dataloader.collate_fn = collator_replacement_rule.replacement
+                if collator_replacement_rule.replacement is not None:
+                    dataloader.collate_fn = collator_replacement_rule.replacement
+                else:
+                    dataloader.collate_fn = collator_replacement_rule.replacement_builder(
+                        dataloader.collate_fn
+                    )
 
             # - special behavior for dataloader replacements
             # - need to know if we run the original prepare
