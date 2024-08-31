@@ -27,7 +27,7 @@ plugins:
 
         # if True, then we shard experts across data parallel dimension
         # - only feasible if world_size divides the number of experts
-        shard_along_dp: true
+        shard_along_dp: false
 
         # to be specified only if shard_along_dp == False. This will influence
         # the level of sharding, which indicates how many experts per device
@@ -35,7 +35,7 @@ plugins:
         # - we disable the ability to set ep_size=1 since this means no sharding
         # - NOTE: ep_size=1 does not mean shard_along_dp=True, which would otherwise
         #   be contradictory since ep_size suggests no expert parallel.
-        # ep_size: 2
+        ep_size: 4
 
         # the MoE dropless implementation. Currently we only support "dropless_sparse", but
         # in the future we may support others

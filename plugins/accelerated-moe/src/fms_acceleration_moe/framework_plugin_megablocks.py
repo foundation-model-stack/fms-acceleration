@@ -119,6 +119,37 @@ class MegablocksMoEAccelerationPlugin(AccelerationPlugin):
         # load the model
         model = AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
 
+        from torch.distributed._tensor.device_mesh import DeviceMesh, init_device_mesh
+        world_size = torch.distributed.get_world_size()
+        device_mesh = init_device_mesh(
+            "cuda", 
+            (
+                world_size // self._ep_size,
+                self._ep_size,
+            ),
+        )
+
+        from fms_acceleration.model_patcher import patch_target_module
+
+        from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
+
+        # inject the device_mesh
+        class FSDPmod(FSDP):
+            def __init__(self, *args, **kwargs):
+                kwargs['device_mesh'] = device_mesh
+                super().__init__(*args, **kwargs)
+
+        from functools import partial
+
+        patch_target_module(
+            "torch.distributed.fsdp.fully_sharded_data_parallel.FullyShardedDataParallel", 
+            # partial(FSDP, device_mesh=device_mesh),
+            FSDPmod,
+        )
+
+        # DEBUG 
+        return model
+
         # set this in the config, which will be picked up by the forward
         # function to go into the load_balancing loss
         model.config.output_router_logits = self._load_balancing_loss
