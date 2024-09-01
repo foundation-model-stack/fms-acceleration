@@ -206,10 +206,11 @@ class BenchmarkDataset:
                 )
             response_template = self.response_template
 
-        # pass in tokenizer to use apply_chat_templates
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-
-        if self.kwargs["tokenize"]:
+        if (
+            self.kwargs['tokenize']
+            or (not self.kwargs['tokenize'] and self.kwargs['chat_template'])
+        ):
+            tokenizer = AutoTokenizer.from_pretrained(model_name)
             # for now, if pad_token_id is None, will just do a replacement
             if tokenizer.pad_token_id is None:
                 tokenizer.pad_token_id = tokenizer.eos_token_id
@@ -219,6 +220,7 @@ class BenchmarkDataset:
                 re.sub(r"[/-]", "_", model_name),
             )
         else:
+            tokenizer = None
             save_path = DATA_JSON_NAME.format("all")
 
         # get the full path

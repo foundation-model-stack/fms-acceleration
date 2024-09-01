@@ -247,8 +247,10 @@ class AcceleratorPatcher:
                 if collator_replacement_rule.replacement is not None:
                     dataloader.collate_fn = collator_replacement_rule.replacement
                 else:
-                    dataloader.collate_fn = collator_replacement_rule.replacement_builder(
-                        dataloader.collate_fn
+                    dataloader.collate_fn = (
+                        collator_replacement_rule.replacement_builder(
+                            dataloader.collate_fn
+                        )
                     )
 
             # - special behavior for dataloader replacements
