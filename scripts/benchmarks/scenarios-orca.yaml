@@ -35,7 +35,7 @@ data_processing:
         ASSISTANT:
         {{ message['answer'] }}
         {%- endfor %}
-    dataset_split: "train[:2000]"
+    dataset_split: "train[:8000]"
     tokenize: false
 
 # scenarios
@@ -49,6 +49,8 @@ scenarios:
             packing: False
             model_name_or_path: 
                 - 'mistralai/Mistral-7B-v0.1'
+            # dataset_text_field: null
+            # response_template: null
             dataset_text_field: 'output'
             response_template: "\n\nASSISTANT:"
 
@@ -64,6 +66,8 @@ scenarios:
             packing: False
             model_name_or_path: 
                 - 'mistralai/Mistral-7B-v0.1'
+            # dataset_text_field: null
+            # response_template: null
             dataset_text_field: 'output'
             response_template: "\n\nASSISTANT:"
 
@@ -87,6 +91,8 @@ scenarios:
             packing: False
             model_name_or_path: 
                 - 'mistralai/Mistral-7B-v0.1'
+            # dataset_text_field: null
+            # response_template: null
             dataset_text_field: 'output'
             response_template: "\n\nASSISTANT:"
 
@@ -110,5 +116,7 @@ scenarios:
             packing: False
             model_name_or_path: 
                 - 'TheBloke/Mistral-7B-v0.1-GPTQ'
+            # dataset_text_field: null
+            # response_template: null
             dataset_text_field: 'output'
             response_template: "\n\nASSISTANT:"
