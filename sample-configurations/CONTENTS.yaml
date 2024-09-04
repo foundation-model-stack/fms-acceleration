@@ -68,3 +68,8 @@ framework_configs:
         - attention-and-distributed-packing
         - fused-ops-and-kernels
       filename: accelerated-peft-autogptq-foak-padding-free-sample-configuration.yaml
+
+    - shortname: foak-fast-kernels
+      plugins:
+        - fused-ops-and-kernels
+      filename: foak-fast-kernels-sample-configuration.yaml

@@ -85,7 +85,7 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
             )
 
         self._check_config_and_maybe_check_values(
-            key="base_layer", 
+            key="base_layer",
             values=["auto_gptq", "bitsandbytes"],
             default="auto_gptq"
         )
@@ -113,11 +113,6 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
         modifiable_args: Tuple[LoraConfig],
     ):
 
-        # this seems to be only needed for fused lora? 
-        assert (
-            model.dtype == torch.float16 and train_args.fp16
-        ), "need to run in fp16 mixed precision or load model in fp16 when using fused lora"
-
         terms = set()
         for k, v in self.configurations.items():
             if v:
@@ -138,7 +133,7 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
 AccelerationPlugin.register_plugin(
     FastKernelsAccelerationPlugin,
     configuration_or_paths=[
-        "training.fused_ops_and_kernels"
+        "training.fused_ops_and_kernels",
         "peft.quantization.fused_ops_and_kernels",
     ],
 )

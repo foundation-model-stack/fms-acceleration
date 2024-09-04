@@ -37,6 +37,9 @@
 
 scenarios:
     -   name: full-finetuning
+        framework_config: 
+            - null
+            - foak-fast-kernels
         arguments:
             learning_rate: 2e-5
             model_name_or_path: 
@@ -46,6 +49,9 @@ scenarios:
             torch_dtype: float16
 
     -   name: standard-peft
+        framework_config: 
+            - null
+            - foak-fast-kernels
         arguments:
             learning_rate: 2e-4
             torch_dtype: float16
