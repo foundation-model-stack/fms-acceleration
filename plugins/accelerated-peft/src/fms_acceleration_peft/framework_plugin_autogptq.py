@@ -320,7 +320,7 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
         model = get_gptq_peft_model(
             model,
             peft_config=peft_config,
-            auto_find_all_linears=peft_config.target_modules == PEFT_ALL_LINEAR,
+            auto_find_all_linears=(peft_config.target_modules == PEFT_ALL_LINEAR),
             train_mode=True,  # install adapaters for training
         )
         modifiable_args = (None,)  # return a None for peft_config

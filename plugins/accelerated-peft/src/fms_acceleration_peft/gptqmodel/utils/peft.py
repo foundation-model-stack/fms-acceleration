@@ -35,7 +35,7 @@ import torch
 
 # Local
 from ..models.base import BaseGPTQModel
-from ..nn_modules.qlinear.qlinear_tritonv2 import QuantLinear as QuantLinearTriton
+from ..nn_modules.qlinear import BaseQuantLinear
 
 
 class GPTQLoraConfig(LoraConfig):
@@ -61,7 +61,7 @@ class GPTQLoraModel(LoraModel):
         lora_config: LoraConfig,
         adapter_name: str,
         target: torch.nn.Module,
-        target_cls: torch.nn.Module = QuantLinearTriton,
+        target_cls: torch.nn.Module = BaseQuantLinear,
         **kwargs,
     ):
         # if the base layer module matches a supported class, dispatch the lora linear
@@ -97,7 +97,7 @@ def find_all_linear_names(
         ignore.append(lm_head_name)
     results = set()
     for n, m in model.named_modules():
-        if isinstance(m, QuantLinearTriton):
+        if isinstance(m, BaseQuantLinear):
             res = n.split(".")[-1]
             if res not in ignore:
                 results.add(res)
