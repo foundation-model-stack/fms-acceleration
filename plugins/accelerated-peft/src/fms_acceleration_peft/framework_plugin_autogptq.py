@@ -33,7 +33,10 @@ import torch
 import torch.distributed
 
 # Local
-from .autogptq_utils import register_tensors_as_parameters_patch_rule
+from .autogptq_utils import (
+    register_tensors_as_parameters_patch_rule,
+    requires_installation_on_all_linears,
+)
 
 
 class AutoGPTQAccelerationPlugin(AccelerationPlugin):
@@ -318,7 +321,7 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
         model = get_gptq_peft_model(
             model,
             peft_config=peft_config,
-            auto_find_all_linears=peft_config.target_modules is None,
+            auto_find_all_linears=requires_installation_on_all_linears(peft_config),
             train_mode=True,  # install adapaters for training
         )
         modifiable_args = (None,)  # return a None for peft_config

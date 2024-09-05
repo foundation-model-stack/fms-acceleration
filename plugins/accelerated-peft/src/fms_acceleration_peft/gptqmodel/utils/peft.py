@@ -35,7 +35,7 @@ import torch
 
 # Local
 from ..models.base import BaseGPTQModel
-from ..nn_modules.qlinear.qlinear_tritonv2 import QuantLinear as QuantLinearTriton
+from ..nn_modules.qlinear import BaseQuantLinear
 
 
 class GPTQLoraConfig(LoraConfig):
@@ -61,7 +61,7 @@ class GPTQLoraModel(LoraModel):
         lora_config: LoraConfig,
         adapter_name: str,
         target: torch.nn.Module,
-        target_cls: torch.nn.Module = QuantLinearTriton,
+        target_cls: torch.nn.Module = BaseQuantLinear,
         **kwargs,
     ):
         # if the base layer module matches a supported class, dispatch the lora linear
@@ -92,12 +92,12 @@ def find_all_linear_names(
 ):
     if not ignore:
         ignore = []
-    lm_head_name = model.lm_head_name
+    lm_head_name = model.lm_head
     if ignore_lm_head and lm_head_name not in ignore:
         ignore.append(lm_head_name)
     results = set()
     for n, m in model.named_modules():
-        if isinstance(m, torch.nn.Linear):
+        if isinstance(m, BaseQuantLinear):
             res = n.split(".")[-1]
             if res not in ignore:
                 results.add(res)
@@ -127,6 +127,7 @@ def get_gptq_peft_model(
     adapter_name: str = "default",
     auto_find_all_linears: bool = True,
     train_mode: bool = False,
+    ignore_lm_head=True,
 ):
     if train_mode and not peft_config:
         raise ValueError("peft_config not specified when in train mode.")
@@ -142,7 +143,7 @@ def get_gptq_peft_model(
         if peft_type in [PeftType.LORA.value]:
             if auto_find_all_linears:
                 peft_config.target_modules = find_all_linear_names(
-                    model, ignore_lm_head=True
+                    model, ignore_lm_head=ignore_lm_head
                 )
             if peft_type == PeftType.LORA.value and not isinstance(
                 peft_config, GPTQLoraConfig
