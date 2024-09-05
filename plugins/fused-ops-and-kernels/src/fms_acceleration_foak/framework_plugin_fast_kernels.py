@@ -33,11 +33,15 @@ def register_foak_model_patch_rules2(base_type: str, filter_endswith: Set[str] =
 
     # Local
     from .models import (  # pylint: disable=import-outside-toplevel
+        gpt_bigcode,
         llama,
         mistral,
         mixtral,
+        granite,
     )
     rules = [
+        *gpt_bigcode.get_mp_rules(base_type),
+        *granite.get_mp_rules(base_type),
         *llama.get_mp_rules(base_type),
         *mistral.get_mp_rules(base_type),
         *mixtral.get_mp_rules(base_type),
@@ -55,6 +59,7 @@ def register_foak_model_patch_rules2(base_type: str, filter_endswith: Set[str] =
 
 # maybe this we should define envvars
 FILTER_MAP = {
+    "base_layer": set(),
     "fused_lora": {"qkvo", "mlp"},
     "fast_loss": "cross-ent",
     "fast_rsm_layernorm": "rms",
@@ -65,6 +70,8 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
 
     # NOTE: may remove this when we have generic model rules
     restricted_model_archs = [
+        "GraniteForCausalLM",
+        "GPTBigCodeForCausalLM",
         "MixtralForCausalLM",
         "LlamaForCausalLM",
         "MistralForCausalLM",
@@ -112,7 +119,10 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
         train_args: TrainingArguments,
         modifiable_args: Tuple[LoraConfig],
     ):
-
+        # This is designed to be a passthrough if training scenario is
+        # full finetuning or standard peft fused-lora rules (only meant for qpeft)
+        # will still be installed but never triggered
+        # if no peft layer is detected at the point of patching
         terms = set()
         for k, v in self.configurations.items():
             if v:
@@ -124,8 +134,10 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
         # wrapper function to register foak patches
         # NOTE: we never take the lora modules so just set arbitrarily
         # to "auto_gptq"
+        _base_layer = self.configurations['base_layer'] if 'base_layer' \
+            in self.configurations else 'auto_gptq'
         register_foak_model_patch_rules2(
-            base_type="auto_gptq", filter_endswith=terms
+            base_type=_base_layer, filter_endswith=terms
         )
         return model, modifiable_args
 

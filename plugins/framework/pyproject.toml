@@ -24,7 +24,7 @@ classifiers=[
 dependencies = [
   "numpy<2.0", # numpy needs to be bounded due to incompatiblity with current torch<2.3
   "torch>2.2",
-  "transformers",
+  "git+https://github.com/huggingface/transformers.git@9230d78e76611cfa38c845213021aeb185362d10",
   "peft",
   "accelerate",
   "pandas",

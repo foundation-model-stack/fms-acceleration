@@ -38,23 +38,25 @@
 scenarios:
     -   name: full-finetuning
         framework_config: 
-            - null
+            - 
             - foak-fast-kernels
         arguments:
             learning_rate: 2e-5
             model_name_or_path: 
+                - 'bigcode/gpt_bigcode-santacoder'
+                - 'ibm/PowerLM-3b'
                 - 'mistralai/Mistral-7B-v0.1'
                 - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
                 - 'NousResearch/Llama-2-70b-hf'
-            torch_dtype: float16
+            torch_dtype: bfloat16
 
     -   name: standard-peft
         framework_config: 
-            - null
+            - 
             - foak-fast-kernels
         arguments:
             learning_rate: 2e-4
-            torch_dtype: float16
+            torch_dtype: bfloat16
             peft_method: lora
             r: 16
             lora_alpha: 16
@@ -71,7 +73,7 @@ scenarios:
         arguments:
             fp16: True
             learning_rate: 2e-4
-            torch_dtype: float16
+            torch_dtype: bfloat16
             peft_method: lora
             r: 16
             lora_alpha: 16
@@ -89,13 +91,15 @@ scenarios:
         arguments:
             fp16: True
             learning_rate: 2e-4
-            torch_dtype: float16
+            torch_dtype: bfloat16
             peft_method: lora
             r: 16
             lora_alpha: 16
             lora_dropout: 0.1
             target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
             model_name_or_path: 
+                - 'ibm/PowerLM-3b'
+                - 'bigcode/gpt_bigcode-santacoder'
                 - 'mistralai/Mistral-7B-v0.1'
                 - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
                 - 'NousResearch/Llama-2-70b-hf'
@@ -107,7 +111,7 @@ scenarios:
         arguments:
             learning_rate: 2e-4
             fp16: True
-            torch_dtype: float16
+            torch_dtype: bfloat16
             peft_method: lora
             r: 16
             lora_alpha: 16
