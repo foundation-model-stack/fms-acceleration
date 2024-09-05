@@ -206,9 +206,11 @@ class BenchmarkDataset:
                 )
             response_template = self.response_template
 
-        if self.kwargs["tokenize"]:
+        if (
+            self.kwargs['tokenize']
+            or (not self.kwargs['tokenize'] and self.kwargs['chat_template'])
+        ):
             tokenizer = AutoTokenizer.from_pretrained(model_name)
-
             # for now, if pad_token_id is None, will just do a replacement
             if tokenizer.pad_token_id is None:
                 tokenizer.pad_token_id = tokenizer.eos_token_id

@@ -20,6 +20,7 @@ import warnings
 from fms_acceleration import AccelerationPlugin
 from peft import LoraConfig
 from transformers import DataCollatorForSeq2Seq, TrainingArguments
+from trl import DataCollatorForCompletionOnlyLM  # pylint: disable=import-error
 import torch
 
 
@@ -65,11 +66,13 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
             ModelPatcherTrigger,
         )
 
-        def _collator_check_seq2seq(collate_fn):
+        def _collator_check(collate_fn):
             # "The padding-free plugin currently only works with a
             # `DataCollatorForSeq2Seq` collate_fn,
             # otherwise the collation can be unreliable"
-            return isinstance(collate_fn, DataCollatorForSeq2Seq)
+            return isinstance(
+                collate_fn, (DataCollatorForSeq2Seq, DataCollatorForCompletionOnlyLM)
+            )
 
         # This check is done here to only patch the attention forward
         # the PR was merged here
@@ -92,12 +95,35 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
             # Local
             from .aadp_utils import DataCollatorWithFlattening
 
+        def _collator_replacement_builder(collate_fn):
+
+            # in this case, replace seq2seq with flattening collator
+            if isinstance(collate_fn, DataCollatorForSeq2Seq):
+                return DataCollatorWithFlattening()
+
+            # otherwise it will be DataCollatorForCompletionOnlyLM
+            # - see _collator_check above
+            if hasattr(collate_fn, "padding_free"):
+                # in the later TRL releases there is a padding_free flag
+                # that turns on extra logic to support padding free. Just
+                # turn it on
+                collate_fn.padding_free = True
+            else:
+                # otherwise trl version is old, and we need to patch
+                # in padding free logic
+                # Local
+                from .aadp_utils import patch_torch_call_remove_padding
+
+                collate_fn = patch_torch_call_remove_padding(collate_fn)
+
+            return collate_fn
+
         # setup the collator
         AcceleratorPatcher.replace(
             "flattening-collator",
             AcceleratorPatcherComponent.data_collator,
-            replacement=DataCollatorWithFlattening(),
-            pre_requisite_check=_collator_check_seq2seq,
+            replacement_builder=_collator_replacement_builder,
+            pre_requisite_check=_collator_check,
         )
 
         if _native:

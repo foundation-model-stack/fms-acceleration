@@ -14,6 +14,7 @@
 
 # Standard
 from dataclasses import dataclass
+from types import MethodType
 import warnings
 
 # Third Party
@@ -56,6 +57,26 @@ class DataCollatorWithFlattening(DefaultDataCollator):
             else:
                 ret["labels"] += [-100] + feature["input_ids"][1:]
         return default_data_collator([ret], return_tensors)
+
+
+# from https://github.com/huggingface/trl/pull/1887
+def patch_torch_call_remove_padding(collate_fn):
+    _old_collate_torch_call = collate_fn.torch_call
+
+    def _torch_call_with_remove_pad(self, examples):
+        batch = _old_collate_torch_call(examples)
+
+        # logic for removing padding as found in later TRL releases
+        attn_mask = batch.pop("attention_mask")
+        batch["input_ids"] = batch["input_ids"][attn_mask.bool()].unsqueeze(0)
+        batch["position_ids"] = attn_mask.cumsum(1)[attn_mask.bool()].unsqueeze(0) - 1
+        batch["labels"] = batch["labels"][attn_mask.bool()].unsqueeze(0)
+        batch["labels"][batch["position_ids"] == 0] = self.ignore_index
+
+        return batch
+
+    collate_fn.torch_call = MethodType(_torch_call_with_remove_pad, collate_fn)
+    return collate_fn
 
 
 def calculate_token_lengths(dataset, num_processes):

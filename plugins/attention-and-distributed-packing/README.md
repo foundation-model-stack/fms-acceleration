@@ -18,6 +18,13 @@ Plugin | Description | Depends | Loading | Augmentation | Callbacks
 Transformers natively supports padding-free from v4.44.0 [see here](https://github.com/huggingface/transformers/pull/31629). The padding-free plugin will use the transformers library if compatible, 
 otherwise if `transformers < v4.44.0` the plugin will use an internal implementation instead.
 
+## Native TRL Support for PaddingFree with DataCollatorForCompletionOnlyLM from v0.10.1
+Users will be able to use PaddingFree with untokenized data from TRL >= v0.10.1. The flattening of inputs and addition of `position_ids` to the batch
+is carried out inside `DataCollatorForCompletionOnlyLM` when keyword `padding_free` is passed to the collator. The plugin uses the TRL library if compatible, 
+otherwise if `trl < v0.10.1` the plugin will use an internal implementation instead.
+
+If a user still passes in a pretokenized dataset, the plugin will still use `DataCollaterForFlattening` in the `collate_fn`.
+
 ## Running Benchmarks
 
 To reproduce the benchmarks, simply run the following commands,
@@ -29,21 +36,6 @@ Reproduce [MultiPack on A100 80GB](scripts/benchmarks/refs_orca/a100_80gb_mp.csv
 `tox -e run-benches -- "2 4 8" "16 32 64" benchmark_outputs scenarios-orca.yaml "padding-free"`
 
 ## Known Issues
-
-### Currently Only Supports Pre-Tokenized Dataset
-
-The padding-free plugin currently only works with pre-tokenized datasets, this is because it is currently designed to replace 
-the data collator from `SFTTrainer` with a custom data collator to manipulate the input to the modified flash attention forward. 
-
-There are some cases, the data collator for SFTTrainer will handle the formatting and tokenization from raw text datasets. The plugin
-is currently unable to both handle the original data collation and apply its custom data collator over it as the same time. This issue 
-will be addressed in a future commit to support this case. 
-
-In the meantime, the plugin expects the user to provide a pretokenized dataset that
-- is formatted with a template for instruct-tuning cases
-- is tokenized
-- has template labels that are masked to exclude from loss computation
-- has eos token appended
 
 ### Currenly Only Supports Multipack with Padding-Free
 

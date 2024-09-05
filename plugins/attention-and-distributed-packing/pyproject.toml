@@ -23,7 +23,7 @@ classifiers=[
     "Programming Language :: Python :: 3.11",
 ]
 
-dependencies = ["numba"]
+dependencies = ["numba", "trl"]
 
 [tool.hatch.build.targets.wheel]
 only-include = ["src/fms_acceleration_aadp"]

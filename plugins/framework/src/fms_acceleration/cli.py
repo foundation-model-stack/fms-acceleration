@@ -42,6 +42,9 @@ def install_plugin(
     assert len(pkg_name) == 1, "Please specify exactly one plugin to install"
     pkg_name = pkg_name[0]
 
+    # if toxinidir is specified in path, replace with cwd
+    pkg_name = pkg_name.format(toxinidir=os.getcwd())
+
     # take the flags
     args = [x for x in args if x.startswith("-")]
 

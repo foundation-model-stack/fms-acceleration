@@ -20,6 +20,11 @@
 #   allows to configure many different datasets
 #  - there is an option of setting tokenize is True or False
 
+# NOTE: on tokenization
+# if tokenize = True then its a pretokenization flow, then below set
+# - response_template: null
+# - dataset_text_field: null
+# otherwise if tokenize = False, then do not set the above to null
 data_processing:
     dataset_name: microsoft/orca-math-word-problems-200k
     chat_template: |
@@ -30,9 +35,8 @@ data_processing:
         ASSISTANT:
         {{ message['answer'] }}
         {%- endfor %}
-    dataset_split: "train[:2000]"
-    tokenize: True
-    response_template: "\n\nASSISTANT:"
+    dataset_split: "train[:8000]"
+    tokenize: false
 
 # scenarios
 scenarios:
@@ -45,8 +49,8 @@ scenarios:
             packing: False
             model_name_or_path: 
                 - 'mistralai/Mistral-7B-v0.1'
-            response_template: null
-            dataset_text_field: null
+            dataset_text_field: 'output'
+            response_template: "\n\nASSISTANT:"
 
     -   name: padding-free
         framework_config: 
@@ -60,8 +64,8 @@ scenarios:
             packing: False
             model_name_or_path: 
                 - 'mistralai/Mistral-7B-v0.1'
-            response_template: null
-            dataset_text_field: null
+            dataset_text_field: 'output'
+            response_template: "\n\nASSISTANT:"
 
     -   name: accelerated-peft-bnb
         framework_config: 
@@ -83,8 +87,8 @@ scenarios:
             packing: False
             model_name_or_path: 
                 - 'mistralai/Mistral-7B-v0.1'
-            response_template: null
-            dataset_text_field: null
+            dataset_text_field: 'output'
+            response_template: "\n\nASSISTANT:"
 
     -   name: accelerated-peft-gptq
         framework_config: 
@@ -106,5 +110,5 @@ scenarios:
             packing: False
             model_name_or_path: 
                 - 'TheBloke/Mistral-7B-v0.1-GPTQ'
-            response_template: null
-            dataset_text_field: null
+            dataset_text_field: 'output'
+            response_template: "\n\nASSISTANT:"
