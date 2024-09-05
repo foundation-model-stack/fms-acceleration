@@ -32,6 +32,18 @@ import torch
 # these parameters are to be patched for triton v2
 # consider making a map if patching more kernels
 PATCH_FOR_FSDP_TRITON_V2 = ["qweight", "qzeros"]
+PEFT_ALL_LINEAR = "all-linear"
+
+
+def requires_installation_on_all_linears(peft_config):
+    tm = peft_config.target_modules
+    assert isinstance(tm, (list, str)), "target modules can only be list or string"
+    if isinstance(tm, list):
+        if PEFT_ALL_LINEAR not in tm:
+            return False
+        assert len(tm) == 1, f"`{PEFT_ALL_LINEAR}` must exist alone in target modules"
+        return True
+    return tm == PEFT_ALL_LINEAR
 
 
 def build_patch_to_view_tensor_to_parameter_for_fsdp_gptq(
