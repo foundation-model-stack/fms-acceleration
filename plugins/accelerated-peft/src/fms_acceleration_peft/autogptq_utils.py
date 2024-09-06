@@ -37,8 +37,10 @@ PEFT_ALL_LINEAR = "all-linear"
 
 def requires_installation_on_all_linears(peft_config):
     tm = peft_config.target_modules
-    assert isinstance(tm, (list, str)), "target modules can only be list or string"
-    if isinstance(tm, list):
+    assert isinstance(
+        tm, (list, set, str)
+    ), "target modules can only be list, set or string"
+    if isinstance(tm, (list, set)):
         if PEFT_ALL_LINEAR not in tm:
             return False
         assert len(tm) == 1, f"`{PEFT_ALL_LINEAR}` must exist alone in target modules"
