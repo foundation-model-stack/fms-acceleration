@@ -172,7 +172,7 @@ CONFIGURATIONS = {
     ),
     KEY_AADP_PADDING_FREE: "plugins/attention-and-distributed-packing/configs/padding_free.yaml",
     KEY_AADP_MULTIPACK: "plugins/attention-and-distributed-packing/configs/multipack.yaml",
-    KEY_FAST_KERNELS: "plugins/fused-ops-and-kernels/configs/fast_full.yaml",
+    KEY_FAST_KERNELS: "plugins/fused-ops-and-kernels/configs/fast_kernels.yaml",
 }
 
 # list of (tag, combi) tuples

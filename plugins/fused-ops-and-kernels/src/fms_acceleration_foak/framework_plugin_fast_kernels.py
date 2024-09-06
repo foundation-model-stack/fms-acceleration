@@ -22,6 +22,8 @@ from peft.tuners.lora.layer import LoraLayer
 from transformers import TrainingArguments
 import torch
 
+from .framework_plugin_fast_quantized_peft import lora_adapters_switch_ddp_from_fsdp
+
 # consider rewriting register_foak_model_patch_rules into something 
 # like this also
 def register_foak_model_patch_rules2(base_type: str, filter_endswith: Set[str] = None):
@@ -59,7 +61,6 @@ def register_foak_model_patch_rules2(base_type: str, filter_endswith: Set[str] =
 
 # maybe this we should define envvars
 FILTER_MAP = {
-    "base_layer": set(),
     "fused_lora": {"qkvo", "mlp"},
     "fast_loss": "cross-ent",
     "fast_rsm_layernorm": "rms",
@@ -91,7 +92,7 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
                 key="peft.quantization.fused_ops_and_kernels",
             )
 
-        self._check_config_and_maybe_check_values(
+        self.configurations["base_layer"] = self._check_config_and_maybe_check_values(
             key="base_layer",
             values=["auto_gptq", "bitsandbytes"],
             default="auto_gptq"
@@ -124,8 +125,8 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
         # will still be installed but never triggered
         # if no peft layer is detected at the point of patching
         terms = set()
-        for k, v in self.configurations.items():
-            if v:
+        for k in self.configurations:
+            if k in FILTER_MAP:
                 ts = FILTER_MAP[k]
                 if isinstance(ts, str):
                     ts = {ts}
@@ -134,12 +135,36 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
         # wrapper function to register foak patches
         # NOTE: we never take the lora modules so just set arbitrarily
         # to "auto_gptq"
-        _base_layer = self.configurations['base_layer'] if 'base_layer' \
-            in self.configurations else 'auto_gptq'
+        _base_layer = self.configurations.get('base_layer', None)
         register_foak_model_patch_rules2(
             base_type=_base_layer, filter_endswith=terms
         )
         return model, modifiable_args
+
+    def get_callbacks_and_ready_for_train(
+        self, model: torch.nn.Module = None, accelerator=None
+    ):
+        # This callback applies only for qpeft
+        # should not install this for full FT and standard peft
+        is_quantized = getattr(model, "quantization_method", None)
+        callbacks = []
+        if (
+            accelerator is not None
+            and getattr(accelerator.state, "fsdp_plugin", None) is not None
+            and is_quantized is not None
+        ):
+            # This function installs grad reduction hooks on adapters if
+            # FSDP is detected. Because of incompatibility between FSDP and
+            # fused modules, adapters are not sharded - instead
+            # accumulated gradients from adapters in each device are reduced
+            # in these grad reduce hooks
+            # This function might be removed in future if the incompatiblity
+            # is resolved
+            lora_adapters_switch_ddp_from_fsdp(
+                [mod for mod in model.modules() if isinstance(mod, LoraLayer)],
+                accelerator.state.fsdp_plugin,
+            )
+        return callbacks
 
 # register
 AccelerationPlugin.register_plugin(

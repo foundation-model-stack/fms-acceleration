@@ -22,11 +22,6 @@ from fms_acceleration.model_patcher import (
     combine_functions,
     combine_triggers,
 )
-from transformers.models.granite.modeling_granite import (
-    GraniteAttention,
-    GraniteMLP,
-    GraniteRMSNorm,
-)
 
 # Local
 from ..kernels.unsloth.cross_entropy_loss import FastCrossEntropyLoss
@@ -42,6 +37,15 @@ def get_mp_rules(base_type: str):
     its forward builder argument, wrap the forward_builder
     function as a partial function with the base_type argument
     """
+    try:
+        from transformers.models.granite.modeling_granite import ( # pylint: disable=import-outside-toplevel
+            GraniteAttention,
+            GraniteMLP,
+            GraniteRMSNorm,
+        )
+    except ImportError:
+        return []
+
     return [
         # TODO: have a generic version of this rule
         # - do regex on RMSNorm class name

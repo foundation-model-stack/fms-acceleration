@@ -230,8 +230,9 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
         # - in particular "is_loaded_in_4bit" will be checked in prepare_model_for_kbit_training
         #   and there is a section of code that will be skipped if not set.
         setattr(model, "is_loaded_in_4bit", True)
-        setattr(model, "quantization_method", "gptq")
-
+        # Need to set this on model.model instead of model, applies to all versionsof gptq
+        # as this attribute is accessed later on from model.model
+        setattr(model.model, "quantization_method", "gptq")
         return model
 
     @property
