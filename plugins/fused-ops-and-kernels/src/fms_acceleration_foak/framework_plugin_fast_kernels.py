@@ -97,16 +97,16 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
             values=["auto_gptq", "bitsandbytes"],
             default="auto_gptq"
         )
-        self._check_config_and_maybe_check_values(
+        self.configurations["fused_lora"] = self._check_config_and_maybe_check_values(
             key="fused_lora", values=[False,True], default=True
         )
-        self._check_config_and_maybe_check_values(
+        self.configurations["fast_loss"] = self._check_config_and_maybe_check_values(
             key="fast_loss", values=[False,True], default=True
         )
-        self._check_config_and_maybe_check_values(
-            key="fast_rsm_layernorm", values=[False,True], default=True
+        self.configurations["fast_rms_layernorm"] = self._check_config_and_maybe_check_values(
+            key="fast_rms_layernorm", values=[False,True], default=True
         )
-        self._check_config_and_maybe_check_values(
+        self.configurations["fast_rope_embeddings"] = self._check_config_and_maybe_check_values(
             key="fast_rope_embeddings", values=[False,True], default=True
         )
 

@@ -230,9 +230,7 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
         # - in particular "is_loaded_in_4bit" will be checked in prepare_model_for_kbit_training
         #   and there is a section of code that will be skipped if not set.
         setattr(model, "is_loaded_in_4bit", True)
-        # Need to set this on model.model instead of model, applies to all versionsof gptq
-        # as this attribute is accessed later on from model.model
-        setattr(model.model, "quantization_method", "gptq")
+        setattr(model, "quantization_method", "gptq")
         return model
 
     @property
@@ -322,6 +320,11 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
             auto_find_all_linears=requires_installation_on_all_linears(peft_config),
             train_mode=True,  # install adapaters for training
         )
+
+        # Reassign the attributes after PEFT installation replaces the top-level class
+        setattr(model, "is_loaded_in_4bit", True)
+        setattr(model, "quantization_method", "gptq")
+
         modifiable_args = (None,)  # return a None for peft_config
 
         if self.use_external_lib:
