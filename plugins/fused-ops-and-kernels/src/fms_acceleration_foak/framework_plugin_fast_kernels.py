@@ -52,7 +52,7 @@ def register_foak_model_patch_rules2(base_type: str, filter_endswith: Set[str] =
     if filter_endswith is not None:
         # filter rules
         rules = [
-            r for r in rules if 
+            r for r in rules if
             any(r.rule_id.endswith(x) for x in filter_endswith)
         ]
 
@@ -121,12 +121,16 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
         modifiable_args: Tuple[LoraConfig],
     ):
         # This is designed to be a passthrough if training scenario is
-        # full finetuning or standard peft fused-lora rules (only meant for qpeft)
+        # full finetuning or standard peft, fused-lora rules (only meant for qpeft)
         # will still be installed but never triggered
         # if no peft layer is detected at the point of patching
+        is_quantized = getattr(model, "quantization_method", None)
+        
         terms = set()
         for k in self.configurations:
             if k in FILTER_MAP:
+                if k == "fused_lora" and not is_quantized:
+                    continue
                 ts = FILTER_MAP[k]
                 if isinstance(ts, str):
                     ts = {ts}

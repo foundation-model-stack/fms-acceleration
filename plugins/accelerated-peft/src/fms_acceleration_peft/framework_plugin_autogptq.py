@@ -321,8 +321,7 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
             train_mode=True,  # install adapaters for training
         )
 
-        # Reassign the attributes after PEFT installation replaces the top-level class
-        setattr(model, "is_loaded_in_4bit", True)
+        # Reassign `quantization_method` after PEFT installation replaces the top-level class
         setattr(model, "quantization_method", "gptq")
 
         modifiable_args = (None,)  # return a None for peft_config
