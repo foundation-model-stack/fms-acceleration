@@ -321,6 +321,8 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
             train_mode=True,  # install adapaters for training
         )
 
+        # We do not set `is_loaded_in_4bit`` at this point because otherwise 
+        # `accelerate.prepare_model` will think the device placement is finalized for the quantized model, and will raise
         # Reassign `quantization_method` after PEFT installation replaces the top-level class
         setattr(model, "quantization_method", "gptq")
 

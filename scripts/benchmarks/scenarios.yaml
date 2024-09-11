@@ -46,8 +46,8 @@ scenarios:
                 # - 'ibm/PowerLM-3b'
                 - 'bigcode/gpt_bigcode-santacoder'
                 - 'mistralai/Mistral-7B-v0.1'
-                # - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
-                # - 'NousResearch/Llama-2-70b-hf'
+                - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
+                - 'NousResearch/Llama-2-70b-hf'
             torch_dtype: bfloat16
 
     -   name: standard-peft
@@ -64,8 +64,8 @@ scenarios:
             target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
             model_name_or_path: 
                 - 'mistralai/Mistral-7B-v0.1'
-                # - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
-                # - 'NousResearch/Llama-2-70b-hf'
+                - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
+                - 'NousResearch/Llama-2-70b-hf'
 
     -   name: baseline-peft-bnb
         framework_config: 
@@ -81,8 +81,8 @@ scenarios:
             target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
             model_name_or_path: 
                 - 'mistralai/Mistral-7B-v0.1'
-                # - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
-                # - 'NousResearch/Llama-2-70b-hf'
+                - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
+                - 'NousResearch/Llama-2-70b-hf'
 
     -   name: accelerated-peft-bnb
         framework_config: 
@@ -101,8 +101,8 @@ scenarios:
                 # - 'ibm/PowerLM-3b'
                 - 'bigcode/gpt_bigcode-santacoder'
                 - 'mistralai/Mistral-7B-v0.1'
-                # - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
-                # - 'NousResearch/Llama-2-70b-hf'
+                - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
+                - 'NousResearch/Llama-2-70b-hf'
 
     -   name: accelerated-peft-gptq
         framework_config: 
@@ -119,5 +119,5 @@ scenarios:
             target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
             model_name_or_path: 
                 - 'TheBloke/Mistral-7B-v0.1-GPTQ'
-                # - 'TheBloke/Mixtral-8x7B-Instruct-v0.1-GPTQ'
-                # - 'TheBloke/Llama-2-70B-GPTQ'
+                - 'TheBloke/Mixtral-8x7B-Instruct-v0.1-GPTQ'
+                - 'TheBloke/Llama-2-70B-GPTQ'

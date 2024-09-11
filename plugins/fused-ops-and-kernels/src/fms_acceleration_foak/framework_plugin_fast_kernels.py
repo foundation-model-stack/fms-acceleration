@@ -63,7 +63,7 @@ def register_foak_model_patch_rules2(base_type: str, filter_endswith: Set[str] =
 FILTER_MAP = {
     "fused_lora": {"qkvo", "mlp"},
     "fast_loss": "cross-ent",
-    "fast_rsm_layernorm": "rms",
+    "fast_rms_layernorm": "rms",
     "fast_rope_embeddings": "rope",
 }
 
@@ -81,7 +81,7 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
     def __init__(self, configurations: Dict[str, Dict]):
         super().__init__(configurations)
 
-        # NOTE: unfortunately we have to do this now, there is no good way to specify mutiple 
+        # NOTE: unfortunately we have to do this now, there is no good way to specify mutiple
         # keys
         try:
             self.configurations = self._check_config_and_maybe_check_values(
@@ -124,22 +124,27 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
         # full finetuning or standard peft, fused-lora rules (only meant for qpeft)
         # will still be installed but never triggered
         # if no peft layer is detected at the point of patching
-        is_quantized = getattr(model, "quantization_method", None)
+
+        # some logic to omit terms from the filter if logic precludes
+        omitted = set()
+        if getattr(model, "quantization_method", None) is None:
+            # - fused_lora only required for quant-peft
+            omitted.add("fused_lora")
         
         terms = set()
-        for k in self.configurations:
-            if k in FILTER_MAP:
-                if k == "fused_lora" and not is_quantized:
-                    continue
+        for k, v in self.configurations.items():
+            if k in FILTER_MAP and k not in omitted:
                 ts = FILTER_MAP[k]
                 if isinstance(ts, str):
                     ts = {ts}
+                if isinstance(v, bool) and v is False:
+                    continue
                 terms.update(ts)
 
         # wrapper function to register foak patches
         # - the base layer setting below will be ignored in non quantized-lora settings
         register_foak_model_patch_rules2(
-            base_type=self.configurations['base_layer'], 
+            base_type=self.configurations['base_layer'],
             filter_endswith=terms
         )
         return model, modifiable_args
