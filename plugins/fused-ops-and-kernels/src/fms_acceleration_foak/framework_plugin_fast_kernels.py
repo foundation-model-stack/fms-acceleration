@@ -137,11 +137,10 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
                 terms.update(ts)
 
         # wrapper function to register foak patches
-        # NOTE: we never take the lora modules so just set arbitrarily
-        # to "auto_gptq"
-        _base_layer = self.configurations.get('base_layer', None)
+        # - the base layer setting below will be ignored in non quantized-lora settings
         register_foak_model_patch_rules2(
-            base_type=_base_layer, filter_endswith=terms
+            base_type=self.configurations['base_layer'], 
+            filter_endswith=terms
         )
         return model, modifiable_args
 

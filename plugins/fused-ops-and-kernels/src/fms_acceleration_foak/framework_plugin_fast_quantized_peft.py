@@ -160,7 +160,7 @@ class FastQuantizedPeftAccelerationPlugin(AccelerationPlugin):
             )
         return callbacks
 
-# This plugin is currently deregistered in favour of fast_kernels.py
+# This plugin is currently deregistered in favour of framework_plugin_fast_kernels.py
 # to additionally support both full-FT and standard PEFT
 # AccelerationPlugin.register_plugin(
 #     FastQuantizedPeftAccelerationPlugin,
