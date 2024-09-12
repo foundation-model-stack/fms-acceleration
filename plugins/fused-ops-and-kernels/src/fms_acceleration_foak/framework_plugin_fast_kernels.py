@@ -120,6 +120,11 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
         train_args: TrainingArguments,
         modifiable_args: Tuple[LoraConfig],
     ):
+        # assert that plugin requires mixed precision to be set
+        assert (
+            train_args.bf16 or train_args.bf16
+        ), f"{self.__class__} requires mixed precision argument `--fp16` or `--bf16`"
+
         # This is designed to be a passthrough if training scenario is
         # full finetuning or standard peft, fused-lora rules (only meant for qpeft)
         # will still be installed but never triggered
