@@ -348,15 +348,18 @@ class ModelPatcher:
                 key=lambda _rule: len(_rule.import_and_maybe_reload[2]),
                 reverse=False,
             )
-            for rule_s in _with_reload:
-                for rule_l in _with_reload[1:]:
+
+            for i_s, rule_s in enumerate(_with_reload[:-1]):
+                for rule_l in _with_reload[i_s+1:]:
                     # if target paths in rule s is a prefix of rule l, raise an error
-                    _, _, _path_s = rule_s.import_and_maybe_reload
+                    _name_s, _obj_s, _path_s = rule_s.import_and_maybe_reload
                     _, _, _path_l = rule_l.import_and_maybe_reload
-                    assert not _path_l.startswith(
-                        _path_s
-                    ), f"Attempting to reload same path `{_path_s}` multiple times in \
-                            {rule_s.rule_id} and {rule_l.rule_id}"
+                    if _path_l.startswith(_path_s):
+                        # - then since _s appears to the left of _l, we will rememeber
+                        #    its location and disable the reload later
+                        # - doing this, actually _with_reload will contain things
+                        #   that are not reloaded
+                        rule_s.import_and_maybe_reload = (_name_s, _obj_s, None)
 
         # handle those with reload first
         for rule in _with_reload + _no_reload:
