@@ -16,6 +16,14 @@ Plugin | Description | Depends | Loading | Augmentation | Callbacks
 [fast_quantized_peft](./src/fms_accelerate_foak/framework_plugin_fast_quantized_peft.py) | LoRA fused ops, fast cross-entropy, fast rms, fast RoPE | Contains extracted code |  | ✅
 [fast_kernels](./src/fms_accelerate_foak/framework_plugin_fast_kernels.py) | Enhanced version of quantized_peft, that also works for full-FT and non-quant peft | Contains extracted code |  | ✅
 
+### Supported DataType Settings
+**Compatibility Matrix with Mixed Precision**
+torch_dtype | Mixed Precision | Full-FT-FOAK | PEFT-FOAK | QPEFT-FOAK
+-- | -- | -- | -- | --
+FLOAT16 | - | ✗ Not Allowed | ✗| ✗
+FLOAT16 | FP16 | ValueError: <br>Attempting to <br>unscale FP16 gradients. <br>[See here](https://github.com/huggingface/peft/blob/main/docs/source/developer_guides/troubleshooting.md) | **Compatible** | **Compatible**
+BFLOAT16 | - | ✗ | ✗ | ✗
+BFLOAT16 | BF16 | **Compatible** | **Compatible** | [Less Performant](https://github.com/foundation-model-stack/fms-acceleration/issues/84)
 
 ### Code Extracted from Unsloth
 

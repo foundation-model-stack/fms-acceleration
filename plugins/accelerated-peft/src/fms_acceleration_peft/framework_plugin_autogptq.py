@@ -274,7 +274,9 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
 
         # some assertions
         assert peft_config is not None, "need peft_config to install PEFT adapters"
-
+        assert (
+            model.dtype == torch.float16 or train_args.fp16
+        ), "need to run in fp16 mixed precision or load model in fp16"
         # call the prepare_model_for_kbit_training. This will no longer be called
         # inside SFTTrainer, because we eventually return None for the peft_config.
         model = prepare_model_for_kbit_training(

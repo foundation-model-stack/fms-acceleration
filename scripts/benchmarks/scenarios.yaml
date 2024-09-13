@@ -49,12 +49,14 @@ scenarios:
                 - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
                 - 'NousResearch/Llama-2-70b-hf'
             torch_dtype: bfloat16
+            bf16: True
 
     -   name: standard-peft
         framework_config: 
             - 
             - foak-fast-kernels
         arguments:
+            bf16: True
             learning_rate: 2e-4
             torch_dtype: bfloat16
             peft_method: lora
@@ -71,9 +73,9 @@ scenarios:
         framework_config: 
             - baseline-peft-bnb
         arguments:
-            bf16: True
+            fp16: True
             learning_rate: 2e-4
-            torch_dtype: bfloat16
+            torch_dtype: float16
             peft_method: lora
             r: 16
             lora_alpha: 16
@@ -89,9 +91,9 @@ scenarios:
             - accelerated-peft-bnb
             - accelerated-peft-bnb-foak
         arguments:
-            bf16: True
+            fp16: True
             learning_rate: 2e-4
-            torch_dtype: bfloat16
+            torch_dtype: float16
             peft_method: lora
             r: 16
             lora_alpha: 16
@@ -110,8 +112,8 @@ scenarios:
             - accelerated-peft-autogptq-foak
         arguments:
             learning_rate: 2e-4
-            bf16: True
-            torch_dtype: bfloat16
+            fp16: True
+            torch_dtype: float16
             peft_method: lora
             r: 16
             lora_alpha: 16
