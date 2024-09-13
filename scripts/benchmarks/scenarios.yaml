@@ -73,9 +73,9 @@ scenarios:
         framework_config: 
             - baseline-peft-bnb
         arguments:
-            fp16: True
+            bf16: True
             learning_rate: 2e-4
-            torch_dtype: float16
+            torch_dtype: bfloat16
             peft_method: lora
             r: 16
             lora_alpha: 16
@@ -91,9 +91,9 @@ scenarios:
             - accelerated-peft-bnb
             - accelerated-peft-bnb-foak
         arguments:
-            fp16: True
+            bf16: True
             learning_rate: 2e-4
-            torch_dtype: float16
+            torch_dtype: bfloat16
             peft_method: lora
             r: 16
             lora_alpha: 16
@@ -112,8 +112,8 @@ scenarios:
             - accelerated-peft-autogptq-foak
         arguments:
             learning_rate: 2e-4
-            fp16: True
-            torch_dtype: float16
+            fp16: True # running gptq-lora in float16 is more performant, see issue
+            torch_dtype: float16 # https://github.com/foundation-model-stack/fms-acceleration/issues/84
             peft_method: lora
             r: 16
             lora_alpha: 16
