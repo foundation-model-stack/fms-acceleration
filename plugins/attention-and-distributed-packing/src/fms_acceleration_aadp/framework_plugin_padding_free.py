@@ -179,7 +179,7 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
             try:
                 # if it is peft
                 _module_path = model.get_base_model().__module__
-            except AttributeError: 
+            except AttributeError:
                 _module_path = model.__module__
 
             ModelPatcher.register(

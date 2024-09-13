@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # Standard
-from typing import Dict, Tuple, Set
+from typing import Dict, Set, Tuple
 
 # Third Party
 from fms_acceleration import AccelerationPlugin, AccelerationPluginConfigError
@@ -22,9 +22,11 @@ from peft.tuners.lora.layer import LoraLayer
 from transformers import TrainingArguments
 import torch
 
+# Local
 from .framework_plugin_fast_quantized_peft import lora_adapters_switch_ddp_from_fsdp
 
-# consider rewriting register_foak_model_patch_rules into something 
+
+# consider rewriting register_foak_model_patch_rules into something
 # like this also
 def register_foak_model_patch_rules2(base_type: str, filter_endswith: Set[str] = None):
 
@@ -36,11 +38,12 @@ def register_foak_model_patch_rules2(base_type: str, filter_endswith: Set[str] =
     # Local
     from .models import (  # pylint: disable=import-outside-toplevel
         gpt_bigcode,
+        granite,
         llama,
         mistral,
         mixtral,
-        granite,
     )
+
     rules = [
         *gpt_bigcode.get_mp_rules(base_type),
         *granite.get_mp_rules(base_type),
@@ -52,12 +55,12 @@ def register_foak_model_patch_rules2(base_type: str, filter_endswith: Set[str] =
     if filter_endswith is not None:
         # filter rules
         rules = [
-            r for r in rules if
-            any(r.rule_id.endswith(x) for x in filter_endswith)
+            r for r in rules if any(r.rule_id.endswith(x) for x in filter_endswith)
         ]
 
     for _rule in rules:
         ModelPatcher.register(_rule)
+
 
 # maybe this we should define envvars
 FILTER_MAP = {
@@ -66,6 +69,7 @@ FILTER_MAP = {
     "fast_rms_layernorm": "rms",
     "fast_rope_embeddings": "rope",
 }
+
 
 class FastKernelsAccelerationPlugin(AccelerationPlugin):
 
@@ -93,21 +97,23 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
             )
 
         self.configurations["base_layer"] = self._check_config_and_maybe_check_values(
-            key="base_layer",
-            values=["auto_gptq", "bitsandbytes"],
-            default="auto_gptq"
+            key="base_layer", values=["auto_gptq", "bitsandbytes"], default="auto_gptq"
         )
         self.configurations["fused_lora"] = self._check_config_and_maybe_check_values(
-            key="fused_lora", values=[False,True], default=True
+            key="fused_lora", values=[False, True], default=True
         )
         self.configurations["fast_loss"] = self._check_config_and_maybe_check_values(
-            key="fast_loss", values=[False,True], default=True
+            key="fast_loss", values=[False, True], default=True
         )
-        self.configurations["fast_rms_layernorm"] = self._check_config_and_maybe_check_values(
-            key="fast_rms_layernorm", values=[False,True], default=True
+        self.configurations["fast_rms_layernorm"] = (
+            self._check_config_and_maybe_check_values(
+                key="fast_rms_layernorm", values=[False, True], default=True
+            )
         )
-        self.configurations["fast_rope_embeddings"] = self._check_config_and_maybe_check_values(
-            key="fast_rope_embeddings", values=[False,True], default=True
+        self.configurations["fast_rope_embeddings"] = (
+            self._check_config_and_maybe_check_values(
+                key="fast_rope_embeddings", values=[False, True], default=True
+            )
         )
 
     @property
@@ -135,7 +141,7 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
         if getattr(model, "quantization_method", None) is None:
             # - fused_lora only required for quant-peft
             omitted.add("fused_lora")
-        
+
         terms = set()
         for k, v in self.configurations.items():
             if k in FILTER_MAP and k not in omitted:
@@ -149,8 +155,7 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
         # wrapper function to register foak patches
         # - the base layer setting below will be ignored in non quantized-lora settings
         register_foak_model_patch_rules2(
-            base_type=self.configurations['base_layer'],
-            filter_endswith=terms
+            base_type=self.configurations["base_layer"], filter_endswith=terms
         )
         return model, modifiable_args
 
@@ -178,6 +183,7 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
                 accelerator.state.fsdp_plugin,
             )
         return callbacks
+
 
 # register
 AccelerationPlugin.register_plugin(

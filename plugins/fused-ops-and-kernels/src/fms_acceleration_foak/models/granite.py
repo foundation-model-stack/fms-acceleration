@@ -38,7 +38,8 @@ def get_mp_rules(base_type: str):
     function as a partial function with the base_type argument
     """
     try:
-        from transformers.models.granite.modeling_granite import ( # pylint: disable=import-outside-toplevel
+        # Third Party
+        from transformers.models.granite.modeling_granite import (  # pylint: disable=import-outside-toplevel
             GraniteAttention,
             GraniteMLP,
             GraniteRMSNorm,

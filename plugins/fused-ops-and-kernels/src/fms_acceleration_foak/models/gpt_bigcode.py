@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from fms_acceleration.model_patcher import (
-    ModelPatcherRule,
-)
+# Third Party
+from fms_acceleration.model_patcher import ModelPatcherRule
 
 # Local
 from ..kernels.unsloth.cross_entropy_loss import FastCrossEntropyLoss
+
 
 def get_mp_rules(base_type: str):
     """

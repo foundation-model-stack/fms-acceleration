@@ -350,7 +350,7 @@ class ModelPatcher:
             )
 
             for i_s, rule_s in enumerate(_with_reload[:-1]):
-                for rule_l in _with_reload[i_s+1:]:
+                for rule_l in _with_reload[i_s + 1 :]:
                     # if target paths in rule s is a prefix of rule l, raise an error
                     _name_s, _obj_s, _path_s = rule_s.import_and_maybe_reload
                     _, _, _path_l = rule_l.import_and_maybe_reload
