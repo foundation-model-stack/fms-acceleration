@@ -354,12 +354,19 @@ class ModelPatcher:
                     # if target paths in rule s is a prefix of rule l, raise an error
                     _name_s, _obj_s, _path_s = rule_s.import_and_maybe_reload
                     _, _, _path_l = rule_l.import_and_maybe_reload
-                    if _path_l.startswith(_path_s):
-                        # - then since _s appears to the left of _l, we will rememeber
-                        #    its location and disable the reload later
-                        # - doing this, actually _with_reload will contain things
-                        #   that are not reloaded
+
+                    if _path_s == _path_l:
+                        # - in the even the target is exactly the same, we will
+                        # only reload once
                         rule_s.import_and_maybe_reload = (_name_s, _obj_s, None)
+                        continue
+
+                    # - otherwise, we do not consider the cases where the target
+                    # is a subpath since this results in unpredictablity.
+                    assert not _path_l.startswith(
+                        _path_s
+                    ), f"Attempting to reload a subpath`{_path_s}` multiple times in \
+                            {rule_s.rule_id} and {rule_l.rule_id}"
 
         # handle those with reload first
         for rule in _with_reload + _no_reload:

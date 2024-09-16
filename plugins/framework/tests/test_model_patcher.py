@@ -123,7 +123,7 @@ def test_import_and_maybe_reload_rule_with_mp_replaces_old_attribute():
             assert isinstance(module4.Module4Class().attribute, PatchedModuleClass)
 
 
-def test_mp_throws_error_with_multiple_reloads_on_same_target():
+def test_mp_multiple_reloads_on_same_target():
     """
     Simulate a case where two rules attempt to reload on the same target prefix
 
@@ -196,19 +196,19 @@ def test_mp_throws_error_with_multiple_reloads_on_same_target():
                 # 1. Initialize a model with module path tests.model_patcher_fixtures.module4
                 model = module4.Module4Class()
 
-                # 2. Simulate patching a function in module4.module5.module5_1
+                # 2. Simulate patching a function in module4.module5
                 ModelPatcher.register(
                     ModelPatcherRule(
                         rule_id=f"{DUMMY_RULE_ID}.2",
                         import_and_maybe_reload=(
                             "tests.model_patcher_fixtures.module4.module5.module5_1.mod_5_function",
                             patched_mod_function,
-                            "tests.model_patcher_fixtures.module4.module5.module5_1",
+                            "tests.model_patcher_fixtures.module4.module5",
                         ),
                     )
                 )
 
-                # 3. Simulate patching a class in module4.module5.module5_1
+                # 3. Simulate patching a class in module4 (an upstream path)
                 ModelPatcher.register(
                     ModelPatcherRule(
                         rule_id=f"{DUMMY_RULE_ID}.1",
@@ -221,11 +221,51 @@ def test_mp_throws_error_with_multiple_reloads_on_same_target():
                 )
 
                 # while there are occasions repeated reloads along the same target path prefix work,
-                # it is risky and not guaranteed to work for all cases.
-                # To prevent the risk of any of the patches conflicting,
-                # we throw an exception if a shorter target path is a prefix of another
-                # longer target path
+                # the model patch will only call a reload once on the path.
+                # - this is because reloading on upstream paths may intefere with downstream
+                # - reload on tests.model_patcher_fixtures.module4 (shorter) will be skipped
+                # - reload on tests.model_patcher_fixtures.module4.module5 (longer) will be called
                 ModelPatcher.patch(model)
+
+    # However the patch_target_module will be surreptiously called to prevent
+    # the overwrites demonstrated above if targets paths are
+    # are a prefixes of another longer target path
+    with isolate_test_module_fixtures():
+        with instantiate_model_patcher():
+            # 1. Initialize a model with module path tests.model_patcher_fixtures.module4
+            model = module4.Module4Class()
+
+            # 2. Simulate patching a function in module4.module5
+            ModelPatcher.register(
+                ModelPatcherRule(
+                    rule_id=f"{DUMMY_RULE_ID}.2",
+                    import_and_maybe_reload=(
+                        "tests.model_patcher_fixtures.module4.module5.module5_1.mod_5_function",
+                        patched_mod_function,
+                        "tests.model_patcher_fixtures.module4.module5",
+                    ),
+                )
+            )
+
+            # 3. Simulate patching a class in module4 (an upstream path)
+            ModelPatcher.register(
+                ModelPatcherRule(
+                    rule_id=f"{DUMMY_RULE_ID}.1",
+                    import_and_maybe_reload=(
+                        "tests.model_patcher_fixtures.module4.module5.module5_1.Module5Class",
+                        PatchedModuleClass,
+                        "tests.model_patcher_fixtures.module4.module5",
+                    ),
+                )
+            )
+
+            # while there are occasions repeated reloads along the same target path prefix work,
+            # the model patch will only call a reload once on the path.
+            ModelPatcher.patch(model)
+
+            # check that patching is applied to both
+            assert isinstance(module4.module5.Module5Class(), PatchedModuleClass)
+            assert module4.module5.mod_5_function() == "patched_mod_function"
 
 
 def test_mp_throws_warning_with_multiple_patches():
