@@ -101,7 +101,7 @@ def get_relevant_configuration_sections(configuration: Dict) -> Dict:
         for key in _or_keys:
             content = _trace_key_path(configuration, key)
             if content is not None:
-                if reject == True:
+                if reject is True:
                     # it is an OR key, and if at least one of them specified
                     # then do not reject
                     reject = False
