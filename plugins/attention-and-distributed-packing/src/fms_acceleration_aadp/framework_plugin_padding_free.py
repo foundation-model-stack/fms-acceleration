@@ -175,13 +175,20 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
             # Local
             from .flash_attn import _flash_attention_forward_with_posids
 
+            # - we need to reload on the correct module
+            try:
+                # if it is peft
+                _module_path = model.get_base_model().__module__
+            except AttributeError:
+                _module_path = model.__module__
+
             ModelPatcher.register(
                 ModelPatcherRule(
                     rule_id="flash_attn_forward",
                     import_and_maybe_reload=(
                         "transformers.modeling_flash_attention_utils._flash_attention_forward",
                         partial(_flash_attention_forward_with_posids, id(model)),
-                        model.__module__,
+                        _module_path,
                     ),
                 ),
             )

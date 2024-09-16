@@ -14,6 +14,16 @@ This library contains fused operations and custom kernels, to be expanded over t
 Plugin | Description | Depends | Loading | Augmentation | Callbacks
 --|--|--|--|--|--
 [fast_quantized_peft](./src/fms_accelerate_foak/framework_plugin_fast_quantized_peft.py) | LoRA fused ops, fast cross-entropy, fast rms, fast RoPE | Contains extracted code |  | ✅
+[fast_kernels](./src/fms_accelerate_foak/framework_plugin_fast_kernels.py) | Enhanced version of quantized_peft, that also works for full-FT and non-quant peft | Contains extracted code |  | ✅
+
+### Supported DataType Settings
+**Compatibility Matrix with Mixed Precision**
+torch_dtype | Mixed Precision | Full-FT-FOAK | PEFT-FOAK | QPEFT-FOAK
+-- | -- | -- | -- | --
+FLOAT16 | - | ✗ Not Allowed | ✗| ✗
+FLOAT16 | FP16 | ValueError: <br>Attempting to <br>unscale FP16 gradients. <br>[See here](https://github.com/huggingface/peft/blob/main/docs/source/developer_guides/troubleshooting.md) | **Compatible** | **Compatible**
+BFLOAT16 | - | ✗ | ✗ | ✗
+BFLOAT16 | BF16 | **Compatible** | **Compatible** | [Less Performant](https://github.com/foundation-model-stack/fms-acceleration/issues/84)
 
 ### Code Extracted from Unsloth
 
@@ -37,11 +47,20 @@ Path | Description | Extracted From  | Modifications | Date
 [fused_ops/unsloth_lora/gptq](./src/fms_acceleration_foak/fused_ops/unsloth_lora/gptq) | GPTQ fast dequant (triton_v2) | `jeromeku/main` @ [2839d39](https://github.com/jeromeku/unsloth/commit/2839d390ef3bb318904289bfb9a7751a782c4e44) | `fast_lora.py`<br>`triton/layers.py` | 6 Feb 2024
 [kernels/unsloth](./src/fms_acceleration_foak/kernels/unsloth) | Fast RMS, RoPE, CrossEnt kernels | `unsloth/main` @ [1ecc0185](https://github.com/unslothai/unsloth/commit/1ecc0185a5759c7a0c95dfc96aceea5023cebdfc) | `cross_entropy_loss.py`<br>`rms_layernorm.py` | 28 Jan 2024
 
+### Supported Models
+
+Model | norm | pos emb | cross-ent | fused_lora 
+--|--|--|--|--
+`LlamaForCausalLM` | ✅  | ✅ | ✅  | ✅ 
+`MistralForCausalLM` | ✅  | ✅ | ✅  | ✅ 
+`MixtralForCausalLM` | ✅  | ✅ | ✅  | ✅ 
+`GPTBigCodeForCausalLM` | ❌  | ❌ | ✅  | ❌ 
+<!-- `GraniteForCausalLM` | ✅  | ✅ | ✅  | ✅  -->
+
 ## Known Issues
 
-- MixedPrecision `--fp16` should be used `fast_lora`. Also consider loading the model in `torch.float16`.
-- `fast_lora` has issues with FSDP with the `peft` style of FSDP wrapping. 
+- MixedPrecision `--fp16` or `--bf16` should be used with `fast_lora`.
+- `fast_lora` has issues with FSDP V1 with the `peft` style of FSDP wrapping. 
     * This is because the adapter's forward functions are bypassed in the fused ops.
-    * For AutoGPTQ this is addressed by distributing the adapters using DDP so they will be unsharded in time for the fused ops.
-    * However for QLoRA this is not yet done https://github.com/foundation-model-stack/fms-acceleration/issues/3.
+    * For AutoGPTQ/QLoRA this is addressed by distributing the adapters using DDP so they will be unsharded in time for the fused ops.
 - `fast_rope_embeddings` does not work with position_ids. Currently `position_ids` are ignored and could give wrong results.

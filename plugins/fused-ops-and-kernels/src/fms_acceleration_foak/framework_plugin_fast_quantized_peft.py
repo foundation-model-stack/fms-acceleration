@@ -161,8 +161,9 @@ class FastQuantizedPeftAccelerationPlugin(AccelerationPlugin):
         return callbacks
 
 
-# register
-AccelerationPlugin.register_plugin(
-    FastQuantizedPeftAccelerationPlugin,
-    configuration_and_paths=["peft.quantization.fused_ops_and_kernels"],
-)
+# This plugin is currently deregistered in favour of framework_plugin_fast_kernels.py
+# to additionally support both full-FT and standard PEFT
+# AccelerationPlugin.register_plugin(
+#     FastQuantizedPeftAccelerationPlugin,
+#     configuration_and_paths=["peft.quantization.fused_ops_and_kernels"],
+# )

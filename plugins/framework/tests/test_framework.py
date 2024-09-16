@@ -313,3 +313,76 @@ def test_plugin_registration_order():
         framework.augmentation(model, None, None)
         for c, (n, _) in zip(plugin_activation_order, plugins_to_be_installed):
             assert n in c
+
+
+def test_plugin_registration_combination_logic():
+
+    plugin = create_plugin_cls(
+        restricted_models={"CausalLM"},
+        requires_agumentation=True,
+        agumentation=dummy_augmentation,
+    )
+
+    configuration_contents = {"existing1": {"key1": 1}, "existing2": {"key1": 1}}
+
+    # empty conditions
+    with pytest.raises(AssertionError, match="Specify at least one AND or OR path"):
+        with build_framework_and_instantiate(
+            plugins_to_be_registered=[
+                ([], [], plugin),
+            ],
+            configuration_contents=configuration_contents,
+        ) as framework:
+            pass
+
+    # AND logic - happy
+    with build_framework_and_instantiate(
+        plugins_to_be_registered=[
+            (["existing1", "existing2"], plugin),
+        ],
+        configuration_contents=configuration_contents,
+    ) as framework:
+        # check 1.
+        assert len(PLUGIN_REGISTRATIONS) == 1
+
+        # check 2.
+        assert len(framework.active_plugins) == 1
+
+    # AND  - sad path
+    with pytest.raises(
+        ValueError,
+        match="No plugins could be configured. Please check the acceleration",
+    ):
+        with build_framework_and_instantiate(
+            plugins_to_be_registered=[
+                (["existing1", "non-existant"], plugin),
+            ],
+            configuration_contents=configuration_contents,
+        ) as framework:
+            pass
+
+    # OR logic
+    with build_framework_and_instantiate(
+        plugins_to_be_registered=[
+            ([], ["existing1", "non-existant"], plugin),
+        ],
+        configuration_contents=configuration_contents,
+    ) as framework:
+        # check 1.
+        assert len(PLUGIN_REGISTRATIONS) == 1
+
+        # check 2.
+        assert len(framework.active_plugins) == 1
+
+    # OR - sad path
+    with pytest.raises(
+        ValueError,
+        match="No plugins could be configured. Please check the acceleration",
+    ):
+        with build_framework_and_instantiate(
+            plugins_to_be_registered=[
+                (["non-existant", "non-existant2"], plugin),
+            ],
+            configuration_contents=configuration_contents,
+        ) as framework:
+            pass

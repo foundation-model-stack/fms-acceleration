@@ -231,7 +231,6 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
         #   and there is a section of code that will be skipped if not set.
         setattr(model, "is_loaded_in_4bit", True)
         setattr(model, "quantization_method", "gptq")
-
         return model
 
     @property
@@ -275,6 +274,8 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
 
         # some assertions
         assert peft_config is not None, "need peft_config to install PEFT adapters"
+        # running this plugin in float16 is the most performant
+        # https://github.com/foundation-model-stack/fms-acceleration/issues/84
         assert (
             model.dtype == torch.float16 or train_args.fp16
         ), "need to run in fp16 mixed precision or load model in fp16"
@@ -324,6 +325,13 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
             auto_find_all_linears=requires_installation_on_all_linears(peft_config),
             train_mode=True,  # install adapaters for training
         )
+
+        # We do not set `is_loaded_in_4bit`` at this point because otherwise
+        # `accelerate.prepare_model` will think the device placement is finalized
+        # for the quantized model, and will raise
+        # Reassign `quantization_method` after PEFT installation replaces the top-level class
+        setattr(model, "quantization_method", "gptq")
+
         modifiable_args = (None,)  # return a None for peft_config
 
         if self.use_external_lib:

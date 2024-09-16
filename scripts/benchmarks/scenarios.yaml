@@ -37,18 +37,28 @@
 
 scenarios:
     -   name: full-finetuning
+        framework_config: 
+            - 
+            - foak-fast-kernels
         arguments:
             learning_rate: 2e-5
             model_name_or_path: 
+                # - 'ibm/PowerLM-3b'
+                - 'bigcode/gpt_bigcode-santacoder'
                 - 'mistralai/Mistral-7B-v0.1'
                 - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
                 - 'NousResearch/Llama-2-70b-hf'
-            torch_dtype: float16
+            torch_dtype: bfloat16
+            bf16: True
 
     -   name: standard-peft
+        framework_config: 
+            - 
+            - foak-fast-kernels
         arguments:
+            bf16: True
             learning_rate: 2e-4
-            torch_dtype: float16
+            torch_dtype: bfloat16
             peft_method: lora
             r: 16
             lora_alpha: 16
@@ -63,9 +73,9 @@ scenarios:
         framework_config: 
             - baseline-peft-bnb
         arguments:
-            fp16: True
+            bf16: True
             learning_rate: 2e-4
-            torch_dtype: float16
+            torch_dtype: bfloat16
             peft_method: lora
             r: 16
             lora_alpha: 16
@@ -81,15 +91,17 @@ scenarios:
             - accelerated-peft-bnb
             - accelerated-peft-bnb-foak
         arguments:
-            fp16: True
+            bf16: True
             learning_rate: 2e-4
-            torch_dtype: float16
+            torch_dtype: bfloat16
             peft_method: lora
             r: 16
             lora_alpha: 16
             lora_dropout: 0.1
-            target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
+            target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "c_attn"]
             model_name_or_path: 
+                # - 'ibm/PowerLM-3b'
+                - 'bigcode/gpt_bigcode-santacoder'
                 - 'mistralai/Mistral-7B-v0.1'
                 - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
                 - 'NousResearch/Llama-2-70b-hf'
@@ -100,8 +112,8 @@ scenarios:
             - accelerated-peft-autogptq-foak
         arguments:
             learning_rate: 2e-4
-            fp16: True
-            torch_dtype: float16
+            fp16: True # running gptq-lora in float16 is more performant, see issue
+            torch_dtype: float16 # https://github.com/foundation-model-stack/fms-acceleration/issues/84
             peft_method: lora
             r: 16
             lora_alpha: 16

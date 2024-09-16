@@ -182,7 +182,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--plot_columns", 
         default=DEFAULT_PLOT_COLUMNS, 
-        nargs="+"
+        nargs="+",
         help="list of metric names in benchmark results to analyze visually",
     )
 

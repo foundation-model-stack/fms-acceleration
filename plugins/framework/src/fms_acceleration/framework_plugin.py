@@ -29,7 +29,7 @@ import torch
 class PluginRegistration:
     plugin: "AccelerationPlugin"
     AND: List[str] = None
-    # OR: List[str] = None # not implemented yet
+    OR: List[str] = None
 
     # package metadata
     package_name: str = None
@@ -53,28 +53,61 @@ def _trace_key_path(configuration: Dict, key: str):
 def get_relevant_configuration_sections(configuration: Dict) -> Dict:
     results = []
 
+    # this function updates cfg with content
+    # - equivalent to taking a union
+    def _update_config_contents(_cfg: Dict, content: Dict, key: str):
+        path = key.split(".")
+        n = len(path)
+        _cfg = relevant_config
+        while n > 1:
+            p = path.pop(0)
+            if p not in _cfg:
+                _cfg[p] = {}
+            _cfg = _cfg[p]
+            n -= 1
+
+        _cfg[path[0]] = content
+
     # assume the registrations are all done with at least some default key
     for registration in PLUGIN_REGISTRATIONS:
         relevant_config = {}
-        # OR is not implemented yet
+
+        _and_keys = registration.AND
+        _or_keys = registration.OR
+        if _and_keys is None:
+            _and_keys = []
+        if _or_keys is None:
+            _or_keys = []
+
+        # go through AND paths then OR paths
+        # - if all AND paths are speciied, then return their union of all content
+        # - if any OR path is specified, then return the union of specified content
         reject = False
-        for key in registration.AND:
+        for key in _and_keys:
             content = _trace_key_path(configuration, key)
             if content is None:
+                # if AND key, then if at least one of them not
+                # specified, then reject and do not descend config tree
                 reject = True
                 break
 
-            path = key.split(".")
-            n = len(path)
-            _cfg = relevant_config
-            while n > 1:
-                p = path.pop(0)
-                if p not in _cfg:
-                    _cfg[p] = {}
-                _cfg = _cfg[p]
-                n -= 1
+            # update
+            _update_config_contents(relevant_config, content, key)
 
-            _cfg[path[0]] = content
+        # if all the any keys were not satisfied, then reset the config
+        if reject:
+            relevant_config = {}
+
+        for key in _or_keys:
+            content = _trace_key_path(configuration, key)
+            if content is not None:
+                if reject:
+                    # it is an OR key, and if at least one of them specified
+                    # then do not reject
+                    reject = False
+
+                # update all content that is not None
+                _update_config_contents(relevant_config, content, key)
 
         if reject:
             continue
@@ -91,7 +124,8 @@ class AccelerationPlugin:
     @staticmethod
     def register_plugin(
         plugin: "AccelerationPlugin",
-        configuration_and_paths: List[str],
+        configuration_and_paths: List[str] = None,
+        configuration_or_paths: List[str] = None,
         **kwargs,
     ):
 
@@ -100,6 +134,12 @@ class AccelerationPlugin:
         # W0602: Using global for 'PLUGIN_REGISTRATIONS' but no assignment
         # is done (global-variable-not-assigned)
         # global PLUGIN_REGISTRATIONS
+
+        assert (
+            configuration_and_paths is not None and len(configuration_and_paths) > 0
+        ) or (
+            configuration_or_paths is not None and len(configuration_or_paths) > 0
+        ), "Specify at least one AND or OR path"
 
         # get the package metadata
         pkg_name = sys.modules[plugin.__module__].__package__
@@ -112,6 +152,7 @@ class AccelerationPlugin:
             PluginRegistration(
                 plugin=plugin,
                 AND=configuration_and_paths,
+                OR=configuration_or_paths,
                 package_name=pkg_name,
                 package_version=package_version,
             )
