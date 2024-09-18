@@ -35,14 +35,56 @@ from ..kernels.unsloth.rope_embedding import fast_rope_embedding
 from .utils import KEY_MLP, KEY_O, KEY_QKV, build_lora_fused_ops, trigger_fused_ops
 
 
-def get_mp_rules(base_type: str):
+def get_mp_rules(base_type: str, use_fused_linear_cross_entropy:bool=True):
     """
     Function to access all patch rules in this module.
     If it is a forward_builder rule with `base_type` in
     its forward builder argument, wrap the forward_builder
     function as a partial function with the base_type argument
     """
+
+    def is_lm_head(module):
+        return module.__name__ == "lm_head"
+
+    import torch
+    from ..kernels.liger.fused_linear_cross_entropy import LigerFusedLinearCrossEntropyFunction
+    def build_new_lm_head_forward(lm_head: torch.nn.Module):        
+        def lm_head_forward(self, hidden_states):
+            # TODO keep the hidden_state somewhere for FusedLCE
+            return torch.rand((-1, self.weight.size(0))) 
+        return lm_head_forward
+
+    custom_rules = []
+    if use_fused_linear_cross_entropy:
+        custom_rules.extend([
+            ModelPatcherRule(
+                rule_id="llama-fused-linear-cross-ent",
+                trigger=is_lm_head,
+                forward_builder=build_new_lm_head_forward,
+            ),
+            ModelPatcherRule(
+                rule_id="llama-fused-linear-cross-ent",
+                import_and_maybe_reload=(
+                    "torch.nn.CrossEntropyLoss",
+                    LigerFusedLinearCrossEntropyFunction,
+                    "transformers.models.llama.modeling_llama",
+                ),
+            ),
+        ])
+    else:
+        custom_rules.extend([
+            ModelPatcherRule(
+                rule_id="llama-cross-ent",
+                import_and_maybe_reload=(
+                    "torch.nn.CrossEntropyLoss",
+                    FastCrossEntropyLoss,
+                    "transformers.models.llama.modeling_llama",
+                ),
+            ),
+        ])
+
     return [
+        *custom_rules,
         # TODO: have a generic version of this rule
         # - do regex on RMSNorm class name
         # - check on the tensors required for fast_rms_layernorm
@@ -107,14 +149,14 @@ def get_mp_rules(base_type: str):
         ),
         # TODO: have a generic version of this rule
         # - get the module_name and reload on that
-        ModelPatcherRule(
-            rule_id="llama-cross-ent",
-            import_and_maybe_reload=(
-                "torch.nn.CrossEntropyLoss",
-                FastCrossEntropyLoss,
-                "transformers.models.llama.modeling_llama",
-            ),
-        ),
+        # ModelPatcherRule(
+        #     rule_id="llama-cross-ent",
+        #     import_and_maybe_reload=(
+        #         "torch.nn.CrossEntropyLoss",
+        #         FastCrossEntropyLoss,
+        #         "transformers.models.llama.modeling_llama",
+        #     ),
+        # ),
         # TODO: have a generic version of this rule
         # - get the module name
         # - check if "apply_rotary_pos_emb" exists
