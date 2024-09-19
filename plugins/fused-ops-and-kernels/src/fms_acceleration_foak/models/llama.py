@@ -23,6 +23,7 @@ from fms_acceleration.model_patcher import (
     combine_triggers,
 )
 from transformers.models.llama.modeling_llama import (
+    LlamaForCausalLM,
     LlamaAttention,
     LlamaMLP,
     LlamaRMSNorm,
@@ -34,6 +35,7 @@ from ..kernels.unsloth.rms_layernorm import fast_rms_layernorm
 from ..kernels.unsloth.rope_embedding import fast_rope_embedding
 from .utils import KEY_MLP, KEY_O, KEY_QKV, build_lora_fused_ops, trigger_fused_ops
 
+from ..kernels.liger.fused_linear_cross_entropy_loss import lce_forward
 
 def get_mp_rules(base_type: str):
     """
@@ -42,6 +44,7 @@ def get_mp_rules(base_type: str):
     its forward builder argument, wrap the forward_builder
     function as a partial function with the base_type argument
     """
+
     return [
         # TODO: have a generic version of this rule
         # - do regex on RMSNorm class name
@@ -105,8 +108,11 @@ def get_mp_rules(base_type: str):
                 base_type=base_type,
             ),
         ),
-        # TODO: have a generic version of this rule
-        # - get the module_name and reload on that
+        ModelPatcherRule(
+            rule_id="llama-fused-lce",
+            trigger=ModelPatcherTrigger(check=LlamaForCausalLM),
+            forward=lce_forward,
+        ),
         ModelPatcherRule(
             rule_id="llama-cross-ent",
             import_and_maybe_reload=(

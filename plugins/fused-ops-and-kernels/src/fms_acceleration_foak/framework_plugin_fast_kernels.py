@@ -26,6 +26,12 @@ import torch
 from .framework_plugin_fast_quantized_peft import lora_adapters_switch_ddp_from_fsdp
 
 
+def validate_plugin_args(configurations):
+    # Consider making this a more graceful fallback?
+    assert (
+        configurations["fused_linear_loss"] != configurations["fast_loss"]
+    ), "If using `fused_linear_loss`, `fast_loss` must be set to False"
+
 # consider rewriting register_foak_model_patch_rules into something
 # like this also
 def register_foak_model_patch_rules2(base_type: str, filter_endswith: Set[str] = None):
@@ -68,6 +74,7 @@ FILTER_MAP = {
     "fast_loss": "cross-ent",
     "fast_rms_layernorm": "rms",
     "fast_rope_embeddings": "rope",
+    "fused_linear_loss": "fused-lce",
 }
 
 
@@ -115,6 +122,14 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
                 key="fast_rope_embeddings", values=[False, True], default=True
             )
         )
+        self.configurations["fast_linear_cross_entropy"] = (
+            self._check_config_and_maybe_check_values(
+                key="fast_linear_cross_entropy", values=[False, True], default=False
+            )
+        )
+
+        validate_plugin_args(self.configurations)
+
 
     @property
     def requires_agumentation(self):
