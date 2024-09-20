@@ -122,9 +122,9 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
                 key="fast_rope_embeddings", values=[False, True], default=True
             )
         )
-        self.configurations["fast_linear_cross_entropy"] = (
+        self.configurations["fused_linear_loss"] = (
             self._check_config_and_maybe_check_values(
-                key="fast_linear_cross_entropy", values=[False, True], default=False
+                key="fused_linear_loss", values=[False, True], default=False
             )
         )
 
