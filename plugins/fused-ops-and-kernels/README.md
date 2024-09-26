@@ -14,7 +14,7 @@ This library contains fused operations and custom kernels, to be expanded over t
 Plugin | Description | Depends | Loading | Augmentation | Callbacks
 --|--|--|--|--|--
 [fast_quantized_peft](./src/fms_accelerate_foak/framework_plugin_fast_quantized_peft.py) | LoRA fused ops, fast cross-entropy, fast rms, fast RoPE | Contains extracted code |  | ✅
-[fast_kernels](./src/fms_accelerate_foak/framework_plugin_fast_kernels.py) | Enhanced version of quantized_peft, that also works for full-FT and non-quant peft | Contains extracted code |  | ✅
+[fast_kernels](./src/fms_accelerate_foak/framework_plugin_fast_kernels.py) | Enhanced version of `fast_quantized_peft`, also works for full-FT and non-quant peft | Contains extracted code |  | ✅
 
 ### Supported DataType Settings
 **Compatibility Matrix with Mixed Precision**
@@ -55,7 +55,28 @@ Model | norm | pos emb | cross-ent | fused_lora
 `MistralForCausalLM` | ✅  | ✅ | ✅  | ✅ 
 `MixtralForCausalLM` | ✅  | ✅ | ✅  | ✅ 
 `GPTBigCodeForCausalLM` | ❌  | ❌ | ✅  | ❌ 
-<!-- `GraniteForCausalLM` | ✅  | ✅ | ✅  | ✅  -->
+`GraniteForCausalLM` | ✅  | ✅ | ✅  | ✅ 
+
+#### Adding Support For A New Model
+
+It is realtively easy by following an existing template, in what follows we use [GraniteForCausalLM](./src/fms_acceleration_foak/models/granite.py) as an example.
+- implement a `get_mp_rules` for the new model, which returns a list of `ModelPatcherRule`.
+- logic that needs to be changed is the various classes that the rules are triggered on. Import the various module classes likes so:
+    ```python
+    from transformers.models.granite.modeling_granite import ( 
+        GraniteAttention,
+        GraniteMLP,
+        GraniteRMSNorm,
+    )
+    ```
+- replace the classes appropriately in various locations in `ModelPatcherRule`. In particular the `ModelPatcherTrigger` portions of it. Name `rule_id` appropriately.
+    ```python
+    ModelPatcherRule(
+        rule_id="granite-rms",
+        trigger=ModelPatcherTrigger(check=GraniteRMSNorm),
+        forward=fast_rms_layernorm,
+    )
+    ```
 
 ## Known Issues
 
