@@ -25,6 +25,7 @@ import warnings
 from fms_acceleration import AccelerationPlugin
 from peft import LoraConfig, get_peft_model
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig, TrainingArguments
+from transformers.utils.import_utils import _is_package_available
 import torch
 
 
@@ -120,6 +121,24 @@ class BNBAccelerationPlugin(AccelerationPlugin):
             and os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true"
         ):
             config_kwargs["bnb_4bit_quant_storage"] = torch_dtype
+
+            _, _transformers_version = _is_package_available("transformers", return_version=True)
+
+            if _transformers_version >= "4.45":
+                from fms_acceleration.model_patcher import patch_target_module
+
+                def _truthy():
+                    return True
+
+                patch_target_module(
+                    "transformers.modeling_utils.is_local_dist_rank_0",
+                    _truthy,
+                )
+                warnings.warn(
+                    "Disabling low_cpu_mem_mode as this will cause problems with "
+                    "the fused-ops-and-kernels package"
+                )
+
         elif world_size > 1:
             warnings.warn(
                 "Running in distributed mode but bnb_4bit_quant_storage is not set. "
