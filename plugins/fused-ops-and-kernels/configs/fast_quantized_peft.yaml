@@ -24,7 +24,7 @@ peft:
       fast_loss: True
 
       # fast rms norm triton kernels
-      fast_rsm_layernorm: True
+      fast_rms_layernorm: True
 
       # fast RoPE embedding triton kernels
       fast_rope_embeddings: True
