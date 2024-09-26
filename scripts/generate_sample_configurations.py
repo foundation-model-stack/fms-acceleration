@@ -192,7 +192,7 @@ COMBINATIONS = [
     ("accelerated-peft-autogptq-foak-padding-free", (KEY_AADP_PADDING_FREE,KEY_AUTO_GPTQ, KEY_AUTO_GPTQ_FOAK)),
     ("accelerated-peft-bnb-nf4-foak-padding-free", (KEY_AADP_PADDING_FREE,KEY_BNB_NF4, KEY_BNB_NF4_FOAK)),
     ("aadp-padding-free-multipack", (KEY_AADP_PADDING_FREE, KEY_AADP_MULTIPACK)),
-    ("foak-fast-kernels", (KEY_FAST_KERNELS))
+    ("foak-fast-kernels", (KEY_FAST_KERNELS,))
 ]
 
 

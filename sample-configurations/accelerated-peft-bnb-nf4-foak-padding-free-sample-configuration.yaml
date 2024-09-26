@@ -38,7 +38,10 @@ plugins:
         base_layer: bitsandbytes
 
         # activate various unsloth optimizations
-        # NOTE: currently supports only all-or-nothing.
+        # there are two versions of the plugin
+        # - the FastKernel version supports individual kernels
+        # - the FastQuantized version is all-or-nothing
+
 
         # fused kernels for lora linear layers
         fused_lora: true
@@ -47,7 +50,7 @@ plugins:
         fast_loss: true
 
         # fast rms norm triton kernels
-        fast_rsm_layernorm: true
+        fast_rms_layernorm: true
 
         # fast RoPE embedding triton kernels
         fast_rope_embeddings: true
