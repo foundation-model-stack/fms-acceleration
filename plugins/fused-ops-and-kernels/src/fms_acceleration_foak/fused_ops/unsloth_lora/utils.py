@@ -62,9 +62,10 @@ def get_lora_parameters(proj):
     # For DPO or disabled adapters
     base_layer = (proj.base_layer if hasattr(proj, "base_layer") else proj)
     W = base_layer.weight
+    bias = base_layer.bias if hasattr(base_layer, 'bias') else None
 
     if not hasattr(proj, "disable_adapters") or proj.disable_adapters or proj.merged:
-        return W, QUANT_STATE(W, base_layer), None, None, None, None
+        return W, QUANT_STATE(W, base_layer), None, None, None, None, None
     pass
 
     active_adapter = proj.active_adapters[0] if \
@@ -73,7 +74,7 @@ def get_lora_parameters(proj):
     B = proj.lora_B [active_adapter].weight
     s = proj.scaling[active_adapter]
     dropout = proj.lora_dropout[active_adapter] if hasattr(proj, "lora_dropout") else None
-    return W, QUANT_STATE(W, base_layer), A, B, s, dropout
+    return W, QUANT_STATE(W, base_layer), bias, A, B, s, dropout
 pass
 
 # modified by flim@sg.ibm.com
