@@ -1048,7 +1048,7 @@ if __name__ == "__main__":
         help="accelerate config file path",
     )
     parser.add_argument(
-        "--process_port", type=int, default=29500, help="accelerate process port"
+        "--process_port", type=int, default=29511, help="accelerate process port"
     )
     parser.add_argument(
         "--no_data_processing",
