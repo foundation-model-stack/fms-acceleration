@@ -125,6 +125,15 @@ PYTHONPATH=. \
     --result_file $BENCH_RESULT_FILE \
     --keep_columns \
         'torch_dtype' \
+	    "framework_config" \
+		"peft_method" \
+     	"model_name_or_path" \
+		"num_gpus" \
+		"per_device_train_batch_size" \
+		"mem_nvidia_mem_reserved" \
+	    "mem_peak_torch_mem_alloc_in_bytes" \
+		"mem_torch_mem_alloc_in_bytes" \
+		"train_tokens_per_second" \
     --remove_columns \
         'before_init_mem_cpu' \
         'before_init_mem_gpu' \

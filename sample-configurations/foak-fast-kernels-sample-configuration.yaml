@@ -3,10 +3,9 @@
 # Each stanza incorporates various configurations for 
 # different fine-tuning / training tasks.
 plugins:
-  # Configurations to accelerate data packing/padding in training
   training:
 
-    fused_ops_and_kernels: 
+    fused_ops_and_kernels:
 
       # if under training stanza, then putting
       # base_layer and fused_lora will be a misnomer
@@ -22,10 +21,10 @@ plugins:
       # - the FastQuantized version is all-or-nothing
 
       # fast loss triton kernels
-      fast_loss: True
+      fast_loss: true
 
       # fast rms norm triton kernels
-      fast_rsm_layernorm: True
+      fast_rms_layernorm: true
 
       # fast RoPE embedding triton kernels
-      fast_rope_embeddings: True
+      fast_rope_embeddings: true

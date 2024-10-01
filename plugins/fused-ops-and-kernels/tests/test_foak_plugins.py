@@ -35,6 +35,7 @@ CONFIG_PATH_AUTO_GPTQ_FOAK = os.path.join(
     DIRNAME, "../configs/fast_quantized_peft.yaml"
 )
 
+
 @pytest.mark.skip(reason="Installation logic has changed - test to be fixed in future.")
 def test_configure_gptq_foak_plugin():
     "test foak plugin loads correctly"

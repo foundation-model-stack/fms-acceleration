@@ -44,10 +44,6 @@ scenarios:
             learning_rate: 2e-5
             model_name_or_path: 
                 - 'ibm/PowerLM-3b'
-                - 'bigcode/gpt_bigcode-santacoder'
-                - 'mistralai/Mistral-7B-v0.1'
-                - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
-                - 'NousResearch/Llama-2-70b-hf'
             torch_dtype: bfloat16
             bf16: True
 
@@ -66,9 +62,6 @@ scenarios:
             target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
             model_name_or_path: 
                 - 'ibm/PowerLM-3b'
-                - 'mistralai/Mistral-7B-v0.1'
-                - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
-                - 'NousResearch/Llama-2-70b-hf'
 
     -   name: baseline-peft-bnb
         framework_config: 
@@ -83,9 +76,7 @@ scenarios:
             lora_dropout: 0.1
             target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
             model_name_or_path: 
-                - 'mistralai/Mistral-7B-v0.1'
-                - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
-                - 'NousResearch/Llama-2-70b-hf'
+                - 'ibm/PowerLM-3b'
 
     -   name: accelerated-peft-bnb
         framework_config: 
@@ -102,25 +93,20 @@ scenarios:
             target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "c_attn"]
             model_name_or_path: 
                 - 'ibm/PowerLM-3b'
-                - 'bigcode/gpt_bigcode-santacoder'
-                - 'mistralai/Mistral-7B-v0.1'
-                - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
-                - 'NousResearch/Llama-2-70b-hf'
 
-    -   name: accelerated-peft-gptq
-        framework_config: 
-            - accelerated-peft-autogptq
-            - accelerated-peft-autogptq-foak
-        arguments:
-            learning_rate: 2e-4
-            fp16: True # running gptq-lora in float16 is more performant, see issue
-            torch_dtype: float16 # https://github.com/foundation-model-stack/fms-acceleration/issues/84
-            peft_method: lora
-            r: 16
-            lora_alpha: 16
-            lora_dropout: 0.1
-            target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
-            model_name_or_path: 
-                - 'TheBloke/Mistral-7B-v0.1-GPTQ'
-                - 'TheBloke/Mixtral-8x7B-Instruct-v0.1-GPTQ'
-                - 'TheBloke/Llama-2-70B-GPTQ'
+    # when ready to add this to bench uncomment
+    # -   name: accelerated-peft-gptq
+    #     framework_config: 
+    #         - accelerated-peft-autogptq
+    #         - accelerated-peft-autogptq-foak
+    #     arguments:
+    #         learning_rate: 2e-4
+    #         fp16: True # running gptq-lora in float16 is more performant, see issue
+    #         torch_dtype: float16 # https://github.com/foundation-model-stack/fms-acceleration/issues/84
+    #         peft_method: lora
+    #         r: 16
+    #         lora_alpha: 16
+    #         lora_dropout: 0.1
+    #         target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
+    #         model_name_or_path: 
+    #             - 'ibm/PowerLM-3b'
