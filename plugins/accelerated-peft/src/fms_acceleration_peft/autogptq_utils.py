@@ -35,11 +35,28 @@ PATCH_FOR_FSDP_TRITON_V2 = ["qweight", "qzeros"]
 PEFT_ALL_LINEAR = "all-linear"
 
 
-def requires_installation_on_all_linears(peft_config):
+def requires_installation_on_all_linears(peft_config, model_type: str = None):
     tm = peft_config.target_modules
+
+    if tm is None:
+        try:
+            # Third Party
+            # pylint: disable=import-outside-toplevel
+            from peft.utils.constants import (
+                TRANSFORMERS_MODELS_TO_LORA_TARGET_MODULES_MAPPING,
+            )
+
+            tm = TRANSFORMERS_MODELS_TO_LORA_TARGET_MODULES_MAPPING[model_type]
+        except (ImportError, IndexError) as e:
+            raise ValueError(
+                "target modules not specified and unable to determine default "
+                f"for given model type {model_type}."
+            ) from e
+
+        # replace with some defaults
     assert isinstance(
         tm, (list, set, str)
-    ), "target modules can only be list, set or string"
+    ), "if provided, target modules can only be list, set or string"
     if isinstance(tm, (list, set)):
         if PEFT_ALL_LINEAR not in tm:
             return False

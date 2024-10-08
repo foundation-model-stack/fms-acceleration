@@ -43,7 +43,6 @@ scenarios:
         arguments:
             learning_rate: 2e-5
             model_name_or_path: 
-                - 'ibm/PowerLM-3b'
                 - 'bigcode/gpt_bigcode-santacoder'
                 - 'mistralai/Mistral-7B-v0.1'
                 - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
@@ -65,7 +64,6 @@ scenarios:
             lora_dropout: 0.1
             target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
             model_name_or_path: 
-                - 'ibm/PowerLM-3b'
                 - 'mistralai/Mistral-7B-v0.1'
                 - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
                 - 'NousResearch/Llama-2-70b-hf'
@@ -101,7 +99,6 @@ scenarios:
             lora_dropout: 0.1
             target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "c_attn"]
             model_name_or_path: 
-                - 'ibm/PowerLM-3b'
                 - 'bigcode/gpt_bigcode-santacoder'
                 - 'mistralai/Mistral-7B-v0.1'
                 - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
