@@ -90,7 +90,7 @@ scenarios:
             r: 16
             lora_alpha: 16
             lora_dropout: 0.1
-            target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "c_attn"]
+            target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
             model_name_or_path: 
                 - 'ibm/PowerLM-3b'
 
