@@ -47,7 +47,7 @@ def requires_installation_on_all_linears(peft_config, model_type: str = None):
             )
 
             tm = TRANSFORMERS_MODELS_TO_LORA_TARGET_MODULES_MAPPING[model_type]
-        except (ImportError, IndexError) as e:
+        except (ImportError, KeyError) as e:
             raise ValueError(
                 "target modules not specified and unable to determine default "
                 f"for given model type {model_type}."

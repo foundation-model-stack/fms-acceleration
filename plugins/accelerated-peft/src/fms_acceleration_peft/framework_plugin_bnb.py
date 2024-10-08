@@ -144,8 +144,7 @@ class BNBAccelerationPlugin(AccelerationPlugin):
             # that low_cpu_mem_mode=True can cause torch distributed primitives
             # to hang.
 
-            # if _transformers_version >= "4.45":
-            if False:
+            if _transformers_version >= "4.45":
 
                 # pylint: disable=import-outside-toplevel
                 # Third Party
