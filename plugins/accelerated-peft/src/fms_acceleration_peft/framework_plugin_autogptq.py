@@ -319,10 +319,18 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
             )
 
         # Install GPTQ adapters using the AutoGPTQ package (with the above patches)
+        # - try to get a model config to auto determine the layers that can be helpful
+        #
+        model_type = (
+            model.config.model_type if hasattr(model.config, "model_type") else None
+        )
         model = get_gptq_peft_model(
             model,
             peft_config=peft_config,
-            auto_find_all_linears=requires_installation_on_all_linears(peft_config),
+            auto_find_all_linears=requires_installation_on_all_linears(
+                peft_config,
+                model_type=model_type,
+            ),
             train_mode=True,  # install adapaters for training
         )
 
