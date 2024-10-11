@@ -21,9 +21,9 @@ from fms_acceleration import AccelerationPlugin
 from peft import LoraConfig
 from peft.tuners.lora.layer import LoraLayer
 from transformers import TrainingArguments
+from transformers.modeling_utils import is_fsdp_enabled
 import torch
 import torch.distributed as dist
-
 
 # consider moving this somewhere else later
 def lora_adapters_switch_ddp_from_fsdp(modules, fsdp_plugin):
@@ -58,16 +58,27 @@ def lora_adapters_switch_ddp_from_fsdp(modules, fsdp_plugin):
         #   low_cpu_mem_mode purposes, and that the values will be synced over
         # - So just initialize them to empty.
         if not A.weight.is_cuda:
-            value = None
-            if A.weight.device == torch.device('meta'):
-                value = torch.empty(*A.weight.size(), dtype=A.weight.dtype)
+            value = A.weight
+
+            if is_fsdp_enabled() and value.device == torch.device('meta'):
+                # if low_cpu_mem_mode
+                value = torch.empty(*value.size(), dtype=value.dtype)
+
             set_module_tensor_to_device(A, "weight", "cuda", value)
+
+            if is_fsdp_enabled():
+                dist.broadcast(A.weight, src=0)
+
         if not B.weight.is_cuda:
-            value = None
-            if B.weight.device == torch.device('meta'):
-                value = torch.empty(*B.weight.size(), dtype=B.weight.dtype)
+            value = B.weight
+
+            if is_fsdp_enabled() and value.device == torch.device('meta'):
+                value = torch.empty(*value.size(), dtype=value.dtype)
+
             set_module_tensor_to_device(B, "weight", "cuda", value)
 
+            if is_fsdp_enabled():
+                dist.broadcast(B.weight, src=0)
 
 def register_foak_model_patch_rules(base_type):
     # Third Party
