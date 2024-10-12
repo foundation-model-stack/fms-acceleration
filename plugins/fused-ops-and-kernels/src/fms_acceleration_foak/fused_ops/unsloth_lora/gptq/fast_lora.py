@@ -843,6 +843,6 @@ def apply_lora_o(self, X):
 # added by flim@sg.ibm.com
 # this version can be directly patched on the output linear
 def apply_lora_o_v2(self, X):
-    Oqstate, O_bias, OA, OB, OS, dropout = get_lora_parameters(self.o_proj)
+    Oqstate, O_bias, OA, OB, OS, dropout = get_lora_parameters(self)
     O = LoRA_W.apply(X, *unpack_gptqstate(Oqstate), O_bias, OA, OB, OS, dropout)
     return O
