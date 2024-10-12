@@ -63,7 +63,9 @@ def compare_results(df, ref, plot_columns, threshold_ratio=0.1):
         ref_series = ref[column].fillna(0)
         df_series = df[column].fillna(0)
         # Extract outliers base on some threshold % difference on referance
-        cmp = ref_series.to_frame().join(df_series.to_frame(), lsuffix='_ref')
+        cmp = ref_series.to_frame()
+        cmp['metric'] = column
+        cmp = cmp.join(df_series.to_frame(), lsuffix='_ref')
         cmp = cmp.rename(columns={f'{column}_ref': 'reference', column: 'new'})
         cmp['ds'] = cmp.apply(
             lambda x: (
@@ -71,6 +73,7 @@ def compare_results(df, ref, plot_columns, threshold_ratio=0.1):
             ), axis=1
         )
         outliers = cmp[cmp.ds > threshold_ratio]
+        outliers = outliers.drop('ds', axis=1)
 
         plot_chart(
             ax,
