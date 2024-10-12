@@ -38,7 +38,12 @@ def main(
                 df[c] = constant[c]
                 kept += 1
 
-    df = df.reset_index(drop=True).drop("output_dir", axis=1)
+    df = df.reset_index(drop=True)
+    try:
+        df = df.drop("output_dir", axis=1)
+    except KeyError:
+        pass # output_dir not found
+
     df.reindex(sorted(df.columns), axis=1).to_csv(output_filename, index=False)
     print("***************** Report Created ******************")
     print(f"Total lines: '{len(df)}'")
