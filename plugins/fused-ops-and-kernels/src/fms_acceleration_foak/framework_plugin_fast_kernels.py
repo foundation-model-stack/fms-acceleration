@@ -129,7 +129,8 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
         has_quant = getattr(model, "quantization_method", None)
 
         if has_quant:
-            # assert that plugin requires mixed precision to be set
+            # - only in the case where quant case, that we enforce the mixed precision settings
+            # - this is mostly for the fused-loras
             assert (
                 train_args.bf16 is True or train_args.fp16 is True
             ), f"{self.__class__} requires mixed precision argument `--fp16` or `--bf16`"

@@ -230,7 +230,7 @@ class BNBAccelerationPlugin(AccelerationPlugin):
         train_args: TrainingArguments,
         modifiable_args: Tuple[LoraConfig],
     ):
-        # assert that plugin requires mixed precision to be set
+        # - when using our prepare peft, we will enforce the mixed precision settings
         assert (
             train_args.bf16 is True or train_args.fp16 is True
         ), f"{self.__class__} requires mixed precision argument `--fp16` or `--bf16`"
