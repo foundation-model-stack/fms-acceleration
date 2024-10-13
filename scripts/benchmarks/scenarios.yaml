@@ -70,6 +70,7 @@ scenarios:
         framework_config: 
             - baseline-peft-bnb
         arguments:
+            bf16: True
             learning_rate: 2e-4
             torch_dtype: bfloat16
             peft_method: lora
