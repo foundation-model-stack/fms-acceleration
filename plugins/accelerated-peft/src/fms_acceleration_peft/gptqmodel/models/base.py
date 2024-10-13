@@ -32,7 +32,7 @@ from transformers import (
     PretrainedConfig,
     PreTrainedModel,
 )
-from transformers.modeling_utils import no_init_weights, shard_checkpoint
+from transformers.modeling_utils import no_init_weights, shard_checkpoint, is_local_dist_rank_0
 from transformers.utils.generic import ContextManagers
 import accelerate
 import torch
@@ -1105,45 +1105,50 @@ class BaseGPTQModel(nn.Module):
             # prepares the model on gpu in `trainer.train` to avoid unnecessary gpu usage
             device_map = {"": "cpu"}
 
-        load_checkpoint_in_model = False
-        # compat: runtime convert checkpoint gptq(v1) to gptq_v2 format
-        if quantize_config.format == FORMAT.GPTQ:
-            accelerate.load_checkpoint_in_model(
-                model,
-                dtype=torch_dtype,
-                # This is very hacky but works due to https://github.com/huggingface/accelerate/blob/bd72a5f1a80d5146554458823f8aeda0a9db5297/src/accelerate/utils/modeling.py#L292
-                checkpoint=model_save_name,
-                device_map=device_map,
-            )
-            # validate sym=False v1 loading needs to be protected for models produced with new v2 format codebase
-            if (
-                not quantize_config.sym
-                and not quantize_config.is_quantized_or_packed_by_v2()
-            ):
-                raise ValueError(
-                    f"Loading of a sym=False model with format={FORMAT.GPTQ} is only supported if produced by gptqmodel version >= {MIN_VERSION_WITH_V2}"
+        # low_cpu_mem_usage fix by flim@sg.ibm.com
+        # - load the checkpoint only if not low_cpu_mem_usage
+        # - or if low_cpu_mem_usage then only in the rank_0
+        if not low_cpu_mem_usage or is_local_dist_rank_0():
+            load_checkpoint_in_model = False
+            # compat: runtime convert checkpoint gptq(v1) to gptq_v2 format
+            if quantize_config.format == FORMAT.GPTQ:
+                accelerate.load_checkpoint_in_model(
+                    model,
+                    dtype=torch_dtype,
+                    # This is very hacky but works due to https://github.com/huggingface/accelerate/blob/bd72a5f1a80d5146554458823f8aeda0a9db5297/src/accelerate/utils/modeling.py#L292
+                    checkpoint=model_save_name,
+                    device_map=device_map,
+                )
+                # validate sym=False v1 loading needs to be protected for models produced with new v2 format codebase
+                if (
+                    not quantize_config.sym
+                    and not quantize_config.is_quantized_or_packed_by_v2()
+                ):
+                    raise ValueError(
+                        f"Loading of a sym=False model with format={FORMAT.GPTQ} is only supported if produced by gptqmodel version >= {MIN_VERSION_WITH_V2}"
+                    )
+
+                logger.info(
+                    f"Compatibility: converting `{FORMAT_FIELD_JSON}` from `{FORMAT.GPTQ}` to `{FORMAT.GPTQ_V2}`."
+                )
+                model = convert_gptq_v1_to_v2_format(
+                    model,
+                    quantize_config=quantize_config,
+                    qlinear_kernel=preload_qlinear_kernel,
+                )
+                load_checkpoint_in_model = True
+                quantize_config.format = FORMAT.GPTQ_V2
+
+            if not load_checkpoint_in_model and backend == Backend.TRITON:
+                accelerate.load_checkpoint_in_model(
+                    model,
+                    dtype=torch_dtype,  # This is very hacky but works due to https://github.com/huggingface/accelerate/blob/bd72a5f1a80d5146554458823f8aeda0a9db5297/src/accelerate/utils/modeling.py#L292
+                    checkpoint=model_save_name,
+                    device_map=device_map,
                 )
 
-            logger.info(
-                f"Compatibility: converting `{FORMAT_FIELD_JSON}` from `{FORMAT.GPTQ}` to `{FORMAT.GPTQ_V2}`."
-            )
-            model = convert_gptq_v1_to_v2_format(
-                model,
-                quantize_config=quantize_config,
-                qlinear_kernel=preload_qlinear_kernel,
-            )
-            load_checkpoint_in_model = True
-            quantize_config.format = FORMAT.GPTQ_V2
-
-        if not load_checkpoint_in_model and backend == Backend.TRITON:
-            accelerate.load_checkpoint_in_model(
-                model,
-                dtype=torch_dtype,  # This is very hacky but works due to https://github.com/huggingface/accelerate/blob/bd72a5f1a80d5146554458823f8aeda0a9db5297/src/accelerate/utils/modeling.py#L292
-                checkpoint=model_save_name,
-                device_map=device_map,
-            )
-        # TODO: Why are we using this custom function and not dispatch_model?
-        model = simple_dispatch_model(model, device_map)
+            # TODO: Why are we using this custom function and not dispatch_model?
+            model = simple_dispatch_model(model, device_map)
 
         qlinear_kernel = select_quant_linear(
             bits=quantize_config.bits,
