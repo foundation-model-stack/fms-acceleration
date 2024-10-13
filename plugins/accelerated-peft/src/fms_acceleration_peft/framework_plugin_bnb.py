@@ -208,7 +208,7 @@ class BNBAccelerationPlugin(AccelerationPlugin):
             # or if trl is installed then its only for this version
             if (
                 _transformers_version >= "4.45" and (
-                    not _trl_installed or (_trl_installed and _trl_version >= "12")
+                    not _trl_installed or (_trl_installed and _trl_version >= "0.12")
                 )
             ):
                 # guarded
