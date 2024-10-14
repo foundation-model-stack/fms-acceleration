@@ -69,11 +69,11 @@ class LoRA_MLP(torch.autograd.Function):
 
         e = matmul_lora(X, gateW, gateW_quant, gateA, gateB, gateS, dropout=dropout_gate)
         g = matmul_lora(X,   upW,   upW_quant,   upA,   upB,   upS, dropout=dropout_up)
-        e += gate_bias
-        g += up_bias
+        if gate_bias is not None: e += gate_bias
+        if up_bias is not None: g += up_bias
         h = _forward_function(e, g)
         i = matmul_lora(h, downW, downW_quant, downA, downB, downS, dropout=dropout_down)
-        i += down_bias
+        if down_bias is not None: i += down_bias
 
         # Extract post-dropout X for use in backward computation
         _dropped_X = []
@@ -261,9 +261,9 @@ class LoRA_QKV(torch.autograd.Function):
         K = matmul_lora(X, KW, KW_quant, KA, KB, KS, dropout=dropout_K)
         V = matmul_lora(X, VW, VW_quant, VA, VB, VS, dropout=dropout_V)
 
-        Q += Q_bias
-        K += K_bias
-        V += V_bias
+        if Q_bias is not None: Q += Q_bias
+        if K_bias is not None: K += K_bias
+        if V_bias is not None: V += V_bias
 
         # Extract post-dropout X for use in backward computation
         _dropped_X = []
@@ -406,7 +406,7 @@ class LoRA_W(torch.autograd.Function):
                 W, W_quant, bias, A, B, S, dropout_O):
         dtype = X.dtype
         XW = matmul_lora(X, W, W_quant, A, B, S, dropout=dropout_O)
-        XW += bias
+        if bias is not None: XW += bias
 
         # Extract post-dropout X for use in backward computation
         if dropout_O is not None:

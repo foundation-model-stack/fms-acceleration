@@ -13,17 +13,19 @@ This library contains fused operations and custom kernels, to be expanded over t
 
 Plugin | Description | Depends | Loading | Augmentation | Callbacks
 --|--|--|--|--|--
-[fast_quantized_peft](./src/fms_accelerate_foak/framework_plugin_fast_quantized_peft.py) | LoRA fused ops, fast cross-entropy, fast rms, fast RoPE | Contains extracted code |  | ✅
+[fast_quantized_peft](./src/fms_accelerate_foak/framework_plugin_fast_quantized_peft.py) | LoRA fused ops, fast cross-entropy, fast rms, fast RoPE (**Disabled**) | Contains extracted code |  | ✅
 [fast_kernels](./src/fms_accelerate_foak/framework_plugin_fast_kernels.py) | Enhanced version of `fast_quantized_peft`, also works for full-FT and non-quant peft | Contains extracted code |  | ✅
 
 ### Supported DataType Settings
 **Compatibility Matrix with Mixed Precision**
 torch_dtype | Mixed Precision | Full-FT-FOAK | PEFT-FOAK | QPEFT-FOAK
 -- | -- | -- | -- | --
-FLOAT16 | - | ✗ Not Allowed | ✗| ✗
+FLOAT16 | - | **Compatible**  | **Compatible** | ✗
 FLOAT16 | FP16 | ValueError: <br>Attempting to <br>unscale FP16 gradients. <br>[See here](https://github.com/huggingface/peft/blob/main/docs/source/developer_guides/troubleshooting.md) | **Compatible** | **Compatible**
-BFLOAT16 | - | ✗ | ✗ | ✗
+BFLOAT16 | - | **Compatible**  | **Compatible**  | ✗
 BFLOAT16 | BF16 | **Compatible** | **Compatible** | [Less Performant](https://github.com/foundation-model-stack/fms-acceleration/issues/84)
+
+NOTE: this chart is also a good reference for supported types, even for the non-FOAK case.
 
 ### Code Extracted from Unsloth
 

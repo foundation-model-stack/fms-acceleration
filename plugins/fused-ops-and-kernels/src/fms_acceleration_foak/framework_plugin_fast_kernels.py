@@ -126,10 +126,14 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
         train_args: TrainingArguments,
         modifiable_args: Tuple[LoraConfig],
     ):
-        # assert that plugin requires mixed precision to be set
-        assert (
-            train_args.bf16 is True or train_args.fp16 is True
-        ), f"{self.__class__} requires mixed precision argument `--fp16` or `--bf16`"
+        has_quant = getattr(model, "quantization_method", None)
+
+        if has_quant:
+            # - only in the case where quant case, that we enforce the mixed precision settings
+            # - this is mostly for the fused-loras
+            assert (
+                train_args.bf16 is True or train_args.fp16 is True
+            ), f"{self.__class__} requires mixed precision argument `--fp16` or `--bf16`"
 
         # This is designed to be a passthrough if training scenario is
         # full finetuning or standard peft, fused-lora rules (only meant for qpeft)
@@ -138,7 +142,7 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
 
         # some logic to omit terms from the filter if logic precludes
         omitted = set()
-        if getattr(model, "quantization_method", None) is None:
+        if has_quant is None:
             # - fused_lora only required for quant-peft
             omitted.add("fused_lora")
 
