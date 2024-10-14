@@ -1,6 +1,8 @@
+# Standard
 from collections import defaultdict
-import torch
 
+# Third Party
+import torch
 
 # Copyright The IBM Tuning Team
 #
@@ -19,6 +21,7 @@ import torch
 # SPDX-License-Identifier: Apache-2.0
 # https://spdx.dev/learn/handling-license-info/
 
+
 def ensure_weights_retied(
     param_init_fn, model: torch.nn.Module, device: torch.cuda.device
 ):
@@ -28,28 +31,28 @@ def ensure_weights_retied(
         # if no tied names just passthrough
         return param_init_fn
 
-    # get map of parameter instances to params. 
+    # get map of parameter instances to params.
     # - needed for replacement later
     _tied_params = {}
     for name in _tied_names:
-        name = name.split('.')
-        name, param_name = '.'.join(name[:-1]), name[-1]
+        name = name.split(".")
+        name, param_name = ".".join(name[:-1]), name[-1]
         mod = model.get_submodule(name)
         param = getattr(mod, param_name)
 
-        _tied_params[id(param)] = None # placeholder for the param first
-    
+        _tied_params[id(param)] = None  # placeholder for the param first
+
     # build param_init_fn for the case with tied params
     def param_init_fn_tied_param(module: torch.nn.Module):
 
-        # track which params to tie 
+        # track which params to tie
         # - usually only 1, but for completeness consider > 1
         params_to_tie = defaultdict(list)
         for n, param in module.named_parameters(recurse=False):
             if id(param) in _tied_params:
                 params_to_tie[id(param)].append(n)
 
-        # call the param init fn, which potentially re-allocates the 
+        # call the param init fn, which potentially re-allocates the
         # parameters
         module = param_init_fn(module)
 
@@ -62,8 +65,8 @@ def ensure_weights_retied(
                     # param is observed
                     _tied_params[id_key] = getattr(module, param_name)
                 else:
-                    setattr(module, param_name, param) # tie
-                    
+                    setattr(module, param_name, param)  # tie
+
         return module
 
     return param_init_fn_tied_param

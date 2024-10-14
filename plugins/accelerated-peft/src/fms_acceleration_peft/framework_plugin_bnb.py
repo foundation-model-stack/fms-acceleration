@@ -201,28 +201,37 @@ class BNBAccelerationPlugin(AccelerationPlugin):
             accelerator is not None
             and getattr(accelerator.state, "fsdp_plugin", None) is not None
         ):
-            _, _transformers_version = _is_package_available("transformers", return_version=True)
-            _trl_installed, _trl_version = _is_package_available("trl", return_version=True)
+            _, _transformers_version = _is_package_available(
+                "transformers", return_version=True
+            )
+            _trl_installed, _trl_version = _is_package_available(
+                "trl", return_version=True
+            )
 
             # the meta device fix for quantized models is since this transformers version
             # or if trl is installed then its only for this version
-            if (
-                _transformers_version >= "4.45" and (
-                    not _trl_installed or (_trl_installed and _trl_version >= "0.12")
-                )
+            if _transformers_version >= "4.45" and (
+                not _trl_installed or (_trl_installed and _trl_version >= "0.12")
             ):
                 # guarded
                 # NOTE: replace this later with a more specific accelerate version check
                 try:
+                    # Third Party
+                    # pylint: disable=import-outside-toplevel
                     from torch.distributed.utils import ensure_weights_retied
+
                     # then its handled internally and there is nothing to do
                 except ImportError:
                     # need to use our internal version
-                    from .fsdp_utils import ensure_weights_retied
+                    # Local
+                    from .fsdp_utils import (  # pylint: disable=import-outside-toplevel
+                        ensure_weights_retied,
+                    )
+
                     accelerator.state.fsdp_plugin.param_init_fn = ensure_weights_retied(
-                        accelerator.state.fsdp_plugin.param_init_fn, 
+                        accelerator.state.fsdp_plugin.param_init_fn,
                         model if self._no_peft_model else model.get_base_model(),
-                        accelerator.device
+                        accelerator.device,
                     )
 
         return callbacks

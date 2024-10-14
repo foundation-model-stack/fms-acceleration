@@ -32,7 +32,11 @@ from transformers import (
     PretrainedConfig,
     PreTrainedModel,
 )
-from transformers.modeling_utils import no_init_weights, shard_checkpoint, is_local_dist_rank_0
+from transformers.modeling_utils import (
+    is_local_dist_rank_0,
+    no_init_weights,
+    shard_checkpoint,
+)
 from transformers.utils.generic import ContextManagers
 import accelerate
 import torch
