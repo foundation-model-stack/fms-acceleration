@@ -23,6 +23,7 @@ from fms_acceleration.model_patcher import (
     combine_triggers,
 )
 from transformers.models.mistral.modeling_mistral import (
+    MistralForCausalLM,
     MistralAttention,
     MistralMLP,
     MistralRMSNorm,
@@ -32,8 +33,8 @@ from transformers.models.mistral.modeling_mistral import (
 from ..kernels.unsloth.cross_entropy_loss import FastCrossEntropyLoss
 from ..kernels.unsloth.rms_layernorm import fast_rms_layernorm
 from ..kernels.unsloth.rope_embedding import fast_rope_embedding
+from ..kernels.liger.fused_linear_cross_entropy_loss import lce_forward
 from .utils import KEY_MLP, KEY_O, KEY_QKV, build_lora_fused_ops, trigger_fused_ops
-
 
 def get_mp_rules(base_type):
     """
@@ -109,6 +110,11 @@ def get_mp_rules(base_type):
                 FastCrossEntropyLoss,
                 "transformers.models.mistral.modeling_mistral",
             ),
+        ),
+        ModelPatcherRule(
+            rule_id="mistral-fused-lce",
+            trigger=ModelPatcherTrigger(check=MistralForCausalLM),
+            forward=lce_forward,
         ),
         ModelPatcherRule(
             rule_id="mistral-rope",

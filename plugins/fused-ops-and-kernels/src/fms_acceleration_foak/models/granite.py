@@ -27,6 +27,7 @@ from fms_acceleration.model_patcher import (
 from ..kernels.unsloth.cross_entropy_loss import FastCrossEntropyLoss
 from ..kernels.unsloth.rms_layernorm import fast_rms_layernorm
 from ..kernels.unsloth.rope_embedding import fast_rope_embedding
+from ..kernels.liger.fused_linear_cross_entropy_loss import lce_forward
 from .utils import KEY_MLP, KEY_O, KEY_QKV, build_lora_fused_ops, trigger_fused_ops
 
 
@@ -40,6 +41,7 @@ def get_mp_rules(base_type: str):
     try:
         # Third Party
         from transformers.models.granite.modeling_granite import (  # pylint: disable=import-outside-toplevel
+            GraniteForCausalLM,
             GraniteAttention,
             GraniteMLP,
             GraniteRMSNorm,
@@ -119,6 +121,11 @@ def get_mp_rules(base_type: str):
                 FastCrossEntropyLoss,
                 "transformers.models.granite.modeling_granite",
             ),
+        ),
+        ModelPatcherRule(
+            rule_id="granite-fused-lce",
+            trigger=ModelPatcherTrigger(check=GraniteForCausalLM),
+            forward=lce_forward,
         ),
         # TODO: have a generic version of this rule
         # - get the module name
