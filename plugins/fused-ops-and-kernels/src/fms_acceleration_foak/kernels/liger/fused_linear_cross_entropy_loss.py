@@ -66,6 +66,7 @@ def fused_linear_cross_entropy_forward(
     ignore_index=-100,
     label_smoothing=0.0,
     reduction="mean",
+    logits_scaling=None,
 ):
     dtype = (
         torch.get_autocast_gpu_dtype() if torch.is_autocast_enabled() else _input.dtype
@@ -109,6 +110,10 @@ def fused_linear_cross_entropy_forward(
         logits_chunk = _input_chunk @ weight.t()  # chunk_size x V
         if bias is not None:
             logits_chunk = logits_chunk + bias
+
+        if logits_scaling is not None:
+            logits_chunk /= logits_scaling
+
         target_chunk = target[start_idx:end_idx]  # chunk_size,
 
         n_rows = logits_chunk.shape[0]
@@ -245,6 +250,7 @@ class LigerFusedLinearCrossEntropyFunction(torch.autograd.Function):
         ignore_index=-100,
         label_smoothing=0.0,
         reduction="mean",
+        logits_scaling=None
     ):
         """
         Fusing the last linear layer with cross-entropy loss
@@ -264,7 +270,7 @@ class LigerFusedLinearCrossEntropyFunction(torch.autograd.Function):
         reduction: reduction to apply
         """
         loss, grad_input, grad_weight, grad_bias = fused_linear_cross_entropy_forward(
-            _input, weight, target, bias, ignore_index, label_smoothing, reduction
+            _input, weight, target, bias, ignore_index, label_smoothing, reduction, logits_scaling
         )
         # downcast to dtype and store for backward
         ctx.save_for_backward(
