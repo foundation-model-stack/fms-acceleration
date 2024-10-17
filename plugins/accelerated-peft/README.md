@@ -6,8 +6,8 @@ Currently only supports LoRA-related techniques, but more are in the pipeline to
 
 Plugin | Description | Depends | Loading | Augmentation | Callbacks
 --|--|--|--|--|--
-[autogptq](./src/fms_acceleration_peft/framework_plugin_autogptq.py) | Loads 4bit GPTQ-LoRA with quantized GPTQ as base | AutoGPTQ | ✅ | ✅
-[bnb](./src/fms_acceleration_peft/framework_plugin_bnb.py) | Loads 4bit QLoRA with quantized bitsandbytes Linear4 | Huggingface<br>bitsandbytes | ✅ | ✅
+[autogptq](./src/fms_acceleration_peft/framework_plugin_autogptq.py) | Loads 4bit GPTQ-LoRA with quantized GPTQ as base | AutoGPTQ | ✅ | ✅ | ✅ 
+[bnb](./src/fms_acceleration_peft/framework_plugin_bnb.py) | Loads 4bit QLoRA with quantized bitsandbytes Linear4 | Huggingface<br>bitsandbytes | ✅ | ✅ | ✅ 
 
 
 ### Key Points
@@ -43,6 +43,7 @@ GPTQ-LORA depends on an AutoGPTQ backend to run. There are 2 backend options
 
 ## Known Issues
 
+<!--
 - Models with sliding windows (e.g., Mistral, Mixtral) will have [memory and throughout issues](https://github.com/huggingface/transformers/issues/30461).
+-->
 - GPTQ-LORA sometimes observed to have `nan` grad norms in the begining of training, but training proceeds well otherwise.
-- `low_cpu_mem_usage` temporarily disabled for AutoGPTQ until bug with `make_sure_no_tensor_in_meta_device` is resolved.
