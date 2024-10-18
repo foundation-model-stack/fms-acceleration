@@ -43,6 +43,12 @@ framework_configs:
         - attention-and-distributed-packing
       filename: aadp-padding-free-multipack-sample-configuration.yaml
 
+    - shortname: aadp-padding-free-multipack-foak
+      plugins:
+        - attention-and-distributed-packing
+        - fused-ops-and-kernels
+      filename: aadp-padding-free-multipack-foak-sample-configuration.yaml
+
     - shortname: accelerated-peft-bnb-padding-free
       plugins:
         - accelerated-peft
