@@ -21,6 +21,7 @@ from .dbrx_converted import DbrxConvertedGPTQ
 from .gemma import GemmaGPTQ
 from .gpt_bigcode import GPTBigCodeGPTQ
 from .gpt_neox import GPTNeoXGPTQ
+from .granite import GraniteGPTQ
 from .llama import LlamaGPTQ
 from .mistral import MistralGPTQ
 from .mixtral import MixtralGPTQ
