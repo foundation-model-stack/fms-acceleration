@@ -357,7 +357,7 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
             and getattr(accelerator.state, "fsdp_plugin", None) is not None
         ):
 
-            # for autogptq we will install the fix regardless of transformers or 
+            # for autogptq we will install the fix regardless of transformers or
             # trl version, because those fixes were only for BNB. Here we control
             # our own model loading
             # NOTE: guard this later with a more specific accelerate version check
