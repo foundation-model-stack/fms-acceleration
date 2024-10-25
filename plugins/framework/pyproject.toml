@@ -23,7 +23,7 @@ classifiers=[
 ]
 dependencies = [
   "numpy<2.0", # numpy needs to be bounded due to incompatiblity with current torch<2.3
-  "torch>2.2",
+  "torch<2.5",
   "peft",
   "accelerate",
   "pandas",
