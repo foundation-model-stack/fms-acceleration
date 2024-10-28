@@ -38,6 +38,7 @@ from .autogptq_utils import (
     register_tensors_as_parameters_patch_rule,
     requires_installation_on_all_linears,
 )
+from .fsdp_utils import put_selected_meta_tensors_on_cpu
 
 
 class AutoGPTQAccelerationPlugin(AccelerationPlugin):
@@ -218,6 +219,11 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
 
             # replace
             AutoModelForCausalLM.from_config = _old_from_config
+
+            # in low_cpu_mem_mode, if certain tensors like embeddings
+            # are in the meta device, then certain operations like
+            # embedding resizing will fail
+            put_selected_meta_tensors_on_cpu(model)
 
         # AutoGPTQ does not set the torch_dtype of the model carefully
         model.config.torch_dtype = torch_dtype

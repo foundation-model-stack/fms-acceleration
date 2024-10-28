@@ -2,6 +2,8 @@
 from collections import defaultdict
 
 # Third Party
+from accelerate.utils import set_module_tensor_to_device
+from transformers import PreTrainedModel
 import torch
 
 # Copyright The IBM Tuning Team
@@ -70,3 +72,27 @@ def ensure_weights_retied(
         return module
 
     return param_init_fn_tied_param
+
+
+# utility to put tensors on the cpu
+def put_selected_meta_tensors_on_cpu(model: PreTrainedModel):
+
+    done = {}
+    # - fow now we only put input and output embeddings
+    for module in [
+        model.get_input_embeddings(),
+        model.get_output_embeddings(),
+    ]:
+
+        for param_name, param in module.named_parameters(recurse=False):
+            param_id = id(param)
+
+            if param.device == torch.device("meta"):
+                if param_id not in done:
+                    value = torch.empty(*param.size(), dtype=param.dtype)
+                    done[param_id] = value  # memoize
+                else:
+                    # this is a tied weight, get back the previous value
+                    value = done[param_id]
+
+                set_module_tensor_to_device(module, param_name, "cpu", value)
