@@ -48,10 +48,6 @@ def lora_adapters_switch_ddp_from_fsdp(modules, fsdp_plugin):
         A = mod.lora_A.default
         B = mod.lora_B.default
 
-        # install hooks on the adapters
-        A.weight.register_hook(_all_reduce_hook)
-        B.weight.register_hook(_all_reduce_hook)
-
         # because we will ignore these from FSDP, we need to manually
         # move them to gpu if they are already not on them
         # - if the adapters are on meta, we assume that this is for FSDP
@@ -79,6 +75,11 @@ def lora_adapters_switch_ddp_from_fsdp(modules, fsdp_plugin):
 
             if is_fsdp_enabled():
                 dist.broadcast(B.weight, src=0)
+
+        # install hooks on the adapters
+        # - this has to be done after all weight replacement happens
+        A.weight.register_hook(_all_reduce_hook)
+        B.weight.register_hook(_all_reduce_hook)
 
 def register_foak_model_patch_rules(base_type):
     # Third Party

@@ -28,6 +28,9 @@ from transformers import AutoModelForCausalLM, BitsAndBytesConfig, TrainingArgum
 from transformers.utils.import_utils import _is_package_available
 import torch
 
+# Local
+from .fsdp_utils import put_selected_meta_tensors_on_cpu
+
 
 # this is a modified copy of the function from peft.utils.other, that we
 # will instead use
@@ -153,6 +156,27 @@ class BNBAccelerationPlugin(AccelerationPlugin):
             low_cpu_mem_usage=low_cpu_mem_usage,
             attn_implementation=attn_implementation,
         )
+
+        if (
+            world_size > 1
+            and os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true"
+        ):
+            config_kwargs["bnb_4bit_quant_storage"] = torch_dtype
+
+            _, _transformers_version = _is_package_available(
+                "transformers", return_version=True
+            )
+            _trl_installed, _trl_version = _is_package_available(
+                "trl", return_version=True
+            )
+
+            if _transformers_version >= "4.45" and (
+                not _trl_installed or (_trl_installed and _trl_version >= "0.12")
+            ):
+                # in low_cpu_mem_mode, if certain tensors like embeddings
+                # are in the meta device, then certain operations like
+                # embedding resizing will fail
+                put_selected_meta_tensors_on_cpu(model)
 
         return model
 
