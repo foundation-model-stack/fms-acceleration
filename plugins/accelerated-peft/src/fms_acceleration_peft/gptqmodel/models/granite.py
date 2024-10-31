@@ -13,23 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ###############################################################################
-# Third Party
-from torch import device
+# Local
+from .base import BaseGPTQModel
 
-CPU = device("cpu")
-CUDA_0 = device("cuda:0")
 
-SUPPORTED_MODELS = [
-    "gpt_neox",
-    "gpt_bigcode",
-    "llama",
-    "mistral",
-    "mixtral",
-    "granite",
-    "gemma",
-    "dbrx_converted",
-]
+class GraniteGPTQ(BaseGPTQModel):
+    base_modules = ["model.embed_tokens", "model.norm"]
 
-EXLLAMA_DEFAULT_MAX_INPUT_LENGTH = 2048
-
-EXPERT_INDEX_PLACEHOLDER = "{expert_index}"
+    layers_node = "model.layers"
+    layer_type = "GraniteDecoderLayer"
+    layer_modules = [
+        ["self_attn.k_proj", "self_attn.v_proj", "self_attn.q_proj"],
+        ["self_attn.o_proj"],
+        ["mlp.up_proj", "mlp.gate_proj"],
+        ["mlp.down_proj"],
+    ]
