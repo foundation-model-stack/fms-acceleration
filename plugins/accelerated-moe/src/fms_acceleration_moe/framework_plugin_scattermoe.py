@@ -26,6 +26,9 @@ import torch
 class ScatterMoEAccelerationPlugin(AccelerationPlugin):
 
     require_packages = {"kernel-hyperdrive"}
+    restricted_model_archs = [
+        'GraniteMoeForCausalLM', 'MixtralForCausalLM'
+    ]
 
     def __init__(self, configurations: Dict[str, Dict]):
         super().__init__(configurations)
@@ -39,50 +42,50 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
             default="GraniteMoeMoE",
         )
         # - 2. gate_module_name
-        self._gate_module_name = self._check_config_and_maybe_check_values(
-            key="training.moe.scattermoe.moe_gate_module_name", default="gate"
-        )
-        # - 3. experts_module_name
-        self._experts_module_name = self._check_config_and_maybe_check_values(
-            key="training.moe.scattermoe.moe_experts_module_name", default="experts"
-        )
-        # - 4. mlp version
-        self._mlp_version = self._check_config_and_maybe_check_values(
-            key="training.moe.scattermoe.moe_mlp_impl",
-            values=["v1", "v2"],
-            default="v2",
-        )
+        # self._gate_module_name = self._check_config_and_maybe_check_values(
+        #     key="training.moe.scattermoe.moe_gate_module_name", default="gate"
+        # )
+        # # - 3. experts_module_name
+        # self._experts_module_name = self._check_config_and_maybe_check_values(
+        #     key="training.moe.scattermoe.moe_experts_module_name", default="experts"
+        # )
+        # # - 4. mlp version
+        # self._mlp_version = self._check_config_and_maybe_check_values(
+        #     key="training.moe.scattermoe.moe_mlp_impl",
+        #     values=["v1", "v2"],
+        #     default="v2",
+        # )
 
         # for controlling the type of sharding
-        self._shard_along_dp = self._check_config_and_maybe_check_values(
-            key="training.moe.scattermoe.shard_along_dp",
-            values=[True, False],
-            default=True,
-        )
+        # self._shard_along_dp = self._check_config_and_maybe_check_values(
+        #     key="training.moe.scattermoe.shard_along_dp",
+        #     values=[True, False],
+        #     default=True,
+        # )
 
         # ep_size determines the expert parallel sharding
         # - ep_size is ignored if _shard_along_dp=True
-        self._ep_size = None
+        self._ep_degree = None
         if not self._shard_along_dp:
-            self._ep_size = self._check_config_and_maybe_check_values(
-                key="training.moe.scattermoe.ep_size",
+            self._ep_degree = self._check_config_and_maybe_check_values(
+                key="training.moe.scattermoe.ep_degree",
                 default=1,
             )
 
         # for the moe_implementation, currently we only use the megablocks
         # dropless sparse implementation
-        self._moe_implementation = self._check_config_and_maybe_check_values(
-            key="training.moe.scattermoe.moe_implementation",
-            values=["dropless_sparse"],
-            default="dropless_sparse",
-        )
-        self._moe_implementation = self._moe_implementation.split("_")[1]
+        # self._moe_implementation = self._check_config_and_maybe_check_values(
+        #     key="training.moe.scattermoe.moe_implementation",
+        #     values=["dropless_sparse"],
+        #     default="dropless_sparse",
+        # )
+        # self._moe_implementation = self._moe_implementation.split("_")[1]
 
-        self._load_balancing_loss = self._check_config_and_maybe_check_values(
-            key="training.moe.scattermoe.load_balancing_loss",
-            values=[True, False],
-            default=False,
-        )
+        # self._load_balancing_loss = self._check_config_and_maybe_check_values(
+        #     key="training.moe.scattermoe.load_balancing_loss",
+        #     values=[True, False],
+        #     default=False,
+        # )
 
     @property
     def requires_custom_loading(self):
@@ -92,37 +95,38 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
         # guarded
         # Local
         # pylint: disable=import-outside-toplevel
-        from .megablocks_utils.config_utils import update_mlp_registry
-        from .megablocks_utils.shard_moe_utils import get_moe_kwargs, shard_moe
+        # from .megablocks_utils.config_utils import update_mlp_registry
+        # from .megablocks_utils.shard_moe_utils import get_moe_kwargs, shard_moe
 
-        # - check the config
-        if self._load_balancing_loss and not hasattr(
-            AutoConfig.from_pretrained(model_name), "output_router_logits"
-        ):
-            warnings.warn(
-                "load_balancing_loss=True but "
-                "the model '{model_name}' config not have 'output_router_logits' "
-                "in its config, hence it might not support load balancing and "
-                "fallback to load_balancing_loss=False."
-            )
-            self._load_balancing_loss = False
+        # # - check the config
+        # if self._load_balancing_loss and not hasattr(
+        #     AutoConfig.from_pretrained(model_name), "output_router_logits"
+        # ):
+        #     warnings.warn(
+        #         "load_balancing_loss=True but "
+        #         "the model '{model_name}' config not have 'output_router_logits' "
+        #         "in its config, hence it might not support load balancing and "
+        #         "fallback to load_balancing_loss=False."
+        #     )
+        #     self._load_balancing_loss = False
 
         # this one does a forward patching on MLP, but needs to be fixed
         # properly as the load balancing loss is currently not properly
         # handled
-        update_mlp_registry(
-            self._moe_implementation, self._mlp_version, self._load_balancing_loss
-        )
+        # update_mlp_registry(
+        #     self._moe_implementation, self._mlp_version, self._load_balancing_loss
+        # )
+        from .utils import prepare_scattemoe
 
         # get additional parameters
-        torch_dtype = kwargs.get("torch_dtype", torch.float32)
+        # torch_dtype = kwargs.get("torch_dtype", torch.float32)
 
         # load the model
         model = AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
 
         # set this in the config, which will be picked up by the forward
         # function to go into the load_balancing loss
-        model.config.output_router_logits = self._load_balancing_loss
+        # model.config.output_router_logits = self._load_balancing_loss
 
         rank, world_size = 0, 1
         if torch.distributed.is_initialized():
@@ -137,21 +141,16 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
         # shard the MOE, and store products required for
         # FSDP configuration
         # pylint: disable=unused-variable
-        (dp_mesh, self._moe_component_module_names) = shard_moe(
+        self._moe_component_module_names = prepare_scattemoe(
             model,
             self._moe_component_cls,
             checkpoint_name_or_path=model_name,
             rank=rank,
             world_size=world_size,
-            ep_size=self._ep_size,
-            moe_kwargs=get_moe_kwargs(
-                model.config,
-                fp16=torch_dtype == torch.float16,
-                bf16=torch_dtype == torch.bfloat16,
-            ),
-            shared_mesh_dim=self._shard_along_dp,
-            router_name=self._gate_module_name,
-            expert_name=self._experts_module_name,
+            ep_degree=self._ep_degree,
+            # shared_mesh_dim=self._shard_along_dp,
+            # router_name=self._gate_module_name,
+            # expert_name=self._experts_module_name,
             mixed_precision=False,  # Currently this is hardcoded to OFF
         )
 
@@ -175,6 +174,18 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
             accelerator is not None
             and getattr(accelerator.state, "fsdp_plugin", None) is not None
         ):
+            # TODO: refactor
+            # for newer torch that enables foreach for Dtensors we need to remove it
+            from torch.optim.optimizer import _foreach_supported_types
+
+            i = 0
+            while i < len(_foreach_supported_types):
+                x = _foreach_supported_types[i]
+                if x.__name__ == 'DTensor':
+                    _foreach_supported_types.pop(i)
+                else:
+                    i += 1 
+
             # - use an internal function call to get the no split
             # module names, which are typically layers
             _layers = model._get_no_split_modules("")
@@ -184,6 +195,23 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
                 for layer in model.modules()
                 if layer.__class__.__name__ in _layers
             ]
+
+            # Third Party
+            # TODO: REFACTOR
+            from fms_acceleration.model_patcher import patch_target_module
+
+            # Local
+            from utils.checkpoint_utils import (
+                load_fsdp_model,
+                load_fsdp_optimizer,
+                save_fsdp_model,
+                save_fsdp_optimizer,
+            )
+
+            patch_target_module("transformers.trainer.save_fsdp_model", save_fsdp_model)
+            patch_target_module("transformers.trainer.save_fsdp_optimizer", save_fsdp_optimizer)
+            patch_target_module("transformers.trainer.load_fsdp_model", load_fsdp_model)
+            patch_target_module("transformers.trainer.load_fsdp_optimizer", load_fsdp_optimizer)
 
         return callbacks
 
