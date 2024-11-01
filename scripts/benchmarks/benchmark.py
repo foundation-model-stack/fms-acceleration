@@ -358,6 +358,12 @@ class ScenarioMatrix:
 
     def __init__(self, scenario: Dict, acceleration_config_map: Dict = None) -> None:
         assert "arguments" in scenario.keys(), "Missing `arguments` key in `scenario`"
+
+        # "slow" is a special key that indicates this scenario
+        # takes resources to run
+        # - "slow" scenarios are not run if not specified by a filter
+        self.slow = False
+
         for key, val in scenario.items():
             if key == "framework_config":
                 # if acceleration_config_map is None, then do not do mapping
@@ -689,7 +695,18 @@ def prepare_arguments(args, benchmark_dataset: BenchmarkDataset):
         if args.run_only_scenarios and _scn_name not in args.run_only_scenarios:
             print(f"Skipping scenario '{_scn_name}'")
             continue
+
+        # build scenario matrix
         scenario = ScenarioMatrix(scenario_config, acceleration_config_map)
+
+        if (
+            not args.run_only_scenarios
+            and scenarios.slow
+        ):
+            # unfiltered runs omit all "slow" marked scenarios
+            print(f"Skipping slow scenario '{_scn_name}' beacuse run_only_scenarios=None.")
+            continue
+
         scenario_matrices, scenario_constants = (
             scenario.get_scenario_matrices_and_defaults()
         )

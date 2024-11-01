@@ -73,3 +73,8 @@ framework_configs:
       plugins:
         - fused-ops-and-kernels
       filename: foak-fast-kernels-sample-configuration.yaml
+
+    - shortname: moe-scattermoe-granite
+      plugins:
+        - accelerated-moe
+      filename: moe-scattermoe-granite-sample-configuration.yaml

@@ -148,6 +148,7 @@ KEY_BNB_NF4_FOAK = "bnb-nf4-foak"
 KEY_AADP_PADDING_FREE = "aadp-padding-free"
 KEY_AADP_MULTIPACK = "aadp-multipack"
 KEY_FAST_KERNELS = "foak-fast-kernels"
+KEY_SCATTERMOE = "moe-scattermoe"
 
 CONFIGURATIONS = {
     KEY_AUTO_GPTQ: "plugins/accelerated-peft/configs/autogptq.yaml",
@@ -173,6 +174,7 @@ CONFIGURATIONS = {
     KEY_AADP_PADDING_FREE: "plugins/attention-and-distributed-packing/configs/padding_free.yaml",
     KEY_AADP_MULTIPACK: "plugins/attention-and-distributed-packing/configs/multipack.yaml",
     KEY_FAST_KERNELS: "plugins/fused-ops-and-kernels/configs/fast_kernels.yaml",
+    KEY_SCATTERMOE: "plugins/accelerated-moe/configs/scattermoe.yaml",
 }
 
 # list of (tag, combi) tuples
@@ -192,7 +194,8 @@ COMBINATIONS = [
     ("accelerated-peft-autogptq-foak-padding-free", (KEY_AADP_PADDING_FREE,KEY_AUTO_GPTQ, KEY_AUTO_GPTQ_FOAK)),
     ("accelerated-peft-bnb-nf4-foak-padding-free", (KEY_AADP_PADDING_FREE,KEY_BNB_NF4, KEY_BNB_NF4_FOAK)),
     ("aadp-padding-free-multipack", (KEY_AADP_PADDING_FREE, KEY_AADP_MULTIPACK)),
-    ("foak-fast-kernels", (KEY_FAST_KERNELS,))
+    ("foak-fast-kernels", (KEY_FAST_KERNELS,)),
+    ("moe-scattermoe-granite", (KEY_SCATTERMOE,)),
 ]
 
 

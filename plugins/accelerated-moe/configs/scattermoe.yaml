@@ -1,0 +1,8 @@
+training:
+
+  # mixture-of-experts configurations
+  moe:
+
+    # expert-parallel for MoE
+    scattermoe:
+
