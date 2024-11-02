@@ -305,12 +305,34 @@ class ConfigUtils:
             argument_list = ConfigUtils.convert_keyvalue_arguments_to_list(
                 combined_args
             )
-            argument_list.extend(
-                [
-                    "--per_device_train_batch_size",
-                    str(effective_batch_size // num_gpus),
-                ]
-            )
+            pdtbs = combined_args.get('per_device_train_batch_size')
+            grad_accum = combined_args.get('gradient_accumulation_steps')
+            if pdtbs is None and grad_accum is not None:
+                if grad_accum > 1:
+                    warnings.warn(
+                        f"Found gradient_accumulation_steps={grad_accum} and "
+                        "no per_device_train_batch_size specified, but for backward "
+                        "compatibility, ignoring gradient_accum in batch size "
+                        "computation (this behavior may change in the future)."
+                    )
+                argument_list.extend(
+                    [
+                        "--per_device_train_batch_size",
+                        str(effective_batch_size // num_gpus),
+                    ]
+                )
+            elif grad_accum is None and pdtbs is not None:
+                argument_list.extend(
+                    [
+                        "--gradient_accumulation_steps",
+                        str(effective_batch_size // num_gpus // pdtbs),
+                    ]
+                )
+            else:
+                raise ValueError(
+                    "Please specify only either per_device_train_batch_size or gradient_accumulation_steps "
+                    "and not both."
+                )
             args.append((num_gpus, framework_config, argument_list))
         return args
 

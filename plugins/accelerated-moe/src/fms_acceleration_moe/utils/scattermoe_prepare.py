@@ -128,7 +128,6 @@ def load_experts_onto_device(
 
 def prepare_scattemoe(
     model: torch.nn.Module,
-    moe_cls: Union[str, Type],
     checkpoint_name_or_path: str = None,
     rank: int = None,
     world_size: int = None,
@@ -156,7 +155,7 @@ def prepare_scattemoe(
     # infer the router_name and expert_name
     found = False
     for archs, (
-        router_name, expert_name, expert_mlp_spec, sharded_expert_ckpt
+        moe_cls, router_name, expert_name, expert_mlp_spec, sharded_expert_ckpt
     ) in SCATTERMOE_CONVERSION_SPEC.items():
         archs = archs.split(',')
         if any(x in archs for x in model.config.architectures):

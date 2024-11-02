@@ -11,8 +11,10 @@ plugins:
       # expert-parallel for MoE
       scattermoe:
 
+        # TODO: should we even get rid of this?
         # The name of the mixture-of-experts class
-        moe_component_class: MixtralSparseMoeBlock
+        # moe_component_class: MixtralSparseMoeBlock
+        # moe_component_class: GraniteMoeMoE
 
         # The module name of the router in moe_component_class above
         # moe_gate_module_name: gate
@@ -34,7 +36,7 @@ plugins:
         # - we disable the ability to set ep_size=1 since this means no sharding
         # - NOTE: ep_size=1 does not mean shard_along_dp=True, which would otherwise
         #   be contradictory since ep_size suggests no expert parallel.
-        ep_degree: 2
+        ep_degree: 1
 
         # the MoE dropless implementation. Currently we only support "dropless_sparse", but
         # in the future we may support others

@@ -25,7 +25,10 @@ import torch
 # pylint: disable=too-many-instance-attributes
 class ScatterMoEAccelerationPlugin(AccelerationPlugin):
 
-    require_packages = {"kernel-hyperdrive"}
+    # NOTE: its not packaged properly so, "importlib.util.find_spec('khd')"
+    # returns but "importlib.metadata.version('kernel-hyperdrive') is needed"
+    # require_packages = {"khd"}
+
     restricted_model_archs = [
         'GraniteMoeForCausalLM', 'MixtralForCausalLM'
     ]
@@ -36,11 +39,11 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
         # arguments for configuring the mixture-of-experts model with defaults
         # shown below for Mixtral 7x8b
         # - 1. component class
-        self._moe_component_cls = self._check_config_and_maybe_check_values(
-            key="training.moe.scattermoe.moe_component_class",
-            # default="MixtralSparseMoeBlock",
-            default="GraniteMoeMoE",
-        )
+        # self._moe_component_cls = self._check_config_and_maybe_check_values(
+        #     key="training.moe.scattermoe.moe_component_class",
+        #     # default="MixtralSparseMoeBlock",
+        #     default="GraniteMoeMoE",
+        # )
         # - 2. gate_module_name
         # self._gate_module_name = self._check_config_and_maybe_check_values(
         #     key="training.moe.scattermoe.moe_gate_module_name", default="gate"
@@ -65,12 +68,10 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
 
         # ep_size determines the expert parallel sharding
         # - ep_size is ignored if _shard_along_dp=True
-        self._ep_degree = None
-        if not self._shard_along_dp:
-            self._ep_degree = self._check_config_and_maybe_check_values(
-                key="training.moe.scattermoe.ep_degree",
-                default=1,
-            )
+        self._ep_degree = self._check_config_and_maybe_check_values(
+            key="training.moe.scattermoe.ep_degree",
+            default=1,
+        )
 
         # for the moe_implementation, currently we only use the megablocks
         # dropless sparse implementation
@@ -132,18 +133,18 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
         if torch.distributed.is_initialized():
             world_size = torch.distributed.get_world_size()
             rank = torch.distributed.get_rank()
-        else:
-            # NOTE: or should we do a silent fallback
-            raise AssertionError(
-                "Megablocks expert parallel only works for distributed training."
-            )
+        # else:
+        #     # NOTE: or should we do a silent fallback
+        #     raise AssertionError(
+        #         "Megablocks expert parallel only works for distributed training."
+        #     )
 
         # shard the MOE, and store products required for
         # FSDP configuration
         # pylint: disable=unused-variable
         self._moe_component_module_names = prepare_scattemoe(
             model,
-            self._moe_component_cls,
+            # self._moe_component_cls,
             checkpoint_name_or_path=model_name,
             rank=rank,
             world_size=world_size,
@@ -201,7 +202,7 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
             from fms_acceleration.model_patcher import patch_target_module
 
             # Local
-            from utils.checkpoint_utils import (
+            from .utils.checkpoint_utils import (
                 load_fsdp_model,
                 load_fsdp_optimizer,
                 save_fsdp_model,
