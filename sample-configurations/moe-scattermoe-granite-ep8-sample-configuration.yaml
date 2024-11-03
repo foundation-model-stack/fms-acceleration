@@ -1,0 +1,46 @@
+# FMS Acceleration Plugin Configuration. 
+#
+# Each stanza incorporates various configurations for 
+# different fine-tuning / training tasks.
+plugins:
+  training:
+
+    # mixture-of-experts configurations
+    moe:
+
+      # expert-parallel for MoE
+      scattermoe:
+
+        # TODO: should we even get rid of this?
+        # The name of the mixture-of-experts class
+        # moe_component_class: MixtralSparseMoeBlock
+        # moe_component_class: GraniteMoeMoE
+
+        # The module name of the router in moe_component_class above
+        # moe_gate_module_name: gate
+
+        # The module name of the experts in moe_component_class above
+        # moe_experts_module_name: experts
+
+        # the mlp version
+        # - for those with only up and down projs, use "v1"
+        # - for those with only up, down and gate projs, use "v2"
+        # moe_mlp_impl: v2
+        # if True, then we shard experts across data parallel dimension
+        # - only feasible if world_size divides the number of experts
+        # shard_along_dp: true
+
+        # to be specified only if shard_along_dp == False. This will influence
+        # the level of sharding, which indicates how many experts per device
+        # - the number of experts per device will be num_experts / ep_size
+        # - we disable the ability to set ep_size=1 since this means no sharding
+        # - NOTE: ep_size=1 does not mean shard_along_dp=True, which would otherwise
+        #   be contradictory since ep_size suggests no expert parallel.
+        ep_degree: 8
+
+        # the MoE dropless implementation. Currently we only support "dropless_sparse", but
+        # in the future we may support others
+        # moe_implementation: dropless_sparse
+
+        # for load_balancing_loss
+        # load_balancing_loss: false

@@ -151,6 +151,7 @@ KEY_FAST_KERNELS = "foak-fast-kernels"
 KEY_SCATTERMOE_EP1 = "moe-scattermoe-ep1"
 KEY_SCATTERMOE_EP2 = 'moe-scattermoe-ep2'
 KEY_SCATTERMOE_EP4 = 'moe-scattermoe-ep4'
+KEY_SCATTERMOE_EP8 = 'moe-scattermoe-ep8'
 
 CONFIGURATIONS = {
     KEY_AUTO_GPTQ: "plugins/accelerated-peft/configs/autogptq.yaml",
@@ -185,6 +186,10 @@ CONFIGURATIONS = {
         "plugins/accelerated-moe/configs/scattermoe.yaml",
         [("training.moe.scattermoe.ep_degree", 4)],
     ),
+    KEY_SCATTERMOE_EP8: (
+        "plugins/accelerated-moe/configs/scattermoe.yaml",
+        [("training.moe.scattermoe.ep_degree", 8)],
+    ),
 }
 
 # list of (tag, combi) tuples
@@ -206,8 +211,13 @@ COMBINATIONS = [
     ("aadp-padding-free-multipack", (KEY_AADP_PADDING_FREE, KEY_AADP_MULTIPACK)),
     ("foak-fast-kernels", (KEY_FAST_KERNELS,)),
     ("moe-scattermoe-granite-ep1", (KEY_SCATTERMOE_EP1,)),
+    ("moe-scattermoe-granite-ep1-padding-free", (KEY_AADP_PADDING_FREE, KEY_SCATTERMOE_EP1,)),
     ("moe-scattermoe-granite-ep2", (KEY_SCATTERMOE_EP2,)),
+    ("moe-scattermoe-granite-ep2-padding-free", (KEY_AADP_PADDING_FREE, KEY_SCATTERMOE_EP2,)),
     ("moe-scattermoe-granite-ep4", (KEY_SCATTERMOE_EP4,)),
+    ("moe-scattermoe-granite-ep4-padding-free", (KEY_AADP_PADDING_FREE, KEY_SCATTERMOE_EP4,)),
+    ("moe-scattermoe-granite-ep8", (KEY_SCATTERMOE_EP8,)),
+    ("moe-scattermoe-granite-ep8-padding-free", (KEY_AADP_PADDING_FREE, KEY_SCATTERMOE_EP8,)),
 ]
 
 

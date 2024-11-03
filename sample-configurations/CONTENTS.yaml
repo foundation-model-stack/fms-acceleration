@@ -80,12 +80,41 @@ framework_configs:
         - accelerated-moe
       filename: moe-scattermoe-granite-ep1-sample-configuration.yaml
 
+    - shortname: moe-scattermoe-granite-ep1-padding-free
+      plugins:
+        - accelerated-moe
+        - attention-and-distributed-packing
+      filename: moe-scattermoe-granite-ep1-padding-free-sample-configuration.yaml
+
     - shortname: moe-scattermoe-granite-ep2
       plugins:
         - accelerated-moe
       filename: moe-scattermoe-granite-ep2-sample-configuration.yaml
 
+    - shortname: moe-scattermoe-granite-ep2-padding-free
+      plugins:
+        - accelerated-moe
+        - attention-and-distributed-packing
+      filename: moe-scattermoe-granite-ep2-padding-free-sample-configuration.yaml
+
     - shortname: moe-scattermoe-granite-ep4
       plugins:
         - accelerated-moe
       filename: moe-scattermoe-granite-ep4-sample-configuration.yaml
+
+    - shortname: moe-scattermoe-granite-ep4-padding-free
+      plugins:
+        - accelerated-moe
+        - attention-and-distributed-packing
+      filename: moe-scattermoe-granite-ep4-padding-free-sample-configuration.yaml
+
+    - shortname: moe-scattermoe-granite-ep8
+      plugins:
+        - accelerated-moe
+      filename: moe-scattermoe-granite-ep8-sample-configuration.yaml
+
+    - shortname: moe-scattermoe-granite-ep8-padding-free
+      plugins:
+        - accelerated-moe
+        - attention-and-distributed-packing
+      filename: moe-scattermoe-granite-ep8-padding-free-sample-configuration.yaml

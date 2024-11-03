@@ -42,7 +42,9 @@ scenarios:
             - moe-scattermoe-granite-ep1
             - moe-scattermoe-granite-ep2
             - moe-scattermoe-granite-ep4
-            # add pf
+            - moe-scattermoe-granite-ep1-padding-free
+            - moe-scattermoe-granite-ep2-padding-free
+            - moe-scattermoe-granite-ep4-padding-free
         arguments:
             learning_rate: 5e-5
             torch_dtype: bfloat16
@@ -52,4 +54,21 @@ scenarios:
             packing: False
             adam_epsilon: 1e-8
             model_name_or_path: 
-                - 'ibm/PowerMoE-3b'
+                - 'ibm-granite/granite-3.0-3b-a800m-instruct'
+
+    -   name: accelerated-moe-full-mixtral
+        framework_config: 
+            - # without acceleration
+            - moe-scattermoe-granite-ep8
+        slow: True
+        arguments:
+            learning_rate: 5e-5
+            torch_dtype: bfloat16
+            accelerator_config: scripts/benchmarks/accelerator-config.json
+            gradient_accumulation_steps: null
+            per_device_train_batch_size: 1
+            logging_steps: 1
+            packing: False
+            adam_epsilon: 1e-8
+            model_name_or_path: 
+                - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
