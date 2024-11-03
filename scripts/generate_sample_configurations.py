@@ -150,7 +150,7 @@ KEY_AADP_MULTIPACK = "aadp-multipack"
 KEY_FAST_KERNELS = "foak-fast-kernels"
 KEY_SCATTERMOE_EP1 = "moe-scattermoe-ep1"
 KEY_SCATTERMOE_EP2 = 'moe-scattermoe-ep2'
-KEY_SCATTERMOE_EP4 = 'moe-scattermoe-ep2'
+KEY_SCATTERMOE_EP4 = 'moe-scattermoe-ep4'
 
 CONFIGURATIONS = {
     KEY_AUTO_GPTQ: "plugins/accelerated-peft/configs/autogptq.yaml",

@@ -46,7 +46,6 @@ scenarios:
         arguments:
             learning_rate: 5e-5
             torch_dtype: bfloat16
-            # gradient_accumulation_steps: 16
             gradient_accumulation_steps: null
             per_device_train_batch_size: 8
             logging_steps: 1
