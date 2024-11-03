@@ -36,108 +36,31 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
     def __init__(self, configurations: Dict[str, Dict]):
         super().__init__(configurations)
 
-        # arguments for configuring the mixture-of-experts model with defaults
-        # shown below for Mixtral 7x8b
-        # - 1. component class
-        # self._moe_component_cls = self._check_config_and_maybe_check_values(
-        #     key="training.moe.scattermoe.moe_component_class",
-        #     # default="MixtralSparseMoeBlock",
-        #     default="GraniteMoeMoE",
-        # )
-        # - 2. gate_module_name
-        # self._gate_module_name = self._check_config_and_maybe_check_values(
-        #     key="training.moe.scattermoe.moe_gate_module_name", default="gate"
-        # )
-        # # - 3. experts_module_name
-        # self._experts_module_name = self._check_config_and_maybe_check_values(
-        #     key="training.moe.scattermoe.moe_experts_module_name", default="experts"
-        # )
-        # # - 4. mlp version
-        # self._mlp_version = self._check_config_and_maybe_check_values(
-        #     key="training.moe.scattermoe.moe_mlp_impl",
-        #     values=["v1", "v2"],
-        #     default="v2",
-        # )
-
-        # for controlling the type of sharding
-        # self._shard_along_dp = self._check_config_and_maybe_check_values(
-        #     key="training.moe.scattermoe.shard_along_dp",
-        #     values=[True, False],
-        #     default=True,
-        # )
-
-        # ep_size determines the expert parallel sharding
-        # - ep_size is ignored if _shard_along_dp=True
+        # ep_degree determines the expert parallel sharding
+        # - default of 1 means experts are not sharded and operate in pure replication.
         self._ep_degree = self._check_config_and_maybe_check_values(
             key="training.moe.scattermoe.ep_degree",
             default=1,
         )
-
-        # for the moe_implementation, currently we only use the megablocks
-        # dropless sparse implementation
-        # self._moe_implementation = self._check_config_and_maybe_check_values(
-        #     key="training.moe.scattermoe.moe_implementation",
-        #     values=["dropless_sparse"],
-        #     default="dropless_sparse",
-        # )
-        # self._moe_implementation = self._moe_implementation.split("_")[1]
-
-        # self._load_balancing_loss = self._check_config_and_maybe_check_values(
-        #     key="training.moe.scattermoe.load_balancing_loss",
-        #     values=[True, False],
-        #     default=False,
-        # )
 
     @property
     def requires_custom_loading(self):
         return True
 
     def model_loader(self, model_name: str, **kwargs):
+
         # guarded
         # Local
         # pylint: disable=import-outside-toplevel
-        # from .megablocks_utils.config_utils import update_mlp_registry
-        # from .megablocks_utils.shard_moe_utils import get_moe_kwargs, shard_moe
-
-        # # - check the config
-        # if self._load_balancing_loss and not hasattr(
-        #     AutoConfig.from_pretrained(model_name), "output_router_logits"
-        # ):
-        #     warnings.warn(
-        #         "load_balancing_loss=True but "
-        #         "the model '{model_name}' config not have 'output_router_logits' "
-        #         "in its config, hence it might not support load balancing and "
-        #         "fallback to load_balancing_loss=False."
-        #     )
-        #     self._load_balancing_loss = False
-
-        # this one does a forward patching on MLP, but needs to be fixed
-        # properly as the load balancing loss is currently not properly
-        # handled
-        # update_mlp_registry(
-        #     self._moe_implementation, self._mlp_version, self._load_balancing_loss
-        # )
         from .utils import prepare_scattemoe
-
-        # get additional parameters
-        # torch_dtype = kwargs.get("torch_dtype", torch.float32)
 
         # load the model
         model = AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
-
-        # set this in the config, which will be picked up by the forward
-        # function to go into the load_balancing loss
-        # model.config.output_router_logits = self._load_balancing_loss
 
         rank, world_size = 0, 1
         if torch.distributed.is_initialized():
             world_size = torch.distributed.get_world_size()
             rank = torch.distributed.get_rank()
-        # else:
-        #     # NOTE: or should we do a silent fallback
-        #     raise AssertionError(
-        #         "Megablocks expert parallel only works for distributed training."
-        #     )
 
         # shard the MOE, and store products required for
         # FSDP configuration
@@ -158,11 +81,6 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
         # NOTE: there is currently no good way to get the mixed precision
         # flag from train_args. It will be better to handle this if
         # when we move the sharding to augmentation.
-
-        # NOTE: Currently, it is a bit troublesome to pass the device_mesh to
-        #  the FSDP constructor, so we do not do that.
-        # - therefore FSDP will always shard on world_size over the default process
-        #   group
 
         return model
 

@@ -1,7 +1,7 @@
 # FMS Acceleration for Mixture-of-Experts
 
 This library contains plugins to accelerate finetuning with the following optimizations:
-1. Expert-Parallel MoE with ScatterMoe & Megablocks
+1. Expert-Parallel MoE with Triton Kernels from ScatterMoe (& Megablocks)
 
 ## Plugins
 
@@ -20,12 +20,12 @@ Run the below in the top-level directory of this repo:
 tox -e run-benches \
     -x testenv:run-benches.deps+="-r plugins/accelerated-moe/requirements-khd.txt" \
     -- \
-    "1 2" "4 8" benchmark_outputs scenarios-granite.yaml accelerated-moe-scatter
+    "1 2 4 8" 128 benchmark_outputs scenarios-granite.yaml accelerated-moe-scatter
 ```
 or run the larger `Mixtral-8x7B` bench:
 ```
 tox ... \
-    8 8 benchmark_outputs scenarios-granite.yaml accelerated-moe-scatter
+    8 128 benchmark_outputs scenarios-granite.yaml accelerated-moe-scatter
 ```
 
 NOTE: if `FileNotFoundError` is observed on the *triton cache*, similar to issues like these:
@@ -40,10 +40,10 @@ running in `bash`:
 
 source .tox/run-benches/bin/activate
 bash scripts/run_benchmarks.sh \
-    "1 2" "4 8" benchmark_outputs scenarios-granite.yaml accelerated-moe-scatter
+    ....
 ```
 
-### Megablocks Dependencies
+### Triton Kernel Dependencies
 
 Currently we do not copy the `scattermoe` kernels into this respository, to this is an additional manual install:
 
