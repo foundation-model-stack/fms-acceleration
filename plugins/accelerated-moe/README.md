@@ -20,7 +20,7 @@ Run the below in the top-level directory of this repo:
 tox -e run-benches \
     -x testenv:run-benches.deps+="-r plugins/accelerated-moe/requirements-khd.txt" \
     -- \
-    "1 2 4 8" 128 benchmark_outputs scenarios-granite.yaml accelerated-moe-scatter
+    "1 2 4 8" 128 benchmark_outputs scenarios-moe.yaml accelerated-moe-scatter
 ```
 or run the larger `Mixtral-8x7B` bench:
 ```
@@ -43,6 +43,7 @@ bash scripts/run_benchmarks.sh \
     ....
 ```
 
+
 ### Triton Kernel Dependencies
 
 Currently we do not copy the `scattermoe` kernels into this respository, to this is an additional manual install:
@@ -50,3 +51,13 @@ Currently we do not copy the `scattermoe` kernels into this respository, to this
 ```
 # this will install the kernel-hyperdrive fork with the scattermoe triton kernels
 pip install -r requirements-khd.txt
+
+### Known Issues
+
+These are currently some known issues not yet resolved
+- The design currently does a swap for the mixture-of-expert module with [ScatterMoE](./src/fms_acceleration_moe/utils/scattermoe.py). This affects the `state_dict` of the model, so any saved checkpoint may need to be converted back to original.
+- should eventually remove the dependency on an external `kernel-hyperdrive` repository.
+- now support only loading *sharded* `safetensor` non-GGUF MoE checkpoints. This is a reasonable assumption since MoE checkpoints are typically above the size limit that prevents it being saved into a single checkpoint filed.
+- currently only supports `StateDictType.SHARDED_STATE_DICT` because the implementation uses `DTensors` which have limited support for full state dicts. However for efficiency considerations, sharded state dicts are the most efficient. 
+
+

@@ -150,3 +150,15 @@ def load_fsdp_optimizer(
             group["initial_lr"] = 0.0
             group["eps"] = 1e-8
             group["weight_decay"] = 0.0
+
+# function to replace various trainer functions in HF with the ones
+# above
+def patch_huggingface_save_and_load_for_dtensors():
+    # Third Party
+    # NOTE: this is really a global replacement, which we use the patcher
+    # to do
+    from fms_acceleration.model_patcher import patch_target_module
+    patch_target_module("transformers.trainer.save_fsdp_model", save_fsdp_model)
+    patch_target_module("transformers.trainer.save_fsdp_optimizer", save_fsdp_optimizer)
+    patch_target_module("transformers.trainer.load_fsdp_model", load_fsdp_model)
+    patch_target_module("transformers.trainer.load_fsdp_optimizer", load_fsdp_optimizer)

@@ -19,8 +19,11 @@ import warnings
 # Third Party
 from fms_acceleration import AccelerationPlugin
 from transformers import AutoConfig, AutoModelForCausalLM
-import torch
+import torch 
 
+from .utils import (
+    prepare_scattemoe, patch_huggingface_save_and_load_for_dtensors, patch_torch_optim_foreach_to_not_apply_to_dtensors
+)
 
 # pylint: disable=too-many-instance-attributes
 class ScatterMoEAccelerationPlugin(AccelerationPlugin):
@@ -28,7 +31,7 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
     # NOTE: its not packaged properly so, "importlib.util.find_spec('khd')"
     # returns but "importlib.metadata.version('kernel-hyperdrive') is needed"
     # require_packages = {"khd"}
-
+    # NOTE: will address this later if we remove the dependency on kernel-hyperdrive
     restricted_model_archs = [
         'GraniteMoeForCausalLM', 'MixtralForCausalLM'
     ]
@@ -49,11 +52,6 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
 
     def model_loader(self, model_name: str, **kwargs):
 
-        # guarded
-        # Local
-        # pylint: disable=import-outside-toplevel
-        from .utils import prepare_scattemoe
-
         # load the model
         model = AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
 
@@ -62,19 +60,14 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
             world_size = torch.distributed.get_world_size()
             rank = torch.distributed.get_rank()
 
-        # shard the MOE, and store products required for
-        # FSDP configuration
-        # pylint: disable=unused-variable
+        # shard the MOE, and store the component names, eventually needed 
+        # to configure the FSDP
         self._moe_component_module_names = prepare_scattemoe(
             model,
-            # self._moe_component_cls,
             checkpoint_name_or_path=model_name,
             rank=rank,
             world_size=world_size,
             ep_degree=self._ep_degree,
-            # shared_mesh_dim=self._shard_along_dp,
-            # router_name=self._gate_module_name,
-            # expert_name=self._experts_module_name,
             mixed_precision=False,  # Currently this is hardcoded to OFF
         )
 
@@ -93,17 +86,6 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
             accelerator is not None
             and getattr(accelerator.state, "fsdp_plugin", None) is not None
         ):
-            # TODO: refactor
-            # for newer torch that enables foreach for Dtensors we need to remove it
-            from torch.optim.optimizer import _foreach_supported_types
-
-            i = 0
-            while i < len(_foreach_supported_types):
-                x = _foreach_supported_types[i]
-                if x.__name__ == 'DTensor':
-                    _foreach_supported_types.pop(i)
-                else:
-                    i += 1 
 
             # - use an internal function call to get the no split
             # module names, which are typically layers
@@ -115,22 +97,13 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
                 if layer.__class__.__name__ in _layers
             ]
 
-            # Third Party
-            # TODO: REFACTOR
-            from fms_acceleration.model_patcher import patch_target_module
+            # call this to patch the HF save and load functions to be able
+            # to save DTensors propery
+            patch_huggingface_save_and_load_for_dtensors()
 
-            # Local
-            from .utils.checkpoint_utils import (
-                load_fsdp_model,
-                load_fsdp_optimizer,
-                save_fsdp_model,
-                save_fsdp_optimizer,
-            )
-
-            patch_target_module("transformers.trainer.save_fsdp_model", save_fsdp_model)
-            patch_target_module("transformers.trainer.save_fsdp_optimizer", save_fsdp_optimizer)
-            patch_target_module("transformers.trainer.load_fsdp_model", load_fsdp_model)
-            patch_target_module("transformers.trainer.load_fsdp_optimizer", load_fsdp_optimizer)
+            # call this to patch torch optim to not use 
+            # foreach for dtensors
+            patch_torch_optim_foreach_to_not_apply_to_dtensors()
 
         return callbacks
 
