@@ -192,14 +192,20 @@ def all_to_all_gather_inputs(
     )
 
 def scatter_with_routing_weights(
-    x,
-    expert_weights,
-    send_counts, recv_counts,
-    bins, original_shape,
-    bin_ids, indices, 
-    expert_parallel_group, 
-    top_k,
+    x: torch.Tensor,
+    expert_weights: torch.Tensor,
+    send_counts: torch.Tensor, 
+    recv_counts: torch.Tensor,
+    bins: torch.Tensor, 
+    bin_ids: torch.Tensor, 
+    indices: torch.Tensor, 
+    expert_parallel_group: torch.distributed.ProcessGroup,
+    top_k: int,
 ):
+    """
+    Extracted from megablocks. This function undoes the all-to-all 
+    gathering for expert parallel.
+    """
 
     # Un-permute the tokens across the devices.
     x, _ = all_to_all(
@@ -210,9 +216,7 @@ def scatter_with_routing_weights(
     )
 
     # Un-permute locally to setup for the next series of operations.
-    x = scatter(
+    return scatter(
         x, indices, bin_ids, expert_weights, 
         bins, top_k
     )
-
-    return x.view(original_shape)

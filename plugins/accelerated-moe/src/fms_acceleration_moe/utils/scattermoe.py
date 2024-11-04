@@ -349,31 +349,39 @@ class ScatterMoE(torch.nn.Module):
     def _maybe_scatter(
         self, 
         hidden_states: torch.Tensor, 
-        routing_weights: torch.Tensor, 
-        original_shape, 
-        _gather_products: Tuple[torch.Tensor, ...],
+        routing_weights: torch.Tensor = None, 
+        gather_products: Tuple[torch.Tensor, ...] = None,
     ):
+
+        """
+        maybe undo the earlier scatter operation during all-to-all.
+        
+        Parameters:
+            hidden_states (tensor): batch-flattened hidden states.
+            routing_weights (tensor): Optional, routing weights for each expert.
+            gather_products (tensor): Optional, tuple of tensors that would have been
+                produced by the earlier gather call.
+        """
 
         if not self.all_to_all:
             # in this case scattering is already handled by 
             # scattermoe when computing w2
-            return hidden_states.view(original_shape)
+            # - then there is nothing to do
+            return hidden_states
 
         # expect these products to be produced by an earlier
         # all-to-all gather call
         (
-            send_counts, recv_counts,
-            bins,
+            send_counts, recv_counts, bins,
             sorted_expert_idxs,
             sorted_scattered_idxs
-        ) = _gather_products
+        ) = gather_products
 
         # perform the scattering with the gather products, 
         hidden_states = scatter_with_routing_weights(
             hidden_states,
             routing_weights.flatten(),
-            send_counts, recv_counts,
-            bins, original_shape, # local
+            send_counts, recv_counts, bins, 
             sorted_expert_idxs, sorted_scattered_idxs,
             self.expert_parallel_group, 
             self.top_k
@@ -454,8 +462,12 @@ class ScatterMoE(torch.nn.Module):
 
         # maybe scatter
         hidden_states = self._maybe_scatter(
-            hidden_states, routing_weights, original_shape,
+            hidden_states, routing_weights, 
             _gather_products,
         ) 
 
-        return hidden_states, router_logits
+        # return hidden states and router logits
+        return (
+            hidden_states.view(original_shape), 
+            router_logits
+        )

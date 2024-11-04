@@ -79,6 +79,12 @@ def get_checkpoint_meta_from_sharded_safetensor(
     expert_name: str = "experts",  # e.g., named "experts" within block_sparse_moe
     expert_map: Dict = None, # map -> [w1,w2,w3]
 ) -> Dict[str, List[Tuple]]:
+
+    """
+    utilty function to infer the mapping from ScatterMoe to incoming model
+    based on the weight_map.
+    """
+
     # insert in order
     def _insert(L: List, i: int, v):
         n = len(L)
@@ -182,15 +188,28 @@ def _maybe_reshape_scattermoe_expert_weights(
 
 def convert_state_dict(
     prefix: str,
-    metadata: Dict,
-    state_dict: Dict,
+    checkpoint_metadata: Dict[str, List[Tuple]],
+    state_dict: OrderedDict,
     num_experts: int,
     intermediate_size: int,
     dtype: torch.dtype = None,
 ):
+    """
+    utility to convert the state dict for ScatterMoE. To be used
+    if the model is already loaded with weights.
+
+    Parameters:
+        prefix (str): where the MoE is located in the incoming model.
+        checkpoint_metadata (dict): a mapping of ScatterMoE state dict
+            with respect to that of incoming model.
+        state_dict (dict): of the incoming MoE.
+        num_experts (int):
+        intermediate_size (int):
+        dtype (torch.dtype): 
+    """
     target = OrderedDict()
 
-    for scatter_key, vs in metadata.items():
+    for scatter_key, vs in checkpoint_metadata.items():
         for state_key, _ in vs:
             state_key = state_key.replace(prefix, "")
             param = state_dict[state_key]
@@ -204,13 +223,28 @@ def convert_state_dict(
     return target
 
 def get_state_dict_from_checkpoint_metadata(
-    directory: str,
+    checkpoint_directory: str,
     checkpoint_metadata: Dict[str, List[Tuple]],
     num_experts: int,
     intermediate_size: int, 
     expert_shards: List[int] = None,
     dtype: torch.dtype = None,
 ):
+    """
+    utility to convert a sharded checkpoint into a state dict for
+    ScatterMoe. To be used if the model was loaded on the meta
+    device and actual weights does not exist in it.
+
+    Parameters:
+        checkpoint_directory (str): where the checkpoint is located.
+        checkpoint_metadata (dict): a mapping of ScatterMoE state dict
+            with respect to that of incoming model.
+        num_experts (int):
+        intermediate_size (int):
+        expert_shards (list): indexing which of the shards are required
+            if only a subset of parameters are required
+        dtype (torch.dtype): 
+    """
     target = OrderedDict()
 
     # typically they all should be same file, but to play safe, load the checkpoint file onto
@@ -222,7 +256,7 @@ def get_state_dict_from_checkpoint_metadata(
                 if fi not in files:
                     files[fi] = stack.enter_context(
                         safe_open(
-                            os.path.join(directory, fi), framework="pt", device="cpu"
+                            os.path.join(checkpoint_directory, fi), framework="pt", device="cpu"
                         )
                     )
 

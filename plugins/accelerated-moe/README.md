@@ -10,6 +10,10 @@ Plugin | Description | Depends | Loading | Augmentation | Callbacks
 [scattermoe](./src/fms_acceleration_moe/framework_plugin_scattermoe.py) | MoE Expert Parallel with Triton Kernels from scattermoe (& megablocks) | scattermoe / megablocks | ✅ | |  ✅
 
 
+## Adding New Models
+
+Our `ScatterMoe` implementation is a module-swap; to add new models we need to update the [the conversion spec](./src/fms_acceleration_moe/utils/scattermoe_constants.py).
+
 ## Running Benchmarks
 
 
