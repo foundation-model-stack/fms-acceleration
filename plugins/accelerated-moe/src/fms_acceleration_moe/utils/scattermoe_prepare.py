@@ -301,8 +301,9 @@ def prepare_scattemoe(
                     top_k=model.config.num_experts_per_tok,
                     dtype=model.dtype,
                     device=device,
-                    device_mesh=device_mesh,
-                    key_ep=key_ep,
+                    ep_device_mesh=(
+                        device_mesh[key_ep] if device_mesh is not None else None
+                    ),
                     lora_config=lora_config,
                 )  # 
 

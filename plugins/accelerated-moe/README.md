@@ -25,7 +25,7 @@ tox -e run-benches \
 or run the larger `Mixtral-8x7B` bench:
 ```
 tox ... \
-    8 128 benchmark_outputs scenarios-granite.yaml accelerated-moe-scatter
+    8 128 benchmark_outputs scenarios-moe.yaml accelerated-moe-scatter-mixtral
 ```
 
 NOTE: if `FileNotFoundError` is observed on the *triton cache*, similar to issues like these:

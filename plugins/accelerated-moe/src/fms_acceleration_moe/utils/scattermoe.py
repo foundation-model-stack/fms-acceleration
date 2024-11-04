@@ -1,3 +1,17 @@
+# Copyright The FMS HF Tuning Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 # Third Party
 from transformers.activations import ACT2FN
 import torch
@@ -6,18 +20,23 @@ from torch.distributed._tensor import DTensor
 from torch.distributed._tensor.device_mesh import DeviceMesh
 from peft import LoraConfig
 from peft.utils import INCLUDE_LINEAR_LAYERS_SHORTHAND
+from typing import Tuple
 
 try:
     from khd.kernels.scattermoe.triton_implementation.ops import (
         scattered_experts, padded_block_indices
     )
 except ImportError:
-    pass
+    raise ImportError(
+        "kernel-hyperdrive PyPI package not found. Install it: "
+        "pip install -r plugins/accelerated-moe/requirements-scattermoe.txt"
+    )
  
 from .scattermoe_constants import SCATTERMOE_HAS_GATE_WEIGHT_SPEC
 from .scattermoe_utils import all_to_all_gather_inputs, scatter_with_routing_weights
 
-def resolve_dtensor(weight):
+# helper function to fetch the local tensor if its a dtensor
+def _maybe_get_local_tensor(weight: torch.Tensor):
     if isinstance(weight, DTensor):
         return weight.to_local()
     return weight
@@ -35,18 +54,45 @@ class ScatteredExperts(torch.nn.Module):
         device: torch.device = torch.device('cpu'),
         lora_config: LoraConfig = None,
     ):
+
+        """
+        ScatteredExperts is the module that implements a group of experts. The 
+        forward function will call scattermoe triton kernels.
+
+        NOTE: in the current implementation, we do not initialize the parameters.
+        We assume this will be done outside.
+
+        Paramters:
+            in_features (int): num of input features per expert.
+            out_features (int): num of output features per expert.
+            num_experts (int): the number of experts.
+            fan_out (int): if the number of embedding inputs are expected to be 
+                a factor less than the bind_ids and indices at the forward.
+            grouped_in (bool): if the embedding inputs are expected to be already 
+                grouped in at the forward.
+            grouped_out (bool): if the outputs are expected to be grouped
+                when they are returned from the forward.
+            dtype (torch.dtype): the dtype of the parameter tensors. Note, for now the 
+                adapter takes the same dtype as base layer if LoRA is enabled.
+            device (torch.device): the cuda device in which the model should be loaded. 
+                Only cuda is supported since only triton kernels are supported.
+            lora_config (peft.LoraConfig): Optional, to be passed if lora is to be used.
+        """
         super().__init__()
+
+        # parameters the experts (not initialized).
         self.weight = torch.nn.Parameter(
             torch.empty(
-                num_experts, in_features, out_features, 
-                dtype=dtype, device=device,
+                num_experts, in_features, out_features, dtype=dtype, device=device,
             ),
             requires_grad=True,
         )
+
+        # handle lora embeddings
         self.lora_A, self.lora_B = None, None
         self.lora_r = 0
         if lora_config is not None:
-            # no gradient for base layer
+            # if LoRA, then disable gradient for the base layer.
             self.weight.requires_grad = False
 
             # NOTE : - for now adapter takes same dtype as base
@@ -65,24 +111,46 @@ class ScatteredExperts(torch.nn.Module):
                 requires_grad=True,
             )
             self.lora_r = lora_config.r
-            
-            # NOTE: call init_lora to initialize the adapters
-            # - not called during initialization
 
+        # store these settings
         self.fan_out = fan_out
         self.grouped_in = grouped_in
         self.grouped_out = grouped_out
 
     def forward(
-        self, x, bin_ids, indices, padded_block_idxs, 
-        expert_offsets, gates=None,
+        self, x: torch.Tensor, bin_ids: torch.Tensor, 
+        indices: torch.Tensor, padded_block_idxs: torch.Tensor, 
+        expert_offsets: torch.Tensor, gates: torch.Tensor=None,
     ):
-        weight = resolve_dtensor(self.weight)
+        """
+        ScatteredExperts executes grouped forwards where each group is a single expert.
+
+        Parameters:
+            x (tensor): the emebeddings fed as input.
+            bin_ids (tensor): the expert index where each embedding is to be sent.
+                Expect that these indices are sorted.
+            indices (tensor): the sorting index that brings the input embeddings to the
+                sorted order corresponding to bin_ids.
+            padded_block_idxs (tensor): the indices for passing triton block info to the 
+                scattermoe kernels.
+            expert_offsets (tensor): the offsets for passing triton block info to the 
+                scattermoe kernels.
+            gates (tensor): Optional. the weighting coefficients that should be applied
+                at the output of the scattermoe kernels.
+        """
+        weight = _maybe_get_local_tensor(self.weight)
         lora_A, lora_B = None, None
         if self.lora_r > 0:
             lora_A, lora_B = (
-                resolve_dtensor(self.lora_A), resolve_dtensor(self.lora_B)
+                _maybe_get_local_tensor(self.lora_A), 
+                _maybe_get_local_tensor(self.lora_B)
             )
+
+        # NOTE: x is of shape (seqlen, in_features)
+        # bin_ids is of shape (seqlen,)
+        # padded_block_idxs is a 1-dim tensor, whose length depends on 
+        # triton kernel block size and input.
+        # expert_offsets is of shape (num_experts, )
         return scattered_experts(
             x,
             weight,
@@ -115,10 +183,34 @@ class ScatterMoE(torch.nn.Module):
         top_k: int = 2,
         dtype: torch.dtype = torch.bfloat16,
         device: str = torch.device('cpu'),
-        device_mesh: DeviceMesh = None,
-        key_ep: str = None,
+        ep_device_mesh: DeviceMesh = None,
         lora_config: LoraConfig = None,
     ):
+
+        """
+        ScatterMoE is the module swap that replaces a sparse mixture-of-experts module 
+        in order to run the scatter moe kernels and the all_to_all expert parallel routines.
+
+        The submodules are a i) router (nn.Linear) and ii) w1, w2, ... (ScatteredExperts);
+        the latter hold the expert weights and run the triton kernels.
+        
+        Parameters:
+
+            hidden_size (int): the hidden dimension.
+            hidden_act (str): the activation fucntion.
+            intermediate_size (int): the intermediate dimension.
+            num_experts (int): the number of experts.
+            has_bias (bool): if the router and experts have bias.
+            mlp_arch (str): unique key that specifies the MLP architecture, 
+                e.g., if there is a gate forward.
+            top_k (int): the number of experts each token gets routed to.
+            dtype (torch.dtype): the dtype of the parameter tensors.
+            device (torch.device): the cuda device in which the model should be loaded. 
+                Only cuda is supported since only triton kernels are supported.
+            ep_device_mesh (torch.distributed.DeviceMesh): Optional, to be passed if there is 
+                sharding. Only pass the mesh for the experts.
+            lora_config (peft.LoraConfig): Optional, to be passed if lora is to be used.
+        """
         assert has_bias == False, \
             "ScatterMoE currently unable to handle bias in both gates and experts."
 
@@ -144,17 +236,13 @@ class ScatterMoE(torch.nn.Module):
         self.activation = ACT2FN[hidden_act]
         self.top_k = top_k
         self.all_to_all = (
-            device_mesh[key_ep].size() > 1 
-            if device_mesh is not None
-            else False
+            ep_device_mesh.size() > 1 if ep_device_mesh is not None else False
         )
 
         # NOTE: we should then use this to distribute inside
         # and not do the distribution outside
         self.expert_parallel_group = (
-            device_mesh[key_ep].get_group(0) 
-            if device_mesh is not None
-            else None
+            ep_device_mesh.get_group(0) if ep_device_mesh is not None else None
         )
 
         # build the router
@@ -166,10 +254,10 @@ class ScatterMoE(torch.nn.Module):
             device=device,
         )
 
-        # currently we only handle MLP's which have the "up_proj", "activate"
-        # "down_proj" architecture, with the option of a "gate_project"
-        # NOTE: in the future we handle this by passing into 
-        # this class a spec on how many to create
+        # the experts. The architecture may depend on the model
+        # - w1: the up_projection.
+        # - w2: the down_projection.
+        # - w3 (optional): the gate projection.
         self.w1 = ScatteredExperts(
             in_features=self.hidden_size,
             out_features=self.intermediate_size,
@@ -202,14 +290,13 @@ class ScatterMoE(torch.nn.Module):
                 lora_config=lora_config,
             )
 
-    # def add_expert(self, key, 
-    # dolomite, MoE_Torch
-    def _compute_routing_weights(self, hidden_states):
+    # referenced from dolomite-engine
+    def _compute_routing_weights(self, hidden_states: torch.Tensor):
 
         # router_logits: (batch * sequence_length, n_experts)
-        weight = resolve_dtensor(self.router.weight)
+        weight = _maybe_get_local_tensor(self.router.weight)
         bias = self.router.bias
-        if bias: bias = resolve_dtensor(bias)
+        if bias: bias = _maybe_get_local_tensor(bias)
         router_logits = F.linear(hidden_states, weight, bias)
 
         routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
@@ -219,23 +306,36 @@ class ScatterMoE(torch.nn.Module):
         routing_weights = routing_weights.to(hidden_states.dtype)
         return router_logits, routing_weights, selected_experts
 
-    def _maybe_gather(self, hidden_states, selected_experts):
-        # can replace with megablocks version of _indices_and_bins
-        # this is if there is no 
+    def _get_expert_idxs_and_maybe_gather(
+        self, 
+        hidden_states: torch.Tensor, 
+        selected_experts: torch.Tensor,
+    ):
+
+        """
+        gets the expert indices, and also gather the hidden_states if 
+        all-to-all processing is required.
+
+        Parameters:
+            hidden_states (tensor): 2D batch-flattened hidden states.
+            selected_experts (tensor): indices of experts selected for each
+                hidden state.
+        """
+
+        # megablocks has a cuda kernel for computing a radix sort, but 
+        # just use the torch version
         sorted_expert_idxs, sorted_scattered_idxs = torch.sort(selected_experts.flatten())
         if not self.all_to_all:
-            # hidden states pass through
+            # in this case, no gathering required for hidden states
             return hidden_states, sorted_expert_idxs, sorted_scattered_idxs
 
-        # needed for scattering later (if required)
-        local_gather_products = (
-            sorted_expert_idxs,
-            sorted_scattered_idxs
-        )
-
-        # outputs will be parallel_x, parallel_bin_ids, parallel_ind
-        # and followed by 
-        # send_counts, recv_counts, bins (local)
+        # outputs will: 
+        # - parallel_x: gathered version of hidden_states
+        # - parallel_bin_ids: gathered version of sorted_expert_idxs, 
+        # - parallel_ind: gathered version of sorted_scattered_idxs.
+        #
+        # followed by some counting metrics:
+        # - send_counts, recv_counts, bins (local)
         outputs = all_to_all_gather_inputs(
             hidden_states, selected_experts, 
             sorted_expert_idxs, sorted_scattered_idxs,
@@ -244,11 +344,14 @@ class ScatterMoE(torch.nn.Module):
             self.num_experts, 
         )
 
-        return outputs + local_gather_products
+        return outputs + (sorted_expert_idxs, sorted_scattered_idxs)
 
     def _maybe_scatter(
-        self, hidden_states, 
-        routing_weights, original_shape, local_gather_products
+        self, 
+        hidden_states: torch.Tensor, 
+        routing_weights: torch.Tensor, 
+        original_shape, 
+        _gather_products: Tuple[torch.Tensor, ...],
     ):
 
         if not self.all_to_all:
@@ -256,13 +359,16 @@ class ScatterMoE(torch.nn.Module):
             # scattermoe when computing w2
             return hidden_states.view(original_shape)
 
+        # expect these products to be produced by an earlier
+        # all-to-all gather call
         (
             send_counts, recv_counts,
             bins,
             sorted_expert_idxs,
             sorted_scattered_idxs
-        ) = local_gather_products
+        ) = _gather_products
 
+        # perform the scattering with the gather products, 
         hidden_states = scatter_with_routing_weights(
             hidden_states,
             routing_weights.flatten(),
@@ -272,36 +378,52 @@ class ScatterMoE(torch.nn.Module):
             self.expert_parallel_group, 
             self.top_k
         )
+
         return hidden_states
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor):
 
-        original_shape = hidden_states.shape
+        """
+        ScatterMoe.forward replaces the forward of the sparse 
+        mixture-of-expert module.
+        """
+
+        # flatten the batch dimension
+        original_shape = hidden_states.shape # take a record
         hidden_states = hidden_states.view(-1, self.hidden_size)
 
-        # _, batch_index, batch_gates, expert_size, router_logits = self.router(layer_input)
-        router_logits, routing_weights, selected_experts = self._compute_routing_weights(
+        # compute the routing logits, weights, and expert assigments
+        # - router_logits: will be passed out of forward, used for computing
+        #   routing loss.
+        (
+            router_logits, routing_weights, selected_experts
+        ) = self._compute_routing_weights(
             hidden_states
         )
 
-        # maybe gather
-        # - local_gather_products may or may not be non-empty
+        # get the sorted expert idxs and scattered idxs.
+        # - if a gather is required, then the hidden-states will be 
+        #   communicated from other ranks, and will change.
+        # - in gather is required, then some _gather_products will be 
+        #   required for the scattering later, so return these out also.
         (
             hidden_states, 
             sorted_expert_idxs, 
             sorted_scattered_idxs,
-            *local_gather_products
-        ) = self._maybe_gather(
-            hidden_states, selected_experts
+            *_gather_products
+        ) = self._get_expert_idxs_and_maybe_gather(
+            hidden_states, selected_experts, 
         )
 
-        # padded indicies need to be computed for scattermoe
+        # scattemoe specific computation.
+        # - padded indicies need to be computed for the scattermoe
+        #   triton kernels.
         with torch.no_grad():
             padded_block_idxs, expert_offsets = padded_block_indices(
                 sorted_expert_idxs, self.num_experts
             )
         
-        # the up projection
+        # compute the up projection
         out = self.w1(
             hidden_states,
             sorted_expert_idxs, sorted_scattered_idxs,
@@ -309,7 +431,7 @@ class ScatterMoE(torch.nn.Module):
         )
         out = self.activation(out)
 
-        # - if defined, a seperate up projection
+        # - if the arch has a seperate gate projection
         if self.w3:
             out *= self.w3(
                 hidden_states,
@@ -317,7 +439,9 @@ class ScatterMoE(torch.nn.Module):
                 padded_block_idxs, expert_offsets
             ) 
 
-        # the down projection
+        # compute the down projection
+        # - if no all-to-all processing, then depend on 
+        # scattermoe kernel to perform the final scattering
         hidden_states = self.w2(
             out,
             sorted_expert_idxs, sorted_scattered_idxs,
@@ -331,7 +455,7 @@ class ScatterMoE(torch.nn.Module):
         # maybe scatter
         hidden_states = self._maybe_scatter(
             hidden_states, routing_weights, original_shape,
-            local_gather_products,
+            _gather_products,
         ) 
 
         return hidden_states, router_logits

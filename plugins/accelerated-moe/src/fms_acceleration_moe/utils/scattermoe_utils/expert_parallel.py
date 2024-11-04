@@ -94,10 +94,15 @@ def all_to_all_gather_inputs(
     top_experts: torch.Tensor,
     bin_ids: torch.Tensor, 
     indices: torch.Tensor, 
-    expert_parallel_group, 
+    expert_parallel_group: torch.distributed.ProcessGroup, 
     top_k: int, 
     experts_per_rank: int, 
 ):
+    """
+    Extracted from megablocks. This function performs all-to-all input
+    gathering for expert parallel.
+    """
+
     # Compute the mapping of local tokens to experts.
     # expert_weights = expert_weights.flatten()
     top_experts = top_experts.flatten()

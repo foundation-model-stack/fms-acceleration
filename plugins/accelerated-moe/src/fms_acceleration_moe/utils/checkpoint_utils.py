@@ -32,8 +32,7 @@ logger = get_logger(__name__)
 #   in the save/load model calls
 MODEL_INDEX = None
 
-# Below are rewrite of functions for megablocks
-
+# Below are rewrite of functions to be able to handle dtensors
 
 # rewrite of func from accelerate.utils.fsdp_utils.py
 # - empty function, as main logic is in the optimizer call
