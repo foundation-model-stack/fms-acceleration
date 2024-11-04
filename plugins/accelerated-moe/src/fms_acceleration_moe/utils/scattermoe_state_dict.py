@@ -1,4 +1,3 @@
-
 # Copyright The FMS HF Tuning Authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,13 +13,18 @@
 # limitations under the License.
 
 # Standard
-from collections import defaultdict, OrderedDict
-from typing import Dict, List, Tuple, Type, Union
-import re, os
-import torch
+from collections import OrderedDict, defaultdict
 from contextlib import ExitStack
+from typing import Dict, List, Tuple
+import os
+import re
+
+# Third Party
 from safetensors import safe_open
-from .scattermoe_constants import KEY_SCATTERMOE_ROUTER, DIM_EXPERT
+import torch
+
+# Local
+from .scattermoe_constants import DIM_EXPERT, KEY_SCATTERMOE_ROUTER
 
 # This function creates a dictionary of keys and paths into the the sharded
 # safetensors checkpoint file, that are relevant to the "prefix" and "instance_name"
@@ -52,7 +56,7 @@ from .scattermoe_constants import KEY_SCATTERMOE_ROUTER, DIM_EXPERT
 #       )
 #     ]
 # }
-# 
+#
 # or the non-sharded case (and possibly fused case)
 # {
 #   'w1.weight': [
@@ -77,9 +81,8 @@ def get_checkpoint_meta_from_sharded_safetensor(
     instance_name: str,  # e.g., block_sparse_moe
     router_name: str = "gate",  # e.g., named "gate" within block_sparse_moe
     expert_name: str = "experts",  # e.g., named "experts" within block_sparse_moe
-    expert_map: Dict = None, # map -> [w1,w2,w3]
+    expert_map: Dict = None,  # map -> [w1,w2,w3]
 ) -> Dict[str, List[Tuple]]:
-
     """
     utilty function to infer the mapping from ScatterMoe to incoming model
     based on the weight_map.
@@ -99,22 +102,22 @@ def get_checkpoint_meta_from_sharded_safetensor(
         L[i] = v
 
     # if expert_name = input_linear|output_linear|input_linear
-    # - in this case will map 
+    # - in this case will map
     # - input_linear: [w1, w3], output_linear: {w2}
     # - will assume the latter has double the size and can
     #   be split.
     if expert_map is None:
-        if '|' in expert_name:
+        if "|" in expert_name:
             expert_map = {}
-            _names = expert_name.split('|')
-            assert len(_names) in {2,3}, "expert name map has to be length 2/3"
-            
+            _names = expert_name.split("|")
+            assert len(_names) in {2, 3}, "expert name map has to be length 2/3"
+
             for i, n in enumerate(_names):
                 if n not in expert_map:
                     expert_map[n] = []
-                expert_map[n].append(f'w{i+1}')
+                expert_map[n].append(f"w{i+1}")
         else:
-            expert_map = {x: [x] for x in ['w1', 'w2', 'w3']}
+            expert_map = {x: [x] for x in ["w1", "w2", "w3"]}
 
     # state dict -> weights
     # 'router.weight': [(k, file),...]
@@ -145,7 +148,7 @@ def get_checkpoint_meta_from_sharded_safetensor(
             for mod in expert_map.get(m.group(1), expert_map.get(m.group(3))):
                 _insert(_map[f"{mod}.weight"], index, (k, stfile))
 
-            assert mod is not None, f"cannot map \'{rel_k}\'"
+            assert mod is not None, f"cannot map '{rel_k}'"
 
     if len(_map) == 0:
         raise ValueError(
@@ -154,15 +157,17 @@ def get_checkpoint_meta_from_sharded_safetensor(
 
     return _map
 
+
 # if the weight is a scattermoe expert weight, need some reshaping
 def _maybe_reshape_scattermoe_expert_weights(
-    scatter_key: str, param: torch.Tensor,
+    scatter_key: str,
+    param: torch.Tensor,
     num_experts: int,
     intermediate_size: int,
 ):
-    (
-        _is_w1, _is_w2, _is_w3
-    ) = [ f'{x}.weight' in scatter_key for x in ['w1', 'w2', 'w3']] 
+    (_is_w1, _is_w2, _is_w3) = [
+        f"{x}.weight" in scatter_key for x in ["w1", "w2", "w3"]
+    ]
 
     if _is_w1 or _is_w2 or _is_w3:
         if len(param.shape) == 2:
@@ -170,7 +175,7 @@ def _maybe_reshape_scattermoe_expert_weights(
 
         if _is_w1 or _is_w3:
             if param.shape[-2] == (2 * intermediate_size):
-                # cut it 
+                # cut it
                 if _is_w1:
                     param = param[..., :intermediate_size, :]
                 else:
@@ -185,6 +190,7 @@ def _maybe_reshape_scattermoe_expert_weights(
         param = param.permute(0, 2, 1)
 
     return param
+
 
 def convert_state_dict(
     prefix: str,
@@ -205,7 +211,7 @@ def convert_state_dict(
         state_dict (dict): of the incoming MoE.
         num_experts (int):
         intermediate_size (int):
-        dtype (torch.dtype): 
+        dtype (torch.dtype):
     """
     target = OrderedDict()
 
@@ -222,11 +228,12 @@ def convert_state_dict(
 
     return target
 
+
 def get_state_dict_from_checkpoint_metadata(
     checkpoint_directory: str,
     checkpoint_metadata: Dict[str, List[Tuple]],
     num_experts: int,
-    intermediate_size: int, 
+    intermediate_size: int,
     expert_shards: List[int] = None,
     dtype: torch.dtype = None,
 ):
@@ -243,7 +250,7 @@ def get_state_dict_from_checkpoint_metadata(
         intermediate_size (int):
         expert_shards (list): indexing which of the shards are required
             if only a subset of parameters are required
-        dtype (torch.dtype): 
+        dtype (torch.dtype):
     """
     target = OrderedDict()
 
@@ -256,7 +263,9 @@ def get_state_dict_from_checkpoint_metadata(
                 if fi not in files:
                     files[fi] = stack.enter_context(
                         safe_open(
-                            os.path.join(checkpoint_directory, fi), framework="pt", device="cpu"
+                            os.path.join(checkpoint_directory, fi),
+                            framework="pt",
+                            device="cpu",
                         )
                     )
 
@@ -264,27 +273,35 @@ def get_state_dict_from_checkpoint_metadata(
         for scatter_key, vs in checkpoint_metadata.items():
 
             if KEY_SCATTERMOE_ROUTER in scatter_key:
-                k, fi = vs[0] # only one item
+                k, fi = vs[0]  # only one item
                 param = files[fi].get_tensor(k)
 
             elif len(vs) == 1:
-                k, fi = vs[0] # only one item
+                k, fi = vs[0]  # only one item
                 # if its a non-router weight and its non-sharded
                 param = files[fi].get_tensor(k)
-                assert len(param.shape) == 3, \
-                    f"Expected 3D tensor for checkpoints with non-sharded experts, but got shape {param.shape}."
+                assert (
+                    len(param.shape) == 3
+                ), (
+                    "Expected 3D tensor for checkpoints with non-sharded experts, ",
+                    f"but got shape {param.shape}."
+                )
 
             else:
                 # handle sharding if the checkpoint shards experts
-                # - 
+                # -
                 data = []
                 if expert_shards is not None:
                     vs = [vs[i] for i in expert_shards]
 
                 for k, fi in vs:
                     T = files[fi].get_tensor(k)
-                    assert len(T.shape) == 2, \
-                        f"Expected 2D tensor for checkpoints with sharded experts, but got shape {T.shape}."
+                    assert (
+                        len(T.shape) == 2
+                    ), (
+                        "Expected 2D tensor for checkpoints with sharded experts, "
+                        f"but got shape {T.shape}."
+                    )
 
                     T = T.unsqueeze(0)
                     data.append(T)
@@ -296,7 +313,7 @@ def get_state_dict_from_checkpoint_metadata(
             )
             if dtype is not None:
                 param = param.to(dtype)
-            
+
             target[scatter_key] = param
 
     return target

@@ -1,6 +1,7 @@
 # Copyright 2024 Databricks
 # SPDX-License-Identifier: Apache-2.0
 
+# Third Party
 import torch
 import triton
 import triton.language as tl
@@ -8,7 +9,7 @@ import triton.language as tl
 
 def assert_is_tensor(x, ndim):
     if x.ndim != ndim:
-        raise ValueError(f'Expected {ndim}-tensor but got {x.ndim}-tensor')
+        raise ValueError(f"Expected {ndim}-tensor but got {x.ndim}-tensor")
 
 
 def assert_is_matrix(x):
@@ -17,12 +18,14 @@ def assert_is_matrix(x):
 
 def assert_is_vector(x):
     if x.ndim != 1:
-        raise ValueError(f'Expected 1-tensor but got {x.ndim}-tensor')
+        raise ValueError(f"Expected 1-tensor but got {x.ndim}-tensor")
 
 
 def assert_equal(a, b):
     if a != b:
-        raise ValueError(f'Expected dimensions to be equal but got {a} and {b}.',)
+        raise ValueError(
+            f"Expected dimensions to be equal but got {a} and {b}.",
+        )
 
 
 # a: (tokens, hidden_size), real.
@@ -33,13 +36,13 @@ def assert_equal(a, b):
 # padded_bins: (num_experts), integer.
 @triton.autotune(
     configs=[
-        triton.Config({'BLOCK_X': 64}, num_warps=2),
-        triton.Config({'BLOCK_X': 128}, num_warps=2),
-        triton.Config({'BLOCK_X': 256}, num_warps=2),
-        triton.Config({'BLOCK_X': 128}, num_warps=4),
-        triton.Config({'BLOCK_X': 256}, num_warps=4),
+        triton.Config({"BLOCK_X": 64}, num_warps=2),
+        triton.Config({"BLOCK_X": 128}, num_warps=2),
+        triton.Config({"BLOCK_X": 256}, num_warps=2),
+        triton.Config({"BLOCK_X": 128}, num_warps=4),
+        triton.Config({"BLOCK_X": 256}, num_warps=4),
     ],
-    key=['NUM_COLUMNS'],
+    key=["NUM_COLUMNS"],
 )
 @triton.jit
 def _padded_copy(
@@ -215,13 +218,13 @@ def scatter(x, indices, bin_ids, weights, bins, top_k):
 # padded_bins: (num_experts), integer.
 @triton.autotune(
     configs=[
-        triton.Config({'BLOCK_X': 64}, num_warps=2),
-        triton.Config({'BLOCK_X': 128}, num_warps=2),
-        triton.Config({'BLOCK_X': 256}, num_warps=2),
-        triton.Config({'BLOCK_X': 128}, num_warps=4),
-        triton.Config({'BLOCK_X': 256}, num_warps=4),
+        triton.Config({"BLOCK_X": 64}, num_warps=2),
+        triton.Config({"BLOCK_X": 128}, num_warps=2),
+        triton.Config({"BLOCK_X": 256}, num_warps=2),
+        triton.Config({"BLOCK_X": 128}, num_warps=4),
+        triton.Config({"BLOCK_X": 256}, num_warps=4),
     ],
-    key=['NUM_COLUMNS'],
+    key=["NUM_COLUMNS"],
 )
 @triton.jit
 def _padded_copy_wgrad(

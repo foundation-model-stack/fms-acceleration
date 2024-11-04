@@ -14,36 +14,36 @@
 
 # Standard
 from collections import OrderedDict
-from typing import Type, Union
+from contextlib import nullcontext
 import json
 import os
-import math
-from contextlib import nullcontext
 
 # Third Party
 from accelerate import init_empty_weights
+from peft import LoraConfig
 from torch.distributed._tensor import DTensor, Replicate, Shard, distribute_tensor
+# pylint: disable=import-error
 from torch.distributed._tensor.device_mesh import DeviceMesh, init_device_mesh
 from tqdm import tqdm
-import torch
-from transformers.modeling_utils import is_fsdp_enabled, is_local_dist_rank_0
 from transformers import PretrainedConfig
-from peft import LoraConfig
+from transformers.modeling_utils import is_fsdp_enabled, is_local_dist_rank_0
+import torch
 
+# Local
 from .scattermoe import ScatterMoE
 from .scattermoe_constants import (
     FILE_SAFETENSOR_INDEX,
-    KEY_REPLICATE, 
     KEY_EXPERT_PARALLEL,
+    KEY_REPLICATE,
     KEY_SCATTERMOE_ROUTER,
-    SCATTERMOE_CONVERSION_SPEC
+    SCATTERMOE_CONVERSION_SPEC,
 )
-
 from .scattermoe_state_dict import (
     convert_state_dict,
-    get_state_dict_from_checkpoint_metadata,
     get_checkpoint_meta_from_sharded_safetensor,
+    get_state_dict_from_checkpoint_metadata,
 )
+
 
 # trick to get the resolved cache file to acccess the safetensor
 # NOTE: this does not work if _dict_from_json_file, like GGUF files
@@ -51,6 +51,7 @@ def get_resolved_checkpoint_location(model_name_or_path: str):
 
     result = None
     _old_func = PretrainedConfig._dict_from_json_file
+
     def _dict_from_json_file(resolved_config_file):
         nonlocal result
         result = resolved_config_file
@@ -70,42 +71,37 @@ def load_experts_onto_device(
     module: torch.nn.Module,
     state_dict: OrderedDict,
     device_mesh: DeviceMesh,
-    num_experts_per_device: int, 
+    num_experts_per_device: int,
 ):
 
     # hook for scaling the gradient
     scaling = device_mesh[KEY_EXPERT_PARALLEL].size()
+
     def _hook(grad):
         if grad is not None:
             grad.div_(scaling)
         return grad
 
     # required replication placements
-    reps = [Replicate() for _ in range(device_mesh.ndim -1)]
+    reps = [Replicate() for _ in range(device_mesh.ndim - 1)]
 
     for weight_name, param in state_dict.items():
 
         if KEY_SCATTERMOE_ROUTER in weight_name:
 
-            param = distribute_tensor(
-                param, device_mesh, reps + [Replicate()]
-            )
+            param = distribute_tensor(param, device_mesh, reps + [Replicate()])
         elif param.shape[0] > num_experts_per_device:
-            param = distribute_tensor(
-                param, device_mesh, 
-                reps + [Shard(0)]
-            )
+            param = distribute_tensor(param, device_mesh, reps + [Shard(0)])
         else:
-            # NOTE: somehow this takes alot of memory, 
+            # NOTE: somehow this takes alot of memory,
             # - so if not rep skip for now
-            # - however, this means that there will be a mixture of 
+            # - however, this means that there will be a mixture of
             #   dtensors and regular tensors in the grad norm calc
             if device_mesh.ndim == 1:
                 param = param.to(device_mesh.device_type)
             else:
                 param = DTensor.from_local(
-                    param, device_mesh=device_mesh, 
-                    placements= reps + [Shard(0)]
+                    param, device_mesh=device_mesh, placements=reps + [Shard(0)]
                 )
 
         # get the module we want to shard
@@ -115,7 +111,8 @@ def load_experts_onto_device(
         requires_grad = getattr(mod, name).requires_grad
 
         param = torch.nn.Parameter(
-            param, requires_grad=requires_grad,
+            param,
+            requires_grad=requires_grad,
         )
 
         # install gradient scaling hook
@@ -134,13 +131,12 @@ def prepare_scattemoe(
     ep_degree: int = 1,
     key_rep: str = KEY_REPLICATE,
     key_ep: str = KEY_EXPERT_PARALLEL,
-    device_type: str = 'cuda',
+    device_type: str = "cuda",
     mixed_precision: bool = False,
     lora_config: LoraConfig = None,
 ):
     assert world_size % ep_degree == 0, (
-        f"world size ({world_size}) "
-        f"not divisible by ep_size ({ep_degree})."
+        f"world size ({world_size}) " f"not divisible by ep_size ({ep_degree})."
     )
 
     moe_num_experts: int = model.config.num_local_experts
@@ -155,14 +151,19 @@ def prepare_scattemoe(
     # infer the router_name and expert_name
     found = False
     for archs, (
-        moe_cls, router_name, expert_name, expert_mlp_spec, sharded_expert_ckpt
+        moe_cls,
+        router_name,
+        expert_name,
+        expert_mlp_spec,
+        sharded_expert_ckpt,
     ) in SCATTERMOE_CONVERSION_SPEC.items():
-        archs = archs.split(',')
+        archs = archs.split(",")
         if any(x in archs for x in model.config.architectures):
             found = True
             break
     assert found, "cannot configure scatter moe for this model"
-    expert_name = expert_name.split('|')
+    # pylint: disable=undefined-loop-variable
+    expert_name = expert_name.split("|")
 
     rep_size = world_size // ep_degree
     if ep_degree == 1 and rep_size == 1:
@@ -172,8 +173,8 @@ def prepare_scattemoe(
         # in this case a 1D device mesh suffices
         device_mesh = init_device_mesh(
             device_type,
-            (ep_degree, ),
-            mesh_dim_names=(key_ep, ),
+            (ep_degree,),
+            mesh_dim_names=(key_ep,),
         )
     else:
         # in this case it will distribute experts on a different dim
@@ -186,15 +187,16 @@ def prepare_scattemoe(
             mesh_dim_names=(key_rep, key_ep),
         )
 
-    # - compute the shard indices for current expert, if sharding is 
+    # - compute the shard indices for current expert, if sharding is
     #   indeed taking place
     expert_shards = None
     if device_mesh is not None:
         _index = device_mesh[KEY_EXPERT_PARALLEL].get_local_rank()
-        expert_shards = list(range(
-            _index * num_experts_per_device, 
-            (_index+1) * num_experts_per_device
-        ))
+        expert_shards = list(
+            range(
+                _index * num_experts_per_device, (_index + 1) * num_experts_per_device
+            )
+        )
 
     # - if mixed precision is specified then we upcast
     dtype = model.dtype if not mixed_precision else torch.float32
@@ -208,6 +210,7 @@ def prepare_scattemoe(
         parent, child = ".".join(name[:-1]), name[-1]
 
         # check the module depending if moe_cls is a str or class
+        # pylint: disable=undefined-loop-variable,isinstance-second-argument-not-valid-type
         if (
             mod.__class__.__name__ == moe_cls
             if isinstance(moe_cls, str)
@@ -221,7 +224,9 @@ def prepare_scattemoe(
             # if there are biases
             # Assumption: assume that if one expert has bias,then the others
             # will have it to
-            has_bias = any(expert_name[0] in k and k.endswith("bias") for k in fqdn_keys)
+            has_bias = any(
+                expert_name[0] in k and k.endswith("bias") for k in fqdn_keys
+            )
 
             found[parent] = (child, fqdn_keys, has_bias)
 
@@ -229,6 +234,7 @@ def prepare_scattemoe(
 
     moe_module_names = set()
 
+    # pylint: disable=too-many-nested-blocks
     # NOTE: for now we only support sharded safetensors
     # - most MOE models should be used using this checkpoint format
     try:
@@ -241,9 +247,13 @@ def prepare_scattemoe(
         for prefix, (module_name, _, has_bias) in tqdm(
             found.items(), disable=(rank > 0), desc="Converting ScatterMoE layers"
         ):
+            # # pylint: disable=undefined-loop-variable
             checkpoint_metadata = get_checkpoint_meta_from_sharded_safetensor(
-                index["weight_map"], prefix, module_name, 
-                router_name, '|'.join(expert_name)
+                index["weight_map"],
+                prefix,
+                module_name,
+                router_name,
+                "|".join(expert_name),
             )
 
             # the parent module
@@ -252,16 +262,16 @@ def prepare_scattemoe(
             # - handle state dict loading
             # - NOTE: convert_state_dict does not have logic to concat sharded
             #   experts so cannot handle the case where sharded_expert_ckpt=True
+            # # pylint: disable=undefined-loop-variable
             if (
-                ep_degree == 1 and (
-                    not is_fsdp_enabled() or is_local_dist_rank_0()
-                ) and
-                not sharded_expert_ckpt # cannot be a sharded checkpoint
+                ep_degree == 1
+                and (not is_fsdp_enabled() or is_local_dist_rank_0())
+                and not sharded_expert_ckpt  # cannot be a sharded checkpoint
             ):
                 # - if there is no sharding, and model is not loaded on the
                 #   meta device, we can simply convert the state dict
                 sd = convert_state_dict(
-                    prefix + '.' + module_name + '.',
+                    prefix + "." + module_name + ".",
                     checkpoint_metadata,
                     getattr(parent, module_name).state_dict(),
                     model.config.num_local_experts,
@@ -269,7 +279,7 @@ def prepare_scattemoe(
                     dtype,
                 )
             else:
-                # if there is sharding, then we want the model to be loaded 
+                # if there is sharding, then we want the model to be loaded
                 # on meta in general, since the actual model may be alot smaller
                 sd = get_state_dict_from_checkpoint_metadata(
                     loc,
@@ -277,7 +287,7 @@ def prepare_scattemoe(
                     num_experts_per_device,
                     model.config.intermediate_size,
                     expert_shards,
-                    dtype
+                    dtype,
                 )
 
             if device_mesh is None:
@@ -290,6 +300,7 @@ def prepare_scattemoe(
 
             # - conver to a scatter moe
             # - very hard to do patching, settle for module swap
+            # # pylint: disable=undefined-loop-variable
             with _init_scattermoe_context():
                 moe = ScatterMoE(
                     hidden_size=model.config.hidden_size,
@@ -305,28 +316,30 @@ def prepare_scattemoe(
                         device_mesh[key_ep] if device_mesh is not None else None
                     ),
                     lora_config=lora_config,
-                )  # 
+                )  #
 
             # the state dict logic below will not have lora adapters
             # - so we need to initialize them
-            # - initialize them 
+            # - initialize them
             if lora_config is not None:
 
                 # update the state_dict
                 for name, param in moe.named_parameters():
                     # NOTE: is his reliable?
-                    if 'lora_' in name:
+                    if "lora_" in name:
                         if device_mesh is not None:
                             # this means it has been loaded with empty context above
                             # - so materialize the tensor
-                            param = torch.empty(*param.size(), dtype=dtype, requires_grad=True)
+                            param = torch.empty(
+                                *param.size(), dtype=dtype, requires_grad=True
+                            )
 
-                        sd[name] = param # set the param in state dict
+                        sd[name] = param  # set the param in state dict
 
                         # initialize the loras here
-                        if 'lora_A' in name:
+                        if "lora_A" in name:
                             torch.nn.init.zeros_(sd[name])
-                        elif 'lora_B' in name:
+                        elif "lora_B" in name:
                             torch.nn.init.normal_(sd[name])
 
             if device_mesh is None:
@@ -335,14 +348,9 @@ def prepare_scattemoe(
                 moe.load_state_dict(sd)
                 moe = moe.to(device)
             else:
-                # - otherwise, we need to distribtue and will 
+                # - otherwise, we need to distribtue and will
                 #   replace the parameters
-                load_experts_onto_device(
-                    moe,
-                    sd, 
-                    device_mesh,
-                    num_experts_per_device
-                )
+                load_experts_onto_device(moe, sd, device_mesh, num_experts_per_device)
             # module swap
             setattr(parent, module_name, moe)
 

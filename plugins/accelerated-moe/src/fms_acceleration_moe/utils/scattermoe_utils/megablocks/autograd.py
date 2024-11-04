@@ -1,17 +1,22 @@
 # Copyright 2024 Databricks
 # SPDX-License-Identifier: Apache-2.0
 
-import torch
+# Standard
 import functools
-from .kernels import (
-    gather as _kernels_gather,
-    scatter as _kernels_scatter,
-    scatter_wgrad as _kernels_scatter_wgrad,
-)
+
+# Third Party
+import torch
+
+# Local
+from .kernels import gather as _kernels_gather
+from .kernels import scatter as _kernels_scatter
+from .kernels import scatter_wgrad as _kernels_scatter_wgrad
+
 
 # ------------------------ HELPERS -----------------------------
 def _is_eligible(x):
     return x.is_floating_point() and x.is_cuda and (x.dtype is not torch.float64)
+
 
 def _cast(x, dtype):
     if isinstance(x, torch.Tensor) and _is_eligible(x):
@@ -21,6 +26,7 @@ def _cast(x, dtype):
     elif isinstance(x, list) or isinstance(x, tuple):
         return type(x)(map(lambda y: _cast(y, dtype), x))
     return x
+
 
 def custom_fwd(fwd):
     """Wrap a custom autograd function that always uses autocast dtype."""
@@ -32,6 +38,7 @@ def custom_fwd(fwd):
                 dtype = torch.get_autocast_gpu_dtype()
                 return fwd(*_cast(args, dtype), **_cast(kwargs, dtype))
         return fwd(*args, **kwargs)
+
     return decorate_fwd
 
 
@@ -40,15 +47,20 @@ def custom_bwd(bwd):
     def decorate_bwd(*args, **kwargs):
         with torch.autocast(device_type="cuda", enabled=False):
             return bwd(*args, **kwargs)
+
     return decorate_bwd
 
+
 # ------------------------ AUTOGRAD -----------------------------
+
 
 class AllToAllOp(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, x, output_split_sizes, input_split_sizes, group, async_op):
-        out = torch.empty((sum(output_split_sizes),) + x.shape[1:], device=x.device, dtype=x.dtype)
+        out = torch.empty(
+            (sum(output_split_sizes),) + x.shape[1:], device=x.device, dtype=x.dtype
+        )
 
         ctx.input_shape = x.shape
         ctx.output_split_sizes = output_split_sizes

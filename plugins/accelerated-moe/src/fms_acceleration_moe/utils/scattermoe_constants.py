@@ -17,12 +17,12 @@ KEY_REPLICATE = "replicate"
 KEY_EXPERT_PARALLEL = "expert_parallel"
 DIM_EXPERT = 0
 
-KEY_SCATTERMOE_ROUTER = 'router.weight'
+KEY_SCATTERMOE_ROUTER = "router.weight"
 
 # Currently out ScatterMoE drop supports an up/down proj, and
-# and optional gate_proj. 
+# and optional gate_proj.
 # - When new architectures are supported this list will update
-SCATTERMOE_HAS_GATE_WEIGHT_SPEC = 'has_gate_proj'
+SCATTERMOE_HAS_GATE_WEIGHT_SPEC = "has_gate_proj"
 
 # - moe_cls
 # - router_name
@@ -53,13 +53,17 @@ SCATTERMOE_HAS_GATE_WEIGHT_SPEC = 'has_gate_proj'
 #   or all "combined" into a single 3D linear module.
 SCATTERMOE_CONVERSION_SPEC = {
     "MixtralForCausalLM": (
-        'MixtralSparseMoeBlock', 
-        'gate', 'experts', 
-        SCATTERMOE_HAS_GATE_WEIGHT_SPEC, True
+        "MixtralSparseMoeBlock",
+        "gate",
+        "experts",
+        SCATTERMOE_HAS_GATE_WEIGHT_SPEC,
+        True,
     ),
-    'GraniteMoeForCausalLM': (
-        'GraniteMoeMoE', 'router', 
-        'input_linear|output_linear|input_linear', 
-        SCATTERMOE_HAS_GATE_WEIGHT_SPEC, False
-    )
+    "GraniteMoeForCausalLM": (
+        "GraniteMoeMoE",
+        "router",
+        "input_linear|output_linear|input_linear",
+        SCATTERMOE_HAS_GATE_WEIGHT_SPEC,
+        False,
+    ),
 }

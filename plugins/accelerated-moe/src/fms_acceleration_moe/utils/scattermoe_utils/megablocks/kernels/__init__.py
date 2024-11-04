@@ -1,4 +1,3 @@
-
 # Copyright The FMS HF Tuning Authors
 # Copyright 2024 Databricks
 #
@@ -14,4 +13,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Local
 from .gather_scatter import gather, scatter, scatter_wgrad

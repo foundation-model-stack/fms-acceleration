@@ -14,16 +14,19 @@
 
 # Standard
 from typing import Dict
-import warnings
 
 # Third Party
 from fms_acceleration import AccelerationPlugin
-from transformers import AutoConfig, AutoModelForCausalLM
-import torch 
+from transformers import AutoModelForCausalLM
+import torch
 
+# Local
 from .utils import (
-    prepare_scattemoe, patch_huggingface_save_and_load_for_dtensors, patch_torch_optim_foreach_to_not_apply_to_dtensors
+    patch_huggingface_save_and_load_for_dtensors,
+    patch_torch_optim_foreach_to_not_apply_to_dtensors,
+    prepare_scattemoe,
 )
+
 
 # pylint: disable=too-many-instance-attributes
 class ScatterMoEAccelerationPlugin(AccelerationPlugin):
@@ -32,9 +35,7 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
     # returns but "importlib.metadata.version('kernel-hyperdrive') is needed"
     # require_packages = {"khd"}
     # NOTE: will address this later if we remove the dependency on kernel-hyperdrive
-    restricted_model_archs = [
-        'GraniteMoeForCausalLM', 'MixtralForCausalLM'
-    ]
+    restricted_model_archs = ["GraniteMoeForCausalLM", "MixtralForCausalLM"]
 
     def __init__(self, configurations: Dict[str, Dict]):
         super().__init__(configurations)
@@ -60,7 +61,7 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
             world_size = torch.distributed.get_world_size()
             rank = torch.distributed.get_rank()
 
-        # shard the MOE, and store the component names, eventually needed 
+        # shard the MOE, and store the component names, eventually needed
         # to configure the FSDP
         self._moe_component_module_names = prepare_scattemoe(
             model,
@@ -101,7 +102,7 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
             # to save DTensors propery
             patch_huggingface_save_and_load_for_dtensors()
 
-            # call this to patch torch optim to not use 
+            # call this to patch torch optim to not use
             # foreach for dtensors
             patch_torch_optim_foreach_to_not_apply_to_dtensors()
 

@@ -1,19 +1,26 @@
 # FMS Acceleration for Mixture-of-Experts
 
 This library contains plugins to accelerate finetuning with the following optimizations:
-1. Expert-Parallel MoE with Triton Kernels from ScatterMoe (& Megablocks)
+1. Expert-Parallel MoE with Triton Kernels from ScatterMoE, and some extracted from [megablocks](https://github.com/databricks/megablocks).
+    - Megablocks kernels for `gather` and `scatter` 
 
 ## Plugins
 
 Plugin | Description | Depends | Loading | Augmentation | Callbacks
 --|--|--|--|--|--
-[scattermoe](./src/fms_acceleration_moe/framework_plugin_scattermoe.py) | MoE Expert Parallel with Triton Kernels from scattermoe (& megablocks) | scattermoe / megablocks | ✅ | |  ✅
+[scattermoe](./src/fms_acceleration_moe/framework_plugin_scattermoe.py) | MoE Expert Parallel with Triton Kernels from scattermoe (& megablocks) | ScatterMoE / extracted kernels from megablocks | ✅ | |  ✅
 
 
 ## Adding New Models
 
 Our `ScatterMoe` implementation is a module-swap; to add new models we need to update the specifications in [scattermoe_constants.py](./src/fms_acceleration_moe/utils/scattermoe_constants.py).
 - See the code documentation within to understand how to add new models.
+
+### Code Extracted from Megablocks
+
+Notes on code extraction:
+- we have only extracted two `autograd` functions [GatherOp](https://github.com/databricks/megablocks/blob/main/megablocks/ops/gather.py) and [ScatterOp](https://github.com/databricks/megablocks/blob/main/megablocks/ops/scatter.py),
+- and the associated triton kernels from [backend/kernels.py](https://github.com/databricks/megablocks/blob/main/megablocks/backend/kernels.py); mostly the `_padded_copy`.
 
 ## Running Benchmarks
 

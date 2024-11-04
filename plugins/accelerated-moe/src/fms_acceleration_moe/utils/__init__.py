@@ -12,27 +12,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .scattermoe_prepare import prepare_scattemoe
+# Local
 from .checkpoint_utils import patch_huggingface_save_and_load_for_dtensors
+from .scattermoe_prepare import prepare_scattemoe
 
-# this is a special patch function to disable foreach for 
+# this is a special patch function to disable foreach for
 # dtensors, which has been introduced since torch 2.4.
-# The reason is because this will cause problems in the optimizer 
+# The reason is because this will cause problems in the optimizer
 # lerp.
 
+
 def patch_torch_optim_foreach_to_not_apply_to_dtensors():
-    # guarded. 
-    # this is an array of supported types, we will remove 
-    # dtensor from it, so the optimizer will faillback to per 
+    # guarded.
+    # this is an array of supported types, we will remove
+    # dtensor from it, so the optimizer will faillback to per
     # parameter
+    # Third Party
+    # pylint: disable=import-outside-toplevel
     from torch.optim.optimizer import _foreach_supported_types
 
-    i = 0 # list index
+    i = 0  # list index
     while i < len(_foreach_supported_types):
         x = _foreach_supported_types[i]
-        if x.__name__ == 'DTensor':
+        if x.__name__ == "DTensor":
             # pop from list
             _foreach_supported_types.pop(i)
         else:
-            i += 1 
-
+            i += 1

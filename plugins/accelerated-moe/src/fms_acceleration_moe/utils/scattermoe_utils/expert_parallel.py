@@ -13,21 +13,26 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import torch
+# Third Party
 import numpy as np
+import torch
 
 try:
-    # if megablocks is installed, import the kernels, distributed 
+    # if megablocks is installed, import the kernels, distributed
     # and kernel functions
 
     # - mixture of triton and cuda kernels
-    import megablocks.ops as ops
-
+    # Third Party
     # - distributed autograd
     from megablocks.layers.all_to_all import all_to_all
     from megablocks.ops import (
-        histogram, inclusive_cumsum, sort, replicate, gather, scatter
+        gather,
+        histogram,
+        inclusive_cumsum,
+        scatter,
     )
+    from megablocks import ops
+
     # this is a radix sort for integral indices 0 .. num_bins-1
     def sort(indices: torch.Tensor, num_bins: int):
         bits = max(int(np.ceil(np.log2(num_bins))), 1)
@@ -38,39 +43,41 @@ try:
     # replicate indices with bins
     def replicate(indices: torch.Tensor, bins: torch.Tensor):
         replicate_bins = inclusive_cumsum(bins.flatten(), 0)
-        replicate_bins = (replicate_bins.view(1) if not len(replicate_bins.size()) else replicate_bins)
+        # pylint: disable=use-implicit-booleaness-not-len
+        replicate_bins = (
+            replicate_bins.view(1) if not len(replicate_bins.size()) else replicate_bins
+        )
 
         return ops.replicate(
             indices.unsqueeze(dim=0),
-            replicate_bins, replicate_bins[-1],
+            replicate_bins,
+            replicate_bins[-1],
         ).flatten()
 
 except ImportError:
 
     # - distributed autograd
-    from .megablocks import all_to_all, gather, scatter 
+    # Local
+    from .megablocks import all_to_all, gather, scatter
 
     # take the histogram of integral indices from 0 .. num_bins-1
-    def histogram(
-        indices: torch.Tensor, num_bins: int
-    ):
+    def histogram(indices: torch.Tensor, num_bins: int):
         # - this has an Aten for the GPU backend
-        return torch.histc(indices, bins=num_bins, min=0, max=num_bins-1)
+        return torch.histc(indices, bins=num_bins, min=0, max=num_bins - 1)
 
-    def inclusive_cumsum(
-        x: torch.Tensor, dim: int
-    ):
-        # - convert to int332 type as that is what is expected by the 
+    def inclusive_cumsum(x: torch.Tensor, dim: int):
+        # - convert to int332 type as that is what is expected by the
         #   megablocks gather and scatter kernels
         return x.cumsum(axis=dim, dtype=torch.int32)
 
     # this is a radix sort for integral indices 0 .. num_bins-1
     def sort(indices: torch.Tensor, num_bins: int):
-        return  torch.sort(indices)
+        return torch.sort(indices)
 
     # replicate, this replicates an integral indices according to bin times
     def replicate(indices: torch.Tensor, bins: torch.Tensor):
         return torch.repeat_interleave(indices, bins)
+
 
 # from megablocks
 def no_indices_just_bins(top_expert, num_experts):
@@ -84,19 +91,21 @@ def no_indices_just_bins(top_expert, num_experts):
 
     # Calculate the bin bounds for the sorted tokens.
     bins = inclusive_cumsum(tokens_per_expert, 0)
+    # pylint: disable=use-implicit-booleaness-not-len
     bins = bins.view(1) if not len(bins.size()) else bins
     return bins, tokens_per_expert
+
 
 # modified from https://github.com/databricks/megablocks/blob/main/megablocks/layers/mlp.py
 # - credit to trevor-gale
 def all_to_all_gather_inputs(
-    x: torch.Tensor, 
+    x: torch.Tensor,
     top_experts: torch.Tensor,
-    bin_ids: torch.Tensor, 
-    indices: torch.Tensor, 
-    expert_parallel_group: torch.distributed.ProcessGroup, 
-    top_k: int, 
-    experts_per_rank: int, 
+    bin_ids: torch.Tensor,
+    indices: torch.Tensor,
+    expert_parallel_group: torch.distributed.ProcessGroup,
+    top_k: int,
+    experts_per_rank: int,
 ):
     """
     Extracted from megablocks. This function performs all-to-all input
@@ -114,7 +123,9 @@ def all_to_all_gather_inputs(
 
         # Pass token count information to the device on which the
         # target expert resides.
-        parallel_tokens_per_expert = torch.empty_like(tokens_per_expert,)
+        parallel_tokens_per_expert = torch.empty_like(
+            tokens_per_expert,
+        )
         tpe_handle = torch.distributed.all_to_all_single(
             parallel_tokens_per_expert,
             tokens_per_expert,
@@ -135,8 +146,10 @@ def all_to_all_gather_inputs(
         tpe_handle.wait()
 
         # Reshape to [world_size, num_experts_per_rank].
-        tokens_per_expert = (tokens_per_expert.view(world_size, experts_per_rank))
-        parallel_tokens_per_expert = (parallel_tokens_per_expert.view(world_size, experts_per_rank))
+        tokens_per_expert = tokens_per_expert.view(world_size, experts_per_rank)
+        parallel_tokens_per_expert = parallel_tokens_per_expert.view(
+            world_size, experts_per_rank
+        )
 
         # TODO(tgale): It might be faster to do this on the GPU and
         # then communicate the results back to the host.
@@ -173,37 +186,41 @@ def all_to_all_gather_inputs(
                 dtype=torch.int32,
                 device=indices.device,
             ),
-            experts_per_rank
+            experts_per_rank,
         )
 
         parallel_top_expert = replicate(
-            parallel_top_expert, 
-            parallel_tokens_per_expert.flatten(), 
+            parallel_top_expert,
+            parallel_tokens_per_expert.flatten(),
         )
 
         parallel_bin_ids, parallel_indices = sort(parallel_top_expert, experts_per_rank)
-    
+
     parallel_x_handle.wait()
 
     return (
-        parallel_x, parallel_bin_ids, parallel_indices, 
-        send_counts, recv_counts, # for all to all
-        bins # local
+        parallel_x,
+        parallel_bin_ids,
+        parallel_indices,
+        send_counts,
+        recv_counts,  # for all to all
+        bins,  # local
     )
+
 
 def scatter_with_routing_weights(
     x: torch.Tensor,
     expert_weights: torch.Tensor,
-    send_counts: torch.Tensor, 
+    send_counts: torch.Tensor,
     recv_counts: torch.Tensor,
-    bins: torch.Tensor, 
-    bin_ids: torch.Tensor, 
-    indices: torch.Tensor, 
+    bins: torch.Tensor,
+    bin_ids: torch.Tensor,
+    indices: torch.Tensor,
     expert_parallel_group: torch.distributed.ProcessGroup,
     top_k: int,
 ):
     """
-    Extracted from megablocks. This function undoes the all-to-all 
+    Extracted from megablocks. This function undoes the all-to-all
     gathering for expert parallel.
     """
 
@@ -216,7 +233,4 @@ def scatter_with_routing_weights(
     )
 
     # Un-permute locally to setup for the next series of operations.
-    return scatter(
-        x, indices, bin_ids, expert_weights, 
-        bins, top_k
-    )
+    return scatter(x, indices, bin_ids, expert_weights, bins, top_k)
