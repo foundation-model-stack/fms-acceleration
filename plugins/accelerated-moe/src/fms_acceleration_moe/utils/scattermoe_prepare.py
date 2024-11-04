@@ -22,6 +22,7 @@ import os
 from accelerate import init_empty_weights
 from peft import LoraConfig
 from torch.distributed._tensor import DTensor, Replicate, Shard, distribute_tensor
+
 # pylint: disable=import-error
 from torch.distributed._tensor.device_mesh import DeviceMesh, init_device_mesh
 from tqdm import tqdm
@@ -30,7 +31,6 @@ from transformers.modeling_utils import is_fsdp_enabled, is_local_dist_rank_0
 import torch
 
 # Local
-from .scattermoe import ScatterMoE
 from .scattermoe_constants import (
     FILE_SAFETENSOR_INDEX,
     KEY_EXPERT_PARALLEL,
@@ -135,6 +135,12 @@ def prepare_scattemoe(
     mixed_precision: bool = False,
     lora_config: LoraConfig = None,
 ):
+
+    # guarded because may have third party package deps
+    # Local
+    # pylint: disable=import-outside-toplevel
+    from .scattermoe import ScatterMoE
+
     assert world_size % ep_degree == 0, (
         f"world size ({world_size}) " f"not divisible by ep_size ({ep_degree})."
     )

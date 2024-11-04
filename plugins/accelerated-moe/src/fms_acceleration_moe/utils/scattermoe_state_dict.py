@@ -280,11 +280,9 @@ def get_state_dict_from_checkpoint_metadata(
                 k, fi = vs[0]  # only one item
                 # if its a non-router weight and its non-sharded
                 param = files[fi].get_tensor(k)
-                assert (
-                    len(param.shape) == 3
-                ), (
+                assert len(param.shape) == 3, (
                     "Expected 3D tensor for checkpoints with non-sharded experts, ",
-                    f"but got shape {param.shape}."
+                    f"but got shape {param.shape}.",
                 )
 
             else:
@@ -296,9 +294,7 @@ def get_state_dict_from_checkpoint_metadata(
 
                 for k, fi in vs:
                     T = files[fi].get_tensor(k)
-                    assert (
-                        len(T.shape) == 2
-                    ), (
+                    assert len(T.shape) == 2, (
                         "Expected 2D tensor for checkpoints with sharded experts, "
                         f"but got shape {T.shape}."
                     )

@@ -23,12 +23,12 @@ from fms_acceleration_moe import ScatterMoEAccelerationPlugin
 
 # configuration
 DIRNAME = os.path.dirname(__file__)
-CONFIG_PATH_MEGABLOCKS = os.path.join(DIRNAME, "../configs/scattermoe.yaml")
+CONFIG_PATH_SCATTERMOE = os.path.join(DIRNAME, "../configs/scattermoe.yaml")
 
 
 def test_framework_installs_scattermoe_plugin():
     with instantiate_framework(
-        read_configuration(CONFIG_PATH_MEGABLOCKS), require_packages_check=False
+        read_configuration(CONFIG_PATH_SCATTERMOE), require_packages_check=False
     ) as framework:
         for plugin in framework.active_plugins:
             assert isinstance(plugin[1], ScatterMoEAccelerationPlugin)

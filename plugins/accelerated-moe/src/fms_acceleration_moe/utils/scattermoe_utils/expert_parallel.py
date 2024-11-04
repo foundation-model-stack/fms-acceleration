@@ -23,15 +23,11 @@ try:
 
     # - mixture of triton and cuda kernels
     # Third Party
+    from megablocks import ops
+
     # - distributed autograd
     from megablocks.layers.all_to_all import all_to_all
-    from megablocks.ops import (
-        gather,
-        histogram,
-        inclusive_cumsum,
-        scatter,
-    )
-    from megablocks import ops
+    from megablocks.ops import gather, histogram, inclusive_cumsum, scatter
 
     # this is a radix sort for integral indices 0 .. num_bins-1
     def sort(indices: torch.Tensor, num_bins: int):
