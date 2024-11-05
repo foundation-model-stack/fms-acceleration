@@ -240,12 +240,21 @@ def loaded_models(device: torch.device = "cuda"):
     class TrainArgs:
         gradient_checkpointing = False
         gradient_checkpointing_kwargs = {}
+        fp16 = False
+        bf16 = False
 
-    args = TrainArgs()
+        def __init__(self, **kwargs):
+            for k, v in kwargs.items():
+                setattr(self, k, v)
 
     all_models = {}
     for dtype in DTYPES:
         for base_type in [BNB, GPTQ]:
+
+            args = TrainArgs(
+                fp16=dtype==FLOAT16
+            )
+
             for r, lora_alpha in LORA_PARAMS:
                 model_name, _, target_modules = TEST_MODELS[base_type]
                 peft_config = LoraConfig(
@@ -389,8 +398,8 @@ def test_adapter_gradients_match_with_attention_layer(
 
 
 @pytest.mark.skipif(
-    not _is_package_available("bitsandbytes") or not _is_package_available("auto_gptq"),
-    reason="Only runs if both bitsandbytes and auto_gptq are installed",
+    not _is_package_available("bitsandbytes"),
+    reason="Only runs if both bitsandbytes",
 )
 def test_adapter_gradients_match_with_model(
     model_inputs, loaded_models, dropout_masks  # pylint: disable=redefined-outer-name
