@@ -8,8 +8,10 @@ from peft import LoraConfig
 from transformers import AutoConfig
 from transformers.models.llama.modeling_llama import LlamaAttention
 from transformers.utils.import_utils import _is_package_available
+from dataclasses import dataclass, field
 import pytest  # pylint: disable=import-error
 import torch
+from typing import Dict
 
 BNB = "bitsandbytes"
 GPTQ = "auto_gptq"
@@ -237,22 +239,19 @@ def loaded_models(device: torch.device = "cuda"):
         ),
     }
 
+    @dataclass
     class TrainArgs:
-        gradient_checkpointing = False
-        gradient_checkpointing_kwargs = {}
-        fp16 = False
-        bf16 = False
-
-        def __init__(self, **kwargs):
-            for k, v in kwargs.items():
-                setattr(self, k, v)
+        gradient_checkpointing: bool = False
+        gradient_checkpointing_kwargs: Dict = field(default_factory=dict)
+        fp16: bool = False
+        bf16: bool = False
 
     all_models = {}
     for dtype in DTYPES:
         for base_type in [BNB, GPTQ]:
 
             args = TrainArgs(
-                fp16=dtype==FLOAT16
+                fp16=(dtype==FLOAT16)
             )
 
             for r, lora_alpha in LORA_PARAMS:
