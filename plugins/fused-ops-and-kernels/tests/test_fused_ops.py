@@ -3,7 +3,8 @@ from copy import deepcopy
 from itertools import product
 
 # Third Party
-from fms_acceleration.model_patcher import patch_model
+from fms_acceleration.model_patcher import patch_model, ModelPatcher
+from fms_acceleration.utils.test_utils import instantiate_model_patcher
 from peft import LoraConfig
 from transformers import AutoConfig
 from transformers.models.llama.modeling_llama import LlamaAttention
@@ -43,6 +44,7 @@ TEST_MODELS = {
         ["q_proj", "k_proj", "v_proj", "o_proj"],
     ),
 }
+
 
 ADAPTER_NAME = "default"
 
@@ -248,11 +250,12 @@ def loaded_models(device: torch.device = "cuda"):
 
     all_models = {}
     for dtype in DTYPES:
-        for base_type in [BNB, GPTQ]:
 
-            args = TrainArgs(
-                fp16=(dtype==FLOAT16)
-            )
+        args = TrainArgs(
+            fp16=(dtype==FLOAT16)
+        )
+
+        for base_type in [BNB, GPTQ]:
 
             for r, lora_alpha in LORA_PARAMS:
                 model_name, _, target_modules = TEST_MODELS[base_type]
@@ -281,13 +284,6 @@ def loaded_models(device: torch.device = "cuda"):
                     )
 
     return all_models
-
-
-def prepare_foak(attn_module, base_type):
-    _model = patch_model(attn_module, base_type=base_type)
-    # print(patch_model_summary())
-    return _model
-
 
 def run_model(
     model,
@@ -334,6 +330,20 @@ def get_attention_lora_grads(model, target_modules):
         raise ValueError("cannot find adapter grads")
     return adapter_grads
 
+# helper function to register the fused ops
+def register_fused_ops_rules(base_type: str):
+
+    # Local
+    # add more models if needed later
+    from fms_acceleration_foak.models import (  # pylint: disable=import-outside-toplevel
+        llama,
+    )
+
+    for r in [
+        *llama.get_mp_rules(base_type)
+    ]:
+        if any(r.rule_id.endswith(x) for x in {"qkvo", "mlp"}):
+            ModelPatcher.register(r)
 
 # -------------------------- TESTS ----------------------------------
 
@@ -372,28 +382,46 @@ def test_adapter_gradients_match_with_attention_layer(
                     attn = attention_layers[(base_type, r, lora_alpha, dtype)]
                     DummyDropout.dropout_mask = dropout_masks[(sl, hd, d)]
 
-                    # prepare models
-                    without_foak = deepcopy(attn)
-                    with_foak = prepare_foak(deepcopy(attn), base_type)
+                    X_without = X.clone().detach().requires_grad_()
+                    X_with = X.clone().detach().requires_grad_()
 
-                    # run the models and get the loss and gradients
-                    loss_unpatched = run_model(without_foak, dtype, X, **_kwargs)
-                    loss_patched = run_model(with_foak, dtype, X, **_kwargs)
+                    # instantiate the sigleton model patcher
+                    with instantiate_model_patcher():
 
-                    # compute outputs
-                    assert (
-                        loss_unpatched - loss_patched
-                    ).abs() < LOSS_TOL, "Loss after foak patch do not match"
+                        # register the fused op rules
+                        register_fused_ops_rules(base_type)
 
-                    grads_unpatched = get_attention_lora_grads(
-                        without_foak, target_modules
-                    )
-                    grads_patched = get_attention_lora_grads(with_foak, target_modules)
+                        # prepare models
+                        without_foak = deepcopy(attn)
+                        with_foak = patch_model(deepcopy(attn))
 
-                    for x, y in zip(grads_unpatched, grads_patched):
-                        assert torch.allclose(
-                            x, y, atol=ALLCLOSE_ATOL, rtol=ALLCLOSE_RTOL
-                        ), "Gradients don't match after foak patch"
+                        # run the models and get the loss and gradients
+                        loss_unpatched = run_model(without_foak, dtype, X_without, **_kwargs)
+                        loss_patched = run_model(with_foak, dtype, X_with, **_kwargs)
+
+                        # check the model has been patched
+                        assert len(ModelPatcher.history) > 0, "Fused ops did not correctly patch"
+
+                        # compute outputs
+                        assert (
+                            loss_unpatched - loss_patched
+                        ).abs() < LOSS_TOL, "Loss after foak patch do not match"
+
+                        # check input gradients
+                        torch.allclose(
+                            X_without.grad, 
+                            X_with.grad, atol=ALLCLOSE_ATOL, rtol=ALLCLOSE_RTOL
+                        )
+
+                        grads_unpatched = get_attention_lora_grads(
+                            without_foak, target_modules
+                        )
+                        grads_patched = get_attention_lora_grads(with_foak, target_modules)
+
+                        for x, y in zip(grads_unpatched, grads_patched):
+                            assert torch.allclose(
+                                x, y, atol=ALLCLOSE_ATOL, rtol=ALLCLOSE_RTOL
+                            ), "Gradients don't match after foak patch"
 
 
 @pytest.mark.skipif(
@@ -425,31 +453,40 @@ def test_adapter_gradients_match_with_model(
                     model = loaded_models[(base_type, r, lora_alpha, dtype)]
                     DummyDropout.dropout_mask = dropout_masks[(sl, hd, d)]
 
-                    # prepare models
-                    without_foak = deepcopy(model)
-                    with_foak = prepare_foak(deepcopy(model), base_type)
+                    # instantiate the sigleton model patcher
+                    with instantiate_model_patcher():
 
-                    # run the models and get the loss and gradients
-                    loss_unpatched = run_model(
-                        without_foak, dtype, input_ids, **_kwargs
-                    )
-                    loss_patched = run_model(with_foak, dtype, input_ids, **_kwargs)
+                        # register the fused op rules
+                        register_fused_ops_rules(base_type)
 
-                    # compute outputs
-                    assert (
-                        loss_unpatched - loss_patched
-                    ).abs() < LOSS_TOL, "Loss after foak patch do not match"
+                        # prepare models
+                        without_foak = deepcopy(model)
+                        with_foak = patch_model(deepcopy(model))
 
-                    for _without, _with in zip(
-                        get_modules_with_class(without_foak, attn_cls),
-                        get_modules_with_class(with_foak, attn_cls),
-                    ):
-                        grads_unpatched = get_attention_lora_grads(
-                            _without, target_modules
+                        # check the model has been patched
+                        assert len(ModelPatcher.history) > 0, "Fused ops did not correctly patch"
+
+                        # run the models and get the loss and gradients
+                        loss_unpatched = run_model(
+                            without_foak, dtype, input_ids, **_kwargs
                         )
-                        grads_patched = get_attention_lora_grads(_with, target_modules)
+                        loss_patched = run_model(with_foak, dtype, input_ids, **_kwargs)
 
-                    for x, y in zip(grads_unpatched, grads_patched):
-                        assert torch.allclose(
-                            x, y, atol=ALLCLOSE_ATOL, rtol=ALLCLOSE_RTOL
-                        ), "Gradients don't match after foak patch"
+                        # compute outputs
+                        assert (
+                            loss_unpatched - loss_patched
+                        ).abs() < LOSS_TOL, "Loss after foak patch do not match"
+
+                        for _without, _with in zip(
+                            get_modules_with_class(without_foak, attn_cls),
+                            get_modules_with_class(with_foak, attn_cls),
+                        ):
+                            grads_unpatched = get_attention_lora_grads(
+                                _without, target_modules
+                            )
+                            grads_patched = get_attention_lora_grads(_with, target_modules)
+
+                        for x, y in zip(grads_unpatched, grads_patched):
+                            assert torch.allclose(
+                                x, y, atol=ALLCLOSE_ATOL, rtol=ALLCLOSE_RTOL
+                            ), "Gradients don't match after foak patch"
