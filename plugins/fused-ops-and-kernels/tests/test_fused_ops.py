@@ -412,7 +412,6 @@ def test_adapter_gradients_match_with_attention_layer(
                         assert (
                             loss_unpatched - loss_patched
                         ).abs() < LOSS_TOL, "Loss after foak patch do not match"
-                        import pdb; pdb.set_trace() 
 
                         # check input gradients
                         torch.allclose(

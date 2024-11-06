@@ -121,7 +121,10 @@ class LoRA_MLP(torch.autograd.Function):
         g  = g .view(-1, g .shape[-1])
         dtype = X.dtype
 
-        DW = matmul_lora(dY, downW.t(), downW_quant, downB, downA, downS)
+        DW = matmul_lora(
+            dY, downW.t(), downW_quant, downB, downA, downS, 
+            dropout=(downX !=0)
+        )
         DW, e, g = _backward_function(DW, e, g)
         h, df, de = DW, e, g
 
@@ -148,12 +151,12 @@ class LoRA_MLP(torch.autograd.Function):
         upW = fast_dequantize(upW.t(), upW_quant)
         dX = torch.matmul(df, upW.t(), out = X)
         del upW
-        dX += df @ upB.to(dtype).t() @ (upS * upA.to(dtype).t())
+        dX += (upX != 0) * (df @ upB.to(dtype).t() @ (upS * upA.to(dtype).t()))
 
         gateW = fast_dequantize(gateW.t(), gateW_quant)
         dX += de @ gateW.t()
         del gateW
-        dX += de @ gateB.to(dtype).t() @ (gateS * gateA.to(dtype).t())
+        dX += (gateX != 0) * (de @ gateB.to(dtype).t() @ (gateS * gateA.to(dtype).t()))
 
         # gateW, gateW_quant, gate_bias, gateA, gateB, gateS,
         #  upW,    upW_quant, up_bias,   upA,   upB,   upS,
@@ -333,19 +336,19 @@ class LoRA_QKV(torch.autograd.Function):
         QW = fast_dequantize(QW.t(), QW_quant)
         dX = torch.matmul(dQ, QW.t(), out = X)
         del QW
-        dX += (dQ @ QB.to(dtype).t() @ (QS * QA.to(dtype).t()))
+        dX += (QX != 0) * (dQ @ QB.to(dtype).t() @ (QS * QA.to(dtype).t()))
 
         # dK
         KW = fast_dequantize(KW.t(), KW_quant)
         dX += dK @ KW.t()
         del KW
-        dX += dK @ KB.to(dtype).t() @ (KS * KA.to(dtype).t())
+        dX += (KX != 0) * (dK @ KB.to(dtype).t() @ (KS * KA.to(dtype).t()))
 
         # dV
         VW = fast_dequantize(VW.t(), VW_quant)
         dX += dV @ VW.t()
         del VW
-        dX += dV @ VB.to(dtype).t() @ (VS * VA.to(dtype).t())
+        dX += (VX != 0) * (dV @ VB.to(dtype).t() @ (VS * VA.to(dtype).t()))
 
         # QW, QW_quant, Q_bias, QA, QB, QS,
         # KW, KW_quant, K_bias, KA, KB, KS,
@@ -443,7 +446,7 @@ class LoRA_W(torch.autograd.Function):
         W = fast_dequantize(W.t(), W_quant)
         dX = dY @ W.t()
         del W
-        dX += dY @ B.to(dtype).t() @ (S * A.to(dtype).t())
+        dX += (OX != 0) * (dY @ B.to(dtype).t() @ (S * A.to(dtype).t()))
 
         # W, W_quant, A, B, S
         return (
