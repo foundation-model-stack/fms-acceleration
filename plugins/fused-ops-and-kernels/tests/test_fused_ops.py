@@ -1,18 +1,18 @@
 # Standard
 from copy import deepcopy
+from dataclasses import dataclass, field
 from itertools import product
+from typing import Dict
 
 # Third Party
-from fms_acceleration.model_patcher import patch_model, ModelPatcher
+from fms_acceleration.model_patcher import ModelPatcher, patch_model
 from fms_acceleration.utils.test_utils import instantiate_model_patcher
 from peft import LoraConfig
 from transformers import AutoConfig
 from transformers.models.llama.modeling_llama import LlamaAttention
 from transformers.utils.import_utils import _is_package_available
-from dataclasses import dataclass, field
 import pytest  # pylint: disable=import-error
 import torch
-from typing import Dict
 
 BNB = "bitsandbytes"
 GPTQ = "auto_gptq"
@@ -251,9 +251,7 @@ def loaded_models(device: torch.device = "cuda"):
     all_models = {}
     for dtype in DTYPES:
 
-        args = TrainArgs(
-            fp16=(dtype==FLOAT16)
-        )
+        args = TrainArgs(fp16=dtype == FLOAT16)
 
         for base_type in [BNB, GPTQ]:
 
@@ -284,6 +282,7 @@ def loaded_models(device: torch.device = "cuda"):
                     )
 
     return all_models
+
 
 def run_model(
     model,
@@ -330,20 +329,20 @@ def get_attention_lora_grads(model, target_modules):
         raise ValueError("cannot find adapter grads")
     return adapter_grads
 
+
 # helper function to register the fused ops
 def register_fused_ops_rules(base_type: str):
 
-    # Local
+    # First Party
     # add more models if needed later
     from fms_acceleration_foak.models import (  # pylint: disable=import-outside-toplevel
         llama,
     )
 
-    for r in [
-        *llama.get_mp_rules(base_type)
-    ]:
-        if any(r.rule_id.endswith(x) for x in {"qkvo", "mlp"}):
+    for r in [*llama.get_mp_rules(base_type)]:
+        if any(r.rule_id.endswith(x) for x in ["qkvo", "mlp"]):
             ModelPatcher.register(r)
+
 
 # -------------------------- TESTS ----------------------------------
 
@@ -364,6 +363,7 @@ def test_adapter_gradients_match_with_attention_layer(
     - For GPTQ it seems to be troublesome to initialize an insolated
       layer, thus this test is only done for BNB.
     """
+    # pylint: disable=too-many-nested-blocks
     for base_type in [BNB]:
         model_name, _, target_modules = TEST_MODELS[base_type]
         config = AutoConfig.from_pretrained(model_name)
@@ -385,7 +385,7 @@ def test_adapter_gradients_match_with_attention_layer(
                     # because we want to check the input gradients, we need to have
                     # the lora_B be initialized to non-zero
                     for name, param in attn.named_parameters():
-                        if 'lora_B' in name:
+                        if "lora_B" in name:
                             torch.nn.init.normal_(param)
 
                     X_without = X.clone().detach().requires_grad_()
@@ -402,11 +402,15 @@ def test_adapter_gradients_match_with_attention_layer(
                         with_foak = patch_model(deepcopy(attn))
 
                         # run the models and get the loss and gradients
-                        loss_unpatched = run_model(without_foak, dtype, X_without, **_kwargs)
+                        loss_unpatched = run_model(
+                            without_foak, dtype, X_without, **_kwargs
+                        )
                         loss_patched = run_model(with_foak, dtype, X_with, **_kwargs)
 
                         # check the model has been patched
-                        assert len(ModelPatcher.history) > 0, "Fused ops did not correctly patch"
+                        assert (
+                            len(ModelPatcher.history) > 0
+                        ), "Fused ops did not correctly patch"
 
                         # compute outputs
                         assert (
@@ -415,14 +419,18 @@ def test_adapter_gradients_match_with_attention_layer(
 
                         # check input gradients
                         torch.allclose(
-                            X_without.grad, 
-                            X_with.grad, atol=ALLCLOSE_ATOL, rtol=ALLCLOSE_RTOL
+                            X_without.grad,
+                            X_with.grad,
+                            atol=ALLCLOSE_ATOL,
+                            rtol=ALLCLOSE_RTOL,
                         )
 
                         grads_unpatched = get_attention_lora_grads(
                             without_foak, target_modules
                         )
-                        grads_patched = get_attention_lora_grads(with_foak, target_modules)
+                        grads_patched = get_attention_lora_grads(
+                            with_foak, target_modules
+                        )
 
                         for x, y in zip(grads_unpatched, grads_patched):
                             assert torch.allclose(
@@ -470,7 +478,9 @@ def test_adapter_gradients_match_with_model(
                         with_foak = patch_model(deepcopy(model))
 
                         # check the model has been patched
-                        assert len(ModelPatcher.history) > 0, "Fused ops did not correctly patch"
+                        assert (
+                            len(ModelPatcher.history) > 0
+                        ), "Fused ops did not correctly patch"
 
                         # run the models and get the loss and gradients
                         loss_unpatched = run_model(
@@ -490,7 +500,9 @@ def test_adapter_gradients_match_with_model(
                             grads_unpatched = get_attention_lora_grads(
                                 _without, target_modules
                             )
-                            grads_patched = get_attention_lora_grads(_with, target_modules)
+                            grads_patched = get_attention_lora_grads(
+                                _with, target_modules
+                            )
 
                         for x, y in zip(grads_unpatched, grads_patched):
                             assert torch.allclose(
