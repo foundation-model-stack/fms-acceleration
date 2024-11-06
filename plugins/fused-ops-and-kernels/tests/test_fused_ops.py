@@ -382,6 +382,12 @@ def test_adapter_gradients_match_with_attention_layer(
                     attn = attention_layers[(base_type, r, lora_alpha, dtype)]
                     DummyDropout.dropout_mask = dropout_masks[(sl, hd, d)]
 
+                    # because we want to check the input gradients, we need to have
+                    # the lora_B be initialized to non-zero
+                    for name, param in attn.named_parameters():
+                        if 'lora_B' in name:
+                            torch.nn.init.normal_(param)
+
                     X_without = X.clone().detach().requires_grad_()
                     X_with = X.clone().detach().requires_grad_()
 
@@ -406,6 +412,7 @@ def test_adapter_gradients_match_with_attention_layer(
                         assert (
                             loss_unpatched - loss_patched
                         ).abs() < LOSS_TOL, "Loss after foak patch do not match"
+                        import pdb; pdb.set_trace() 
 
                         # check input gradients
                         torch.allclose(
