@@ -30,6 +30,7 @@ from transformers.modeling_utils import is_fsdp_enabled, is_local_dist_rank_0
 import torch
 
 # Local
+from .checkpoint_utils import get_resolved_checkpoint_location
 from .scattermoe_constants import (
     FILE_SAFETENSOR_INDEX,
     KEY_EXPERT_PARALLEL,
@@ -43,7 +44,6 @@ from .scattermoe_state_dict import (
     get_state_dict_from_checkpoint_metadata,
 )
 
-from .checkpoint_utils import get_resolved_checkpoint_location
 
 # this function will load the sharded experts onto the device.
 # - this assumes that the "dmoe" module is the megablocks.layers.dmoe.dMoE distributed
@@ -72,7 +72,7 @@ def load_experts_onto_device(
             # if its the router, replicate
             param = distribute_tensor(param, device_mesh, reps + [Replicate()])
         elif param.shape[0] > num_experts_per_device:
-            # if its a weight param and the number of experts exceed that of 
+            # if its a weight param and the number of experts exceed that of
             # the device, shard
             param = distribute_tensor(param, device_mesh, reps + [Shard(0)])
         else:
@@ -138,9 +138,7 @@ def prepare_scattermoe(
         expert_name,
         expert_mlp_spec,
         sharded_expert_ckpt,
-    ) = get_scattermoe_conv_spec_from_archs(
-        model.config.architectures
-    )
+    ) = get_scattermoe_conv_spec_from_archs(model.config.architectures)
 
     # split the names first
     expert_name = expert_name.split("|")

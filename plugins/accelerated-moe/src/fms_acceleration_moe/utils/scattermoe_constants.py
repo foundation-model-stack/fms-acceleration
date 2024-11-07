@@ -12,11 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Standard
 from typing import List
 
 # to be updated so that the parsers can work properly
-PARAM_NAME_ROUTER_SCATTERMOE = 'router'
-PARAM_NAME_WEIGHT_SCATTERMOE = ['w1', 'w2', 'w3']
+PARAM_NAME_ROUTER_SCATTERMOE = "router"
+PARAM_NAME_WEIGHT_SCATTERMOE = ["w1", "w2", "w3"]
 
 FILE_SAFETENSOR_INDEX = "model.safetensors.index.json"
 KEY_REPLICATE = "replicate"
@@ -79,9 +80,8 @@ SCATTERMOE_CONVERSION_SPEC = {
 
 #  helper function to get the spec based on architectures
 
-def get_scattermoe_conv_spec_from_archs(
-    architectures: List[str]
-):
+
+def get_scattermoe_conv_spec_from_archs(architectures: List[str]):
     # infer the spec
     for archs, spec in SCATTERMOE_CONVERSION_SPEC.items():
         archs = archs.split(",")
@@ -90,6 +90,6 @@ def get_scattermoe_conv_spec_from_archs(
 
     # if not found
     raise ValueError(
-        f"In order to configure ScatterMoe for archs \'{architectures}\' "
+        f"In order to configure ScatterMoe for archs '{architectures}' "
         "the conversion spect must be updated in scattermoe_constants.py"
     )

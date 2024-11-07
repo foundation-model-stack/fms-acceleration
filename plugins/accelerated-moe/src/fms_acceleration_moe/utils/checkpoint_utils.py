@@ -13,22 +13,13 @@
 # limitations under the License.
 
 # Standard
+from collections import defaultdict
+from typing import List
+import json
 import os
 import re
-import json
-import torch
-
-from .scattermoe_constants import (
-    FILE_SAFETENSOR_INDEX,
-    PARAM_NAME_WEIGHT_SCATTERMOE,
-    PARAM_NAME_ROUTER_SCATTERMOE,
-    get_scattermoe_conv_spec_from_archs,
-)
-
-from .scattermoe_state_dict import get_checkpoint_meta_from_sharded_safetensor
 
 # Third Party
-from transformers import PretrainedConfig
 from accelerate.logging import get_logger
 from accelerate.utils.constants import FSDP_MODEL_NAME, OPTIMIZER_NAME
 from torch.distributed.checkpoint.default_planner import (
@@ -37,9 +28,18 @@ from torch.distributed.checkpoint.default_planner import (
 )
 from torch.distributed.checkpoint.state_dict import get_state_dict, set_state_dict
 from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
+from transformers import PretrainedConfig
+import torch
 import torch.distributed.checkpoint as dcp
 
-from typing import List
+# Local
+from .scattermoe_constants import (
+    FILE_SAFETENSOR_INDEX,
+    PARAM_NAME_ROUTER_SCATTERMOE,
+    PARAM_NAME_WEIGHT_SCATTERMOE,
+    get_scattermoe_conv_spec_from_archs,
+)
+from .scattermoe_state_dict import get_checkpoint_meta_from_sharded_safetensor
 
 logger = get_logger(__name__)
 
@@ -181,6 +181,7 @@ def patch_huggingface_save_and_load_for_dtensors():
     patch_target_module("transformers.trainer.load_fsdp_model", load_fsdp_model)
     patch_target_module("transformers.trainer.load_fsdp_optimizer", load_fsdp_optimizer)
 
+
 # trick to get the resolved cache file to acccess the safetensor
 # NOTE: this does not work if _dict_from_json_file, like GGUF files
 def get_resolved_checkpoint_location(model_name_or_path: str):
@@ -199,26 +200,29 @@ def get_resolved_checkpoint_location(model_name_or_path: str):
     PretrainedConfig._dict_from_json_file = _old_func
     return os.path.dirname(result)
 
+
 def restore_scattermoe_checkpoint_to_orig(
     dcp_checkpoint_dir: str,
     pretrained_model_name_or_path: str = None,
-    dcp_outer_key: str = 'model',
+    dcp_outer_key: str = "model",
 ):
-
     """
     Parameters:
         dcp_checkpoint_dir (str): the dcp to be converted.
-        pretrained_model_name_or_path (str): Optional, if provided we will 
-            use the hints to remap the 
+        pretrained_model_name_or_path (str): Optional, if provided we will
+            use the hints to remap the
     """
 
     # reference dcp_to_torch_save from torch.distributed.checkpoint.format_utils.py
     # - strategy is to use _EmptyStateDictLoadPlanner to populate the state dict, then we remap
 
     # guarded, load some internal functions
+    # pylint: disable=import-outside-toplevel
+    # Third Party
     from torch.distributed.checkpoint.default_planner import _EmptyStateDictLoadPlanner
-    from torch.distributed.checkpoint.state_dict_loader import _load_state_dict
     from torch.distributed.checkpoint.metadata import STATE_DICT_TYPE
+    from torch.distributed.checkpoint.state_dict_loader import _load_state_dict
+
     sd: STATE_DICT_TYPE = {}
     _load_state_dict(
         sd,
@@ -228,7 +232,7 @@ def restore_scattermoe_checkpoint_to_orig(
     )
     sd = sd[dcp_outer_key]
 
-    # if not provided 
+    # if not provided
     if pretrained_model_name_or_path is None:
         return sd
 
@@ -237,18 +241,16 @@ def restore_scattermoe_checkpoint_to_orig(
     with open(os.path.join(loc, FILE_SAFETENSOR_INDEX), encoding="utf-8") as f:
         index = json.load(f)
 
-    # config 
+    # config
     config = PretrainedConfig.from_pretrained(pretrained_model_name_or_path)
 
     (
-        moe_cls,
+        _,
         router_name,
         expert_name,
-        expert_mlp_spec,
+        __,
         sharded_expert_ckpt,
-    ) = get_scattermoe_conv_spec_from_archs(
-        config.architectures
-    )
+    ) = get_scattermoe_conv_spec_from_archs(config.architectures)
 
     # the sd from the module swap must have keys like
     # 'model.layers.0.block_sparse_moe.w1.weight'
@@ -258,13 +260,12 @@ def restore_scattermoe_checkpoint_to_orig(
     # prefix = model.layers.0 and module_name = block_sparse_moe
 
     def _infer_prefixes_and_module_names(
-        sd_keys: List[str], min_count: int = 3,
+        sd_keys: List[str],
+        min_count: int = 3,
     ):
-        _name = "|".join([
-            PARAM_NAME_ROUTER_SCATTERMOE, 
-            *PARAM_NAME_WEIGHT_SCATTERMOE
-        ])
-        _reg = re.compile(f'(.*)\.({_name})\.weight')
+        _name = "|".join([PARAM_NAME_ROUTER_SCATTERMOE, *PARAM_NAME_WEIGHT_SCATTERMOE])
+        # pylint: disable=anomalous-backslash-in-string
+        _reg = re.compile(f"(.*)\.({_name})\.weight")
         found = {}
 
         for k in sd_keys:
@@ -276,22 +277,22 @@ def restore_scattermoe_checkpoint_to_orig(
             found[prefix] = 1 + found.get(prefix, 0)
 
         results = []
-        for prefix in found.keys():
+        for prefix, cnt in found.items():
             # if at least router, w1 and w2 are found, take it
             # otherwise we delete
-            if found[prefix] >= min_count:
+            if cnt >= min_count:
                 results.append(prefix)
 
         return results
 
     for prefix in _infer_prefixes_and_module_names(sd.keys()):
-        prefix = prefix.split('.')
+        prefix = prefix.split(".")
         prefix, module_name = ".".join(prefix[:-1]), prefix[-1]
 
         # checkpoint metadata is will be a  map
         # key -> list of tuples
         # where each in the list is (param_name, stfile)
-        # - if the list is larger than one, it means that the 
+        # - if the list is larger than one, it means that the
         #   actual model has a sharded checkpoint
 
         # defaultdict(list,
@@ -312,22 +313,12 @@ def restore_scattermoe_checkpoint_to_orig(
             expert_name,
         )
 
-        # check if expert name has repeats
-        # has_repeat = False
-        # _seen = set()
-        # for k in expert_name.split('|'):
-        #     if k in _seen:
-        #         has_repeat = True
-        #         break
-        #     _seen.add(k)
-
-        from collections import defaultdict
         model2scatter = defaultdict(dict)
         # construct a map of model_key -> {scatter_key: [params, ...]}
-        # - if the param list > 1, that means many scatter keys map to 1 
+        # - if the param list > 1, that means many scatter keys map to 1
         #   model param and they need to be cat
         for scatter_key, list_of_params in checkpoint_metadata.items():
-            scatter_key_fqdn = '.'.join([prefix, module_name, scatter_key])
+            scatter_key_fqdn = ".".join([prefix, module_name, scatter_key])
             scatter_param = sd[scatter_key_fqdn]
 
             # remove from state dict
@@ -341,13 +332,11 @@ def restore_scattermoe_checkpoint_to_orig(
             else:
                 # if sharded, we just assume that there should be 1 expert
                 # per shard
-                assert n == scatter_param.shape[0], \
-                    "Sharded expert weights should be 1 expert per shard."
+                assert (
+                    n == scatter_param.shape[0]
+                ), "Sharded expert weights should be 1 expert per shard."
 
-            if any(
-                scatter_key.startswith(k) for k in
-                PARAM_NAME_WEIGHT_SCATTERMOE
-            ):
+            if any(scatter_key.startswith(k) for k in PARAM_NAME_WEIGHT_SCATTERMOE):
                 scatter_param = scatter_param.permute(0, 2, 1)
 
             # go through all the model keys
@@ -363,7 +352,7 @@ def restore_scattermoe_checkpoint_to_orig(
                 model2scatter[model_key][scatter_key] = _param
 
         # replace them back in the sd
-        for model_key in list(model2scatter.keys()): 
+        for model_key in list(model2scatter.keys()):
 
             scatter_params = model2scatter[model_key]
 
@@ -371,25 +360,25 @@ def restore_scattermoe_checkpoint_to_orig(
             #  it will go by order of scatter keys
             scatter_keys = sorted(scatter_params.keys())
 
-            assert len(scatter_keys) > 0, f"Obtained zero scatter keys for model_key \'{model_key}\'"
+            assert (
+                len(scatter_keys) > 0
+            ), f"Obtained zero scatter keys for model_key '{model_key}'"
 
             if len(scatter_keys) == 1:
                 sd[model_key] = scatter_params[scatter_keys[0]]
             else:
-                # unfortunately, there this is a in 
+                # unfortunately, there this is a in
                 # scattermoe_state_dict._maybe_reshape_scattermoe_expert_weights
                 # that we split on the dim=1, so we cat back on that
                 sd[model_key] = torch.cat(
-                    [scatter_params[k] for k in scatter_keys],
-                    dim=1
+                    [scatter_params[k] for k in scatter_keys], dim=1
                 )
 
             # remove from this intemediate mapping
             del model2scatter[model_key]
 
-        rem_keys = ",".join([k for k in model2scatter])
-        assert len(rem_keys) == 0, \
-            f"Did not handle model parameters \'{rem_keys}\'"
+        rem_keys = ",".join(list(model2scatter))
+        assert len(rem_keys) == 0, f"Did not handle model parameters '{rem_keys}'"
 
     return sd
 
@@ -398,7 +387,8 @@ def restore_scattermoe_checkpoint_to_orig(
 
 
 # have it serve as a conversion script
-if __name__ == '__main__':
+if __name__ == "__main__":
+    # Standard
     import argparse
 
     parser = argparse.ArgumentParser(
@@ -417,7 +407,5 @@ if __name__ == '__main__':
             "In order to reconstruct the state dict, we requre hints from "
             "the original pretrained model checkpoint (from which this "
             "checkpoint is obtained)."
-        )
+        ),
     )
-
-
