@@ -21,7 +21,7 @@ plugins:
       # - the FastQuantized version is all-or-nothing
 
       # fast loss triton kernels
-      fast_loss: true
+      fast_loss: false
 
       # fast rms norm triton kernels
       fast_rms_layernorm: true
@@ -30,4 +30,4 @@ plugins:
       fast_rope_embeddings: true
 
       # fused linear cross entropy loss
-      fused_linear_loss: false
+      fused_linear_loss: true

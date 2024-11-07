@@ -3,16 +3,7 @@
 # Each stanza incorporates various configurations for 
 # different fine-tuning / training tasks.
 plugins:
-  # Configurations to accelerate data packing/padding in training
-  training:
-
-    # attention module configurations
-    # e.g. padding-free modifications to attention layer
-    attention:
-
-      # this controls the confgurations for padding free computation of flash attention
-      padding_free:
-        method: huggingface
+  # PEFT-related acceleration
   peft:
 
     # quantization-releated acceleration
@@ -52,10 +43,13 @@ plugins:
         fused_lora: true
 
         # fast loss triton kernels
-        fast_loss: true
+        fast_loss: false
 
         # fast rms norm triton kernels
         fast_rsm_layernorm: true
 
         # fast RoPE embedding triton kernels
         fast_rope_embeddings: true
+
+        # fused linear cross entropy loss
+        fused_linear_loss: true

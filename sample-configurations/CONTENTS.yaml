@@ -27,11 +27,23 @@ framework_configs:
         - fused-ops-and-kernels
       filename: accelerated-peft-autogptq-foak-sample-configuration.yaml
 
+    - shortname: accelerated-peft-autogptq-foak-liger
+      plugins:
+        - accelerated-peft
+        - fused-ops-and-kernels
+      filename: accelerated-peft-autogptq-foak-liger-sample-configuration.yaml
+
     - shortname: accelerated-peft-bnb-foak
       plugins:
         - accelerated-peft
         - fused-ops-and-kernels
       filename: accelerated-peft-bnb-nf4-foak-sample-configuration.yaml
+
+    - shortname: accelerated-peft-bnb-foak-liger
+      plugins:
+        - accelerated-peft
+        - fused-ops-and-kernels
+      filename: accelerated-peft-bnb-nf4-foak-liger-sample-configuration.yaml
 
     - shortname: aadp-padding-free
       plugins:
@@ -73,3 +85,8 @@ framework_configs:
       plugins:
         - fused-ops-and-kernels
       filename: foak-fast-kernels-sample-configuration.yaml
+
+    - shortname: foak-fast-kernels-liger
+      plugins:
+        - fused-ops-and-kernels
+      filename: foak-fast-kernels-liger-sample-configuration.yaml
