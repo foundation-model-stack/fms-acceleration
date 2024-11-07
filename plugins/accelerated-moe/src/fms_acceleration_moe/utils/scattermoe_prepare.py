@@ -26,7 +26,6 @@ from torch.distributed._tensor import DTensor, Replicate, Shard, distribute_tens
 # pylint: disable=import-error
 from torch.distributed._tensor.device_mesh import DeviceMesh, init_device_mesh
 from tqdm import tqdm
-from transformers import PretrainedConfig
 from transformers.modeling_utils import is_fsdp_enabled, is_local_dist_rank_0
 import torch
 
@@ -36,7 +35,7 @@ from .scattermoe_constants import (
     KEY_EXPERT_PARALLEL,
     KEY_REPLICATE,
     KEY_SCATTERMOE_ROUTER,
-    SCATTERMOE_CONVERSION_SPEC,
+    get_scattermoe_conv_spec_from_archs,
 )
 from .scattermoe_state_dict import (
     convert_state_dict,
@@ -44,25 +43,7 @@ from .scattermoe_state_dict import (
     get_state_dict_from_checkpoint_metadata,
 )
 
-
-# trick to get the resolved cache file to acccess the safetensor
-# NOTE: this does not work if _dict_from_json_file, like GGUF files
-def get_resolved_checkpoint_location(model_name_or_path: str):
-
-    result = None
-    _old_func = PretrainedConfig._dict_from_json_file
-
-    def _dict_from_json_file(resolved_config_file):
-        nonlocal result
-        result = resolved_config_file
-        return _old_func(resolved_config_file)
-
-    # make a hook and restrive
-    PretrainedConfig._dict_from_json_file = _dict_from_json_file
-    PretrainedConfig.from_pretrained(model_name_or_path)
-    PretrainedConfig._dict_from_json_file = _old_func
-    return os.path.dirname(result)
-
+from .checkpoint_utils import get_resolved_checkpoint_location
 
 # this function will load the sharded experts onto the device.
 # - this assumes that the "dmoe" module is the megablocks.layers.dmoe.dMoE distributed
@@ -119,7 +100,7 @@ def load_experts_onto_device(
         mod.register_parameter(name, param)
 
 
-def prepare_scattemoe(
+def prepare_scattermoe(
     model: torch.nn.Module,
     checkpoint_name_or_path: str = None,
     rank: int = None,
@@ -150,21 +131,18 @@ def prepare_scattemoe(
     # current rank of the device
     device = torch.device(f"{device_type}:{rank}")
 
-    # infer the router_name and expert_name
-    found = False
-    for archs, (
+    # get the scattermoe conversion spec
+    (
         moe_cls,
         router_name,
         expert_name,
         expert_mlp_spec,
         sharded_expert_ckpt,
-    ) in SCATTERMOE_CONVERSION_SPEC.items():
-        archs = archs.split(",")
-        if any(x in archs for x in model.config.architectures):
-            found = True
-            break
-    assert found, "cannot configure scatter moe for this model"
-    # pylint: disable=undefined-loop-variable
+    ) = get_scattermoe_conv_spec_from_archs(
+        model.config.architectures
+    )
+
+    # split the names first
     expert_name = expert_name.split("|")
 
     rep_size = world_size // ep_degree
@@ -212,7 +190,7 @@ def prepare_scattemoe(
         parent, child = ".".join(name[:-1]), name[-1]
 
         # check the module depending if moe_cls is a str or class
-        # pylint: disable=undefined-loop-variable,isinstance-second-argument-not-valid-type
+        # pylint: disable=isinstance-second-argument-not-valid-type
         if (
             mod.__class__.__name__ == moe_cls
             if isinstance(moe_cls, str)
@@ -249,7 +227,6 @@ def prepare_scattemoe(
         for prefix, (module_name, _, has_bias) in tqdm(
             found.items(), disable=(rank > 0), desc="Converting ScatterMoE layers"
         ):
-            # # pylint: disable=undefined-loop-variable
             checkpoint_metadata = get_checkpoint_meta_from_sharded_safetensor(
                 index["weight_map"],
                 prefix,
@@ -264,7 +241,6 @@ def prepare_scattemoe(
             # - handle state dict loading
             # - NOTE: convert_state_dict does not have logic to concat sharded
             #   experts so cannot handle the case where sharded_expert_ckpt=True
-            # # pylint: disable=undefined-loop-variable
             if (
                 ep_degree == 1
                 and (not is_fsdp_enabled() or is_local_dist_rank_0())
@@ -302,7 +278,6 @@ def prepare_scattemoe(
 
             # - conver to a scatter moe
             # - very hard to do patching, settle for module swap
-            # # pylint: disable=undefined-loop-variable
             with _init_scattermoe_context():
                 moe = ScatterMoE(
                     hidden_size=model.config.hidden_size,

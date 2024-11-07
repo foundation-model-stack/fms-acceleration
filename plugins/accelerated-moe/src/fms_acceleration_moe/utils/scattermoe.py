@@ -39,7 +39,7 @@ except ImportError as e:
     ) from e
 
 # Local
-from .scattermoe_constants import SCATTERMOE_HAS_GATE_WEIGHT_SPEC
+from .scattermoe_constants import SCATTERMOE_SPEC_HAS_GATE_WEIGHT
 from .scattermoe_utils import all_to_all_gather_inputs, scatter_with_routing_weights
 
 
@@ -190,6 +190,7 @@ class ScatteredExperts(torch.nn.Module):
         )
 
 
+# NOTE: this name should match scattermoe_constants.CLASS_NAME_SCATTERMOE
 # similar to of MoE_Triton from https://github.com/mayank31398/kernel-hyperdrive
 # and ParameterizedScatteredExperts from
 # https://github.com/IBM/dolomite-engine/blob/main/dolomite_engine/hf_models/models/moe_dolomite/moe/scatter.py
@@ -305,7 +306,7 @@ class ScatterMoE(torch.nn.Module):
             device=device,
             lora_config=lora_config,
         )
-        if mlp_arch == SCATTERMOE_HAS_GATE_WEIGHT_SPEC:
+        if mlp_arch == SCATTERMOE_SPEC_HAS_GATE_WEIGHT:
             self.w3 = ScatteredExperts(
                 in_features=self.hidden_size,
                 out_features=self.intermediate_size,

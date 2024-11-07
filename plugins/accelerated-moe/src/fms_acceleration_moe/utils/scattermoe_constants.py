@@ -12,17 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import List
+
+# to be updated so that the parsers can work properly
+PARAM_NAME_ROUTER_SCATTERMOE = 'router'
+PARAM_NAME_WEIGHT_SCATTERMOE = ['w1', 'w2', 'w3']
+
 FILE_SAFETENSOR_INDEX = "model.safetensors.index.json"
 KEY_REPLICATE = "replicate"
 KEY_EXPERT_PARALLEL = "expert_parallel"
 DIM_EXPERT = 0
 
-KEY_SCATTERMOE_ROUTER = "router.weight"
+KEY_SCATTERMOE_ROUTER = PARAM_NAME_ROUTER_SCATTERMOE + ".weight"
 
 # Currently out ScatterMoE drop supports an up/down proj, and
 # and optional gate_proj.
 # - When new architectures are supported this list will update
-SCATTERMOE_HAS_GATE_WEIGHT_SPEC = "has_gate_proj"
+SCATTERMOE_SPEC_HAS_GATE_WEIGHT = "has_gate_proj"
 
 # - moe_cls
 # - router_name
@@ -41,6 +47,9 @@ SCATTERMOE_HAS_GATE_WEIGHT_SPEC = "has_gate_proj"
 # in the SPEC. the expert_map allows us to map the the parameter names
 # if they are different. But so far we do not need to use it.
 
+# NOTE: the keys can be a single arch string MixtralForCausalLM
+# or a few arch strings seperated by comma (no space)
+
 # when adding new models, follow the following convention:
 # - class name of moe module to be replaced with ScatterMoE.
 # - module_name of the router.
@@ -56,14 +65,31 @@ SCATTERMOE_CONVERSION_SPEC = {
         "MixtralSparseMoeBlock",
         "gate",
         "experts",
-        SCATTERMOE_HAS_GATE_WEIGHT_SPEC,
+        SCATTERMOE_SPEC_HAS_GATE_WEIGHT,
         True,
     ),
     "GraniteMoeForCausalLM": (
         "GraniteMoeMoE",
         "router",
         "input_linear|output_linear|input_linear",
-        SCATTERMOE_HAS_GATE_WEIGHT_SPEC,
+        SCATTERMOE_SPEC_HAS_GATE_WEIGHT,
         False,
     ),
 }
+
+#  helper function to get the spec based on architectures
+
+def get_scattermoe_conv_spec_from_archs(
+    architectures: List[str]
+):
+    # infer the spec
+    for archs, spec in SCATTERMOE_CONVERSION_SPEC.items():
+        archs = archs.split(",")
+        if any(x in archs for x in architectures):
+            return spec
+
+    # if not found
+    raise ValueError(
+        f"In order to configure ScatterMoe for archs \'{architectures}\' "
+        "the conversion spect must be updated in scattermoe_constants.py"
+    )

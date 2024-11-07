@@ -24,7 +24,7 @@ import torch
 from .utils import (
     patch_huggingface_save_and_load_for_dtensors,
     patch_torch_optim_foreach_to_not_apply_to_dtensors,
-    prepare_scattemoe,
+    prepare_scattermoe,
 )
 
 
@@ -63,7 +63,7 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
 
         # shard the MOE, and store the component names, eventually needed
         # to configure the FSDP
-        self._moe_component_module_names = prepare_scattemoe(
+        self._moe_component_module_names = prepare_scattermoe(
             model,
             checkpoint_name_or_path=model_name,
             rank=rank,
