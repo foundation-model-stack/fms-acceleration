@@ -88,21 +88,17 @@ def load_experts_onto_device(
     for weight_name, param in state_dict.items():
 
         if KEY_SCATTERMOE_ROUTER in weight_name:
-
+            # if its the router, replicate
             param = distribute_tensor(param, device_mesh, reps + [Replicate()])
         elif param.shape[0] > num_experts_per_device:
+            # if its a weight param and the number of experts exceed that of 
+            # the device, shard
             param = distribute_tensor(param, device_mesh, reps + [Shard(0)])
         else:
-            # NOTE: somehow this takes alot of memory,
-            # - so if not rep skip for now
-            # - however, this means that there will be a mixture of
-            #   dtensors and regular tensors in the grad norm calc
-            if device_mesh.ndim == 1:
-                param = param.to(device_mesh.device_type)
-            else:
-                param = DTensor.from_local(
-                    param, device_mesh=device_mesh, placements=reps + [Shard(0)]
-                )
+            # if its a weight and the already sharded by number of experts
+            param = DTensor.from_local(
+                param, device_mesh=device_mesh, placements=reps + [Shard(0)]
+            )
 
         # get the module we want to shard
         name = weight_name.split(".")
