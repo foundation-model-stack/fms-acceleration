@@ -12,15 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Standard
-from typing import Dict, Tuple
-
 # Third Party
 from accelerate.utils import set_module_tensor_to_device
-from fms_acceleration import AccelerationPlugin
-from peft import LoraConfig
-from peft.tuners.lora.layer import LoraLayer
-from transformers import TrainingArguments
 from transformers.modeling_utils import is_fsdp_enabled
 import torch
 import torch.distributed as dist
@@ -81,112 +74,3 @@ def lora_adapters_switch_ddp_from_fsdp(modules, fsdp_plugin):
         # - this has to be done after all weight replacement happens
         A.weight.register_hook(_all_reduce_hook)
         B.weight.register_hook(_all_reduce_hook)
-
-
-def register_foak_model_patch_rules(base_type):
-    # Third Party
-    from fms_acceleration.model_patcher import (  # pylint: disable=import-outside-toplevel
-        ModelPatcher,
-    )
-
-    # Local
-    from .models import (  # pylint: disable=import-outside-toplevel
-        llama,
-        mistral,
-        mixtral,
-    )
-
-    rules = [
-        *llama.get_mp_rules(base_type),
-        *mistral.get_mp_rules(base_type),
-        *mixtral.get_mp_rules(base_type),
-    ]
-    for _rule in rules:
-        ModelPatcher.register(_rule)
-
-
-class FastQuantizedPeftAccelerationPlugin(AccelerationPlugin):
-
-    # NOTE: may remove this when we have generic model rules
-    restricted_model_archs = [
-        "MixtralForCausalLM",
-        "LlamaForCausalLM",
-        "MistralForCausalLM",
-    ]
-
-    def __init__(self, configurations: Dict[str, Dict]):
-        super().__init__(configurations)
-
-        self._base_layer = self._check_config_and_maybe_check_values(
-            key="peft.quantization.fused_ops_and_kernels.base_layer",
-            values=["auto_gptq", "bitsandbytes"],
-        )
-
-        # only support these at the moment
-        self._check_config_equal(
-            key="peft.quantization.fused_ops_and_kernels.fused_lora", value=True
-        )
-        self._check_config_equal(
-            key="peft.quantization.fused_ops_and_kernels.fast_loss", value=True
-        )
-        self._check_config_equal(
-            key="peft.quantization.fused_ops_and_kernels.fast_rsm_layernorm",
-            value=True,
-        )
-        self._check_config_equal(
-            key="peft.quantization.fused_ops_and_kernels.fast_rope_embeddings",
-            value=True,
-        )
-
-    @property
-    def requires_agumentation(self):
-        return True
-
-    def augmentation(
-        self,
-        model,
-        train_args: TrainingArguments,
-        modifiable_args: Tuple[LoraConfig],
-    ):
-        # NOTE: how do I check this now that the modifiable args are missing
-        # assert peft_config.lora_dropout == 0, \
-        # "Fused Attention requires lora_dropout argument to be set to 0"
-
-        # need to check why this is needed
-        assert (
-            model.dtype == torch.float16 and train_args.fp16
-        ), "need to run in fp16 mixed precision or load model in fp16"
-
-        # wrapper function to register foak patches
-        register_foak_model_patch_rules(base_type=self._base_layer)
-        return model, modifiable_args
-
-    def get_callbacks_and_ready_for_train(
-        self, model: torch.nn.Module = None, accelerator=None
-    ):
-
-        callbacks = []
-        if (
-            accelerator is not None
-            and getattr(accelerator.state, "fsdp_plugin", None) is not None
-        ):
-            # This function installs grad reduction hooks on adapters if
-            # FSDP is detected. Because of incompatibility between FSDP and
-            # fused modules, adapters are not sharded - instead
-            # accumulated gradients from adapters in each device are reduced
-            # in these grad reduce hooks
-            # This function might be removed in future if the incompatiblity
-            # is resolved
-            lora_adapters_switch_ddp_from_fsdp(
-                [mod for mod in model.modules() if isinstance(mod, LoraLayer)],
-                accelerator.state.fsdp_plugin,
-            )
-        return callbacks
-
-
-# This plugin is currently deregistered in favour of framework_plugin_fast_kernels.py
-# to additionally support both full-FT and standard PEFT
-# AccelerationPlugin.register_plugin(
-#     FastQuantizedPeftAccelerationPlugin,
-#     configuration_and_paths=["peft.quantization.fused_ops_and_kernels"],
-# )

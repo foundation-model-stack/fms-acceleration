@@ -1,10 +1,10 @@
 # Standard
 from functools import partial
-from typing import Callable, List, Type
+from typing import Callable, List, Set, Type
 import os
 
 # Third Party
-from fms_acceleration.model_patcher import ModelPatcherTrigger
+from fms_acceleration.model_patcher import ModelPatcherRule, ModelPatcherTrigger
 import torch
 
 # Local
@@ -196,3 +196,11 @@ def trigger_fused_ops(
     # are all loralayers
     _mods = [getattr(module, x) for x in submodule_names]
     return isinstance(module, attn_cls) and all(_is_loralayer(x) for x in _mods)
+
+
+# helper function to filter rules
+def filter_mp_rules(
+    rules: List[ModelPatcherRule],
+    filter_endswith: Set[str],
+):
+    return [r for r in rules if any(r.rule_id.endswith(x) for x in filter_endswith)]
