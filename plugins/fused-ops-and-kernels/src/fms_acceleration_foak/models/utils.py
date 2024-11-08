@@ -202,5 +202,13 @@ def trigger_fused_ops(
 def filter_mp_rules(
     rules: List[ModelPatcherRule],
     filter_endswith: Set[str],
+    drop: bool = False,
 ):
+    if drop:
+        # this means if any of the filter terms appear, we drop
+        return [
+            r for r in rules if not any(r.rule_id.endswith(x) for x in filter_endswith)
+        ]
+
+    # this means if any if the filter terms appear, we keep
     return [r for r in rules if any(r.rule_id.endswith(x) for x in filter_endswith)]

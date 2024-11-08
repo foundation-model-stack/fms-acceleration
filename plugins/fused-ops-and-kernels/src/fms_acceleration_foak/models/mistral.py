@@ -136,6 +136,6 @@ def get_mp_rules(base_type: str, config: PretrainedConfig):
             "thus disabling LoRA fused-op for MLP, since only SwiGLU "
             "is supported. This only affects quantized-peft."
         )
-        rules = filter_mp_rules(rules, {"mlp"})
+        rules = filter_mp_rules(rules, {"mlp"}, drop=True)
 
     return rules
