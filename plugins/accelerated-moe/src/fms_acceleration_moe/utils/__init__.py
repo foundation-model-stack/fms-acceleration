@@ -19,9 +19,11 @@ from .scattermoe_prepare import prepare_scattermoe
 # this is a special patch function to disable foreach for
 # dtensors, which has been introduced since torch 2.4.
 # The reason is because this will cause problems in the optimizer
-# lerp.
+# RuntimeError: aten._foreach_mul_.Scalar: got mixed torch.Tensor and DTensor,
+# need to convert all torch.Tensor to DTensor before calling distributed operators!
 
 
+# - this function patches torch
 def patch_torch_optim_foreach_to_not_apply_to_dtensors():
     # guarded.
     # this is an array of supported types, we will remove

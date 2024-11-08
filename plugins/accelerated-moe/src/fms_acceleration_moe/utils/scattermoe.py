@@ -39,7 +39,7 @@ except ImportError as e:
     ) from e
 
 # Local
-from .scattermoe_constants import SCATTERMOE_SPEC_HAS_GATE_WEIGHT
+from .scattermoe_constants import SCATTERMOE_SPEC_HAS_GATE
 from .scattermoe_utils import all_to_all_gather_inputs, scatter_with_routing_weights
 
 
@@ -306,7 +306,7 @@ class ScatterMoE(torch.nn.Module):
             device=device,
             lora_config=lora_config,
         )
-        if mlp_arch == SCATTERMOE_SPEC_HAS_GATE_WEIGHT:
+        if mlp_arch == SCATTERMOE_SPEC_HAS_GATE:
             self.w3 = ScatteredExperts(
                 in_features=self.hidden_size,
                 out_features=self.intermediate_size,

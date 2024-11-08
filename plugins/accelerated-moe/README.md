@@ -16,7 +16,24 @@ Plugin | Description | Depends | Loading | Augmentation | Callbacks
 Our `ScatterMoe` implementation is a module-swap; to add new models we need to update the specifications in [scattermoe_constants.py](./src/fms_acceleration_moe/utils/scattermoe_constants.py).
 - See the code documentation within to understand how to add new models.
 
-### Code Extracted from Megablocks
+### Using ScatterMoE Saved Checkpoints
+
+`ScatterMoE` checkpoints are saved using `torch.distributed.checkpoint` (DCP) and which is by default `StateDictType.SHARDED_STATE_DICT`:
+- `DTensors` limited support for full state dicts. 
+- sharded state dicts are the extremely efficient, and require little comms overhead when saving.
+
+We provide a script to recover back the original checkpoint:
+- currently the script is only tested in the case where DCP has saved the model in a single node.
+
+If the checkpoint is stored in `hf/checkpoint-10`, call the following to have the converted checkpoint written into `output_dir`:
+
+```
+python -m fms_acceleration_moe.utils.checkpoint_utils \
+    hf/checkpoint-10 output_dir \
+    mistralai/Mixtral-8x7B-Instruct-v0.1
+```
+
+## Code Extracted from Megablocks
 
 Notes on code extraction:
 - we have only extracted two `autograd` functions [GatherOp](https://github.com/databricks/megablocks/blob/main/megablocks/ops/gather.py) and [ScatterOp](https://github.com/databricks/megablocks/blob/main/megablocks/ops/scatter.py),
@@ -71,6 +88,5 @@ These are currently some known issues not yet resolved:
 - The design currently does a swap for the mixture-of-expert module with [ScatterMoE](./src/fms_acceleration_moe/utils/scattermoe.py). This affects the `state_dict` of the model, so any saved checkpoint may need to be converted back to original.
 - should eventually remove the dependency on an external `kernel-hyperdrive` repository.
 - now support only loading *sharded* `safetensor` non-GGUF MoE checkpoints. This is a reasonable assumption since MoE checkpoints are typically above the size limit that prevents it being saved into a single checkpoint filed.
-- currently only supports `StateDictType.SHARDED_STATE_DICT` because the implementation uses `DTensors` which have limited support for full state dicts. However for efficiency considerations, sharded state dicts are the most efficient. 
 
 

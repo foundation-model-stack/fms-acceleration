@@ -31,10 +31,14 @@ from .utils import (
 # pylint: disable=too-many-instance-attributes
 class ScatterMoEAccelerationPlugin(AccelerationPlugin):
 
-    # NOTE: its not packaged properly so, "importlib.util.find_spec('khd')"
-    # returns but "importlib.metadata.version('kernel-hyperdrive') is needed"
-    # require_packages = {"khd"}
-    # NOTE: will address this later if we remove the dependency on kernel-hyperdrive
+    # NOTE: we cannot do 
+    # - require_packages = {"khd"}
+    # this is because the khd fork is not properly packaged as a PyPI project, and so
+    # - "importlib.util.find_spec('khd')" returns, but 
+    # - "importlib.metadata.version('kernel-hyperdrive')" does not return 
+    # if we decide to extract the kernels, then we do not need to anymore, 
+    # https://github.com/foundation-model-stack/fms-acceleration/issues/105
+
     restricted_model_archs = ["GraniteMoeForCausalLM", "MixtralForCausalLM"]
 
     def __init__(self, configurations: Dict[str, Dict]):
@@ -75,6 +79,7 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
         # NOTE: there is currently no good way to get the mixed precision
         # flag from train_args. It will be better to handle this if
         # when we move the sharding to augmentation.
+        # https://github.com/foundation-model-stack/fms-acceleration/issues/103
 
         return model
 

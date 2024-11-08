@@ -46,13 +46,20 @@ logger = get_logger(__name__)
 # - variable to capture the model variable
 #   in the save/load model calls
 MODEL_INDEX = None
+KEY_MODEL = "model"
+KEY_OPTIMIZER = "optimizer"
 
-# Below are rewrite of functions to be able to handle dtensors
+# Below are rewrite of HF FSDP model saving functions to be able to handle
+# that the parameters are now a mixture of regular and Dtensors.
+# - these functions are found in accelerate.utils.fsdp_utils.py
+# - save_fsdp_model, save_fsdp_optimizer, load_fsdp_model, load_fsdp_optimizer
+# NOTE: we will observe warnings such as
+# /torch/distributed/checkpoint/state_dict.py:520:
+# FutureWarning: Please use DTensor instead and we are deprecating ShardedTensor.
 
 
 # rewrite of func from accelerate.utils.fsdp_utils.py
-# - empty function, as main logic is in the optimizer call
-#  save_fsdp_optimizer (see below).
+# - empty function, the main logic will be in save_fsdp_optimizer (see below).
 def save_fsdp_model(
     fsdp_plugin, accelerator, model, output_dir, model_index=0, adapter_only=False
 ):
@@ -62,7 +69,7 @@ def save_fsdp_model(
 
 
 # rewrite of func from accelerate.utils.fsdp_utils.py
-# - saves both model and optimizer
+# - saves both model and optimizer at the same time
 def save_fsdp_optimizer(
     fsdp_plugin, accelerator, optimizer, model, output_dir, optimizer_index=0
 ):
@@ -80,7 +87,7 @@ def save_fsdp_optimizer(
     os.makedirs(ckpt_model, exist_ok=True)
     logger.info(f"Saving model to {ckpt_model}")
     dcp.save(
-        state_dict={"model": model_state_dict},
+        state_dict={KEY_MODEL: model_state_dict},
         storage_writer=dcp.FileSystemWriter(ckpt_model),
         planner=DefaultSavePlanner(),
     )
@@ -91,7 +98,7 @@ def save_fsdp_optimizer(
     os.makedirs(ckpt_opt, exist_ok=True)
     logger.info(f"Saving Optimizer state to {ckpt_opt}")
     dcp.save(
-        state_dict={"optimizer": optimizer_state_dict},
+        state_dict={KEY_OPTIMIZER: optimizer_state_dict},
         storage_writer=dcp.FileSystemWriter(ckpt_opt),
         planner=DefaultSavePlanner(),
     )
@@ -99,8 +106,7 @@ def save_fsdp_optimizer(
 
 
 # rewrite of func from accelerate.utils.fsdp_utils.py
-# - empty function, as main logic is in the optimizer call
-#  load_fsdp_optimizer (see below).
+# - empty function, main logic in load_fsdp_optimizer (see below).
 def load_fsdp_model(
     fsdp_plugin, accelerator, model, input_dir, model_index=0, adapter_only=False
 ):
@@ -133,7 +139,7 @@ def load_fsdp_optimizer(
     # - load the model state dict
     ckpt_model = os.path.join(input_dir, f"{FSDP_MODEL_NAME}_{MODEL_INDEX}")
     dcp.load(
-        state_dict={"model": model_state_dict},
+        state_dict={KEY_MODEL: model_state_dict},
         storage_reader=dcp.FileSystemReader(ckpt_model),
         planner=DefaultLoadPlanner(),
     )
@@ -141,7 +147,7 @@ def load_fsdp_optimizer(
     # - load the optimizer state dict
     ckpt_opt = os.path.join(input_dir, f"{OPTIMIZER_NAME}_{optimizer_index}")
     dcp.load(
-        state_dict={"optimizer": optimizer_state_dict},
+        state_dict={KEY_OPTIMIZER: optimizer_state_dict},
         storage_reader=dcp.FileSystemReader(ckpt_opt),
         planner=DefaultLoadPlanner(),
     )
@@ -154,10 +160,16 @@ def load_fsdp_optimizer(
         optim_state_dict=optimizer_state_dict,
     )
 
-    # HACK for now
-    # - if seems that if params is empty, then the loading has someo
-    #    problems
-    # - so for now, we just dump some random defaults
+    # FIXME:
+    # - We see errors that occur in optimizer.step()
+    # - torch/optim/optimizer.py", line 89, in _use_grad
+    # - torch/optim/adamw.py", line 214, in step beta1,
+    #   beta2 = cast(Tuple[float, float], group["betas"])
+    # - KeyError: 'betas'
+    # - Fortunately, this seems to be limited to the empty groups case, where
+    #   it seems that it is just the params are not initialized. Since we suppose
+    #   these groups are never used, we simply initialize the empty groups with
+    #   random values so the errors do not throw.
     for group in optimizer.param_groups:
         if len(group["params"]) == 0:
             group["betas"] = (0.9, 0.999)
@@ -182,8 +194,8 @@ def patch_huggingface_save_and_load_for_dtensors():
     patch_target_module("transformers.trainer.load_fsdp_optimizer", load_fsdp_optimizer)
 
 
-# trick to get the resolved cache file to acccess the safetensor
-# NOTE: this does not work if _dict_from_json_file, like GGUF files
+# this function implements a trick to get the resolved cache file to acccess the safetensor
+# - NOTE: does not work if _dict_from_json_file is not called, such as in the case of GGUF files.
 def get_resolved_checkpoint_location(model_name_or_path: str):
 
     result = None
@@ -201,14 +213,17 @@ def get_resolved_checkpoint_location(model_name_or_path: str):
     return os.path.dirname(result)
 
 
-def restore_scattermoe_checkpoint_to_orig(
+# function to get the ScatterMoE state dict from its DCP checkpoint
+# - if the original pretrained_model_name_or_path is specified, will use the checkpoint as hints
+#   to map the ScatterMoE checkpoint to that of the original model. This is useful so that we
+#   can restore the checkpoint to be loaded by the original architecture.
+def get_scattermoe_state_dict(
     dcp_checkpoint_dir: str,
     pretrained_model_name_or_path: str = None,
-    dcp_outer_key: str = "model",
 ):
     """
     Parameters:
-        dcp_checkpoint_dir (str): the dcp to be converted.
+        dcp_checkpoint_dir (str): the DCP to be converted.
         pretrained_model_name_or_path (str): Optional, if provided we will
             use the hints to remap the
     """
@@ -230,7 +245,7 @@ def restore_scattermoe_checkpoint_to_orig(
         planner=_EmptyStateDictLoadPlanner(),
         no_dist=True,
     )
-    sd = sd[dcp_outer_key]
+    sd = sd[KEY_MODEL]
 
     # if not provided
     if pretrained_model_name_or_path is None:
@@ -402,6 +417,15 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
+        "dcp_checkpoint_dir",
+        help="Path to the distributed checkpoint.",
+    )
+
+    parser.add_argument(
+        "output_dir", help="Path to the location to write the converted checkpoint."
+    )
+
+    parser.add_argument(
         "pretrained_model_name_or_path",
         help=(
             "In order to reconstruct the state dict, we requre hints from "
@@ -409,3 +433,36 @@ if __name__ == "__main__":
             "checkpoint is obtained)."
         ),
     )
+
+    args = parser.parse_args()
+
+    # search for the checkpint. By the code above, it must
+    # start with FSDP_MODEL_NAME
+    if args.dcp_checkpoint_dir.startswith(FSDP_MODEL_NAME):
+        checkpoint_dir = args.dcp_checkpoint_dir
+    else:
+        checkpoint_dir = [
+            x
+            for x in os.listdir(args.dcp_checkpoint_dir)
+            if os.path.isdir(os.path.join(args.dcp_checkpoint_dir, x))
+            and x.startswith(FSDP_MODEL_NAME)
+        ]
+        if len(checkpoint_dir) > 1:
+            raise ValueError(
+                f"Found > 1 dirs in dcp checkpoint dir {args.dcp_checkpoint_dir} "
+                f"that starts with {FSDP_MODEL_NAME}. Please spectify the exact dir."
+            )
+        if len(checkpoint_dir) == 0:
+            raise ValueError(
+                f"Found no dirs in dcp checkpoint dir {args.dcp_checkpoint_dir} "
+                f"that starts with {FSDP_MODEL_NAME}. Nothing to convert"
+            )
+        checkpoint_dir = os.path.join(args.dcp_checkpoint_dir, checkpoint_dir[0])
+
+    # get the converted statedict
+    state_dict = get_scattermoe_state_dict(
+        checkpoint_dir, args.pretrained_model_name_or_path
+    )
+
+    # save it
+    torch.save(state_dict, args.output_dir)

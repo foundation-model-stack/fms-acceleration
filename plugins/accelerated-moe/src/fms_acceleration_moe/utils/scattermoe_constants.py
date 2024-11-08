@@ -29,7 +29,7 @@ KEY_SCATTERMOE_ROUTER = PARAM_NAME_ROUTER_SCATTERMOE + ".weight"
 # Currently out ScatterMoE drop supports an up/down proj, and
 # and optional gate_proj.
 # - When new architectures are supported this list will update
-SCATTERMOE_SPEC_HAS_GATE_WEIGHT = "has_gate_proj"
+SCATTERMOE_SPEC_HAS_GATE = "Gated"
 
 # - moe_cls
 # - router_name
@@ -66,21 +66,20 @@ SCATTERMOE_CONVERSION_SPEC = {
         "MixtralSparseMoeBlock",
         "gate",
         "experts",
-        SCATTERMOE_SPEC_HAS_GATE_WEIGHT,
+        SCATTERMOE_SPEC_HAS_GATE,
         True,
     ),
     "GraniteMoeForCausalLM": (
         "GraniteMoeMoE",
         "router",
         "input_linear|output_linear|input_linear",
-        SCATTERMOE_SPEC_HAS_GATE_WEIGHT,
+        SCATTERMOE_SPEC_HAS_GATE,
         False,
     ),
 }
 
+
 #  helper function to get the spec based on architectures
-
-
 def get_scattermoe_conv_spec_from_archs(architectures: List[str]):
     # infer the spec
     for archs, spec in SCATTERMOE_CONVERSION_SPEC.items():
