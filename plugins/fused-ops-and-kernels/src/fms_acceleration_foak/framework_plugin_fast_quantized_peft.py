@@ -25,6 +25,7 @@ from transformers.modeling_utils import is_fsdp_enabled
 import torch
 import torch.distributed as dist
 
+
 # consider moving this somewhere else later
 def lora_adapters_switch_ddp_from_fsdp(modules, fsdp_plugin):
     """
@@ -56,7 +57,7 @@ def lora_adapters_switch_ddp_from_fsdp(modules, fsdp_plugin):
         if not A.weight.is_cuda:
             value = A.weight
 
-            if is_fsdp_enabled() and value.device == torch.device('meta'):
+            if is_fsdp_enabled() and value.device == torch.device("meta"):
                 # if low_cpu_mem_mode
                 value = torch.empty(*value.size(), dtype=value.dtype)
 
@@ -68,7 +69,7 @@ def lora_adapters_switch_ddp_from_fsdp(modules, fsdp_plugin):
         if not B.weight.is_cuda:
             value = B.weight
 
-            if is_fsdp_enabled() and value.device == torch.device('meta'):
+            if is_fsdp_enabled() and value.device == torch.device("meta"):
                 value = torch.empty(*value.size(), dtype=value.dtype)
 
             set_module_tensor_to_device(B, "weight", "cuda", value)
@@ -80,6 +81,7 @@ def lora_adapters_switch_ddp_from_fsdp(modules, fsdp_plugin):
         # - this has to be done after all weight replacement happens
         A.weight.register_hook(_all_reduce_hook)
         B.weight.register_hook(_all_reduce_hook)
+
 
 def register_foak_model_patch_rules(base_type):
     # Third Party

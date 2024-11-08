@@ -260,10 +260,16 @@ def matmul_lora(X, W, W_quant, A, B, s, out = None, dropout=None):
     if A is not None:
         # LoRA is enabled
         if dropout is not None:
-            # in order to return the dropped out X to the 
-            # top level, we save it on the dropout module
-            X = dropout(X)
-            dropout.X = X
+            if isinstance(dropout, torch.Tensor):
+                X *= dropout
+            elif isinstance(dropout, torch.nn.Module):
+                # in order to return the dropped out X to the 
+                # top level, we save it on the dropout module
+                X = dropout(X)
+                dropout.X = X
+            else:
+                raise NotImplementedError("dropout must be a tensor or module.")
+
         A, B = A.t(), B.t()
         out += (X @ A.to(dtype)) @ (s * B.to(dtype))
     pass

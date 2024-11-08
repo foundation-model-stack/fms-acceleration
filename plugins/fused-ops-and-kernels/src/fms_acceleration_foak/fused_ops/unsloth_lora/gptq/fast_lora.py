@@ -129,8 +129,13 @@ def matmul_lora_canonicalized(X, W, A, B, s, dropout=None):
 
     out = torch.matmul(X, W)
     if dropout is not None:
-        X = dropout(X)        
-        dropout.X = X
+        if isinstance(dropout, torch.Tensor):
+            X *= dropout
+        elif isinstance(dropout, torch.nn.Module):
+            X = dropout(X)        
+            dropout.X = X
+        else:
+            raise NotImplementedError("dropout must be a tensor or module.")
     A, B = A.t(), B.t()
     out += (X @ A) @ (s * B)
 
@@ -152,9 +157,14 @@ def matmul_lora(X, W, A, B, s, out=None, dropout=None):
     if A is not None:
         # LoRA is enabled
         if dropout is not None:
-            # save post-dropout X for backward computation
-            X = dropout(X)
-            dropout.X = X
+            if isinstance(dropout, torch.Tensor):
+                X *= dropout
+            elif isinstance(dropout, torch.nn.Module):
+                # save post-dropout X for backward computation
+                X = dropout(X)
+                dropout.X = X
+            else:
+                raise NotImplementedError("dropout must be a tensor or module.")
         A, B = A.t(), B.t()
         out += (X @ A.to(dtype)) @ (s * B.to(dtype))
 
@@ -343,7 +353,10 @@ class LoRA_MLP(torch.autograd.Function):
         downW = dequant248(
             down_qweight, down_scales, down_qzeros, down_g_idx, down_bits
         )
-        DW = matmul_lora(dY, downW.t(), downB, downA, downS)
+        DW = matmul_lora(
+            dY, downW.t(), downB, downA, downS,
+            dropout=(downX !=0)
+        )
         # e = e.float()
         # se = 1.0 / (1.0 + torch.exp(-e))
         # f = (se * e).to(dtype)
@@ -377,14 +390,14 @@ class LoRA_MLP(torch.autograd.Function):
         upW = dequant248(up_qweight, up_scales, up_qzeros, up_g_idx, up_bits)
         dX = torch.matmul(df, upW.t())  # , out=X)
         del upW
-        dX += df @ upB.to(dtype).t() @ (upS * upA.to(dtype).t())
+        dX += (upX != 0) * (df @ upB.to(dtype).t() @ (upS * upA.to(dtype).t()))
 
         gateW = dequant248(
             gate_qweight, gate_scales, gate_qzeros, gate_g_idx, gate_bits
         )
         dX += de @ gateW.t()
         del gateW
-        dX += de @ gateB.to(dtype).t() @ (gateS * gateA.to(dtype).t())
+        dX += (gateX != 0) * (de @ gateB.to(dtype).t() @ (gateS * gateA.to(dtype).t()))
 
         # qweight, scales, qzeros, g_idx, bits
         #  upW,    upW_quant,   upA,   upB,   upS,
@@ -648,19 +661,19 @@ class LoRA_QKV(torch.autograd.Function):
         QW = dequant248(Q_qweight, Q_scales, Q_qzeros, Q_g_idx, Q_bits)
         dX = torch.matmul(dQ, QW.t())  # , out=X)
         del QW
-        dX += dQ @ QB.to(dtype).t() @ (QS * QA.to(dtype).t())
+        dX += (QX != 0) * (dQ @ QB.to(dtype).t() @ (QS * QA.to(dtype).t()))
 
         # dK
         KW = dequant248(K_qweight, K_scales, K_qzeros, K_g_idx, K_bits)
         dX += dK @ KW.t()
         del KW
-        dX += dK @ KB.to(dtype).t() @ (KS * KA.to(dtype).t())
+        dX += (KX != 0) * (dK @ KB.to(dtype).t() @ (KS * KA.to(dtype).t()))
 
         # dV
         VW = dequant248(V_qweight, V_scales, V_qzeros, V_g_idx, V_bits)
         dX += dV @ VW.t()
         del VW
-        dX += dV @ VB.to(dtype).t() @ (VS * VA.to(dtype).t())
+        dX += (VX != 0) * (dV @ VB.to(dtype).t() @ (VS * VA.to(dtype).t()))
 
         # Q_qweight, Q_scales, Q_qzeros, Q_wf, Q_g_idx, Q_bits, Q_bias, QA, QB, QS,
         # K_qweight, K_scales, K_qzeros, K_wf, K_g_idx, K_bits, K_bias, KA, KB, KS,
@@ -817,7 +830,7 @@ class LoRA_W(torch.autograd.Function):
         W = dequant248(O_qweight, O_scales, O_qzeros, O_g_idx, O_bits)
         dX = dY @ W.t()
         del W
-        dX += dY @ B.to(dtype).t() @ (S * A.to(dtype).t())
+        dX += (OX !=0) * (dY @ B.to(dtype).t() @ (S * A.to(dtype).t()))
 
         # O_qweight, O_scales, O_qzeros, O_wf, O_g_idx, O_bits, O_bias, A, B, S
         return (
