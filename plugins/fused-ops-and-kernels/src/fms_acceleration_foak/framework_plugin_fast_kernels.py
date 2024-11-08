@@ -29,7 +29,7 @@ from .models.utils import filter_mp_rules
 
 # consider rewriting register_foak_model_patch_rules into something
 # like this also
-def register_foak_model_patch_rules2(
+def register_foak_model_patch_rules(
     base_type: str,
     filter_endswith: Set[str] = None,
     config: PretrainedConfig = None,
@@ -52,8 +52,8 @@ def register_foak_model_patch_rules2(
     # create model specific rules
     rules = [
         *gpt_bigcode.get_mp_rules(base_type),
-        *granite.get_mp_rules(base_type),
-        *llama.get_mp_rules(base_type),
+        *granite.get_mp_rules(base_type, config),
+        *llama.get_mp_rules(base_type, config),
         *mistral.get_mp_rules(base_type, config),
         *mixtral.get_mp_rules(base_type),
     ]
@@ -166,7 +166,7 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
 
         # wrapper function to register foak patches
         # - the base layer setting below will be ignored in non quantized-lora settings
-        register_foak_model_patch_rules2(
+        register_foak_model_patch_rules(
             base_type=self.configurations["base_layer"],
             filter_endswith=terms,
             config=model.config,

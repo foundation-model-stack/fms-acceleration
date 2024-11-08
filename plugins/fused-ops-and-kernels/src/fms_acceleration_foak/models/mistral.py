@@ -44,7 +44,7 @@ from .utils import (
 )
 
 
-def get_mp_rules(base_type: str, config: PretrainedConfig):
+def get_mp_rules(base_type: str, config: PretrainedConfig = None):
     """
     Function to access all patch rules in this module.
     If it is a forward_builder rule with `base_type` in
@@ -130,9 +130,9 @@ def get_mp_rules(base_type: str, config: PretrainedConfig):
     ]
 
     # perform model specific filtering
-    if config.hidden_act != "silu":
+    if config and config.hidden_act != "silu":
         warnings.warn(
-            f"Mixtral activation is {config.hdiden_act}, "
+            f"Mistral activation is {config.hdiden_act}, "
             "thus disabling LoRA fused-op for MLP, since only SwiGLU "
             "is supported. This only affects quantized-peft."
         )

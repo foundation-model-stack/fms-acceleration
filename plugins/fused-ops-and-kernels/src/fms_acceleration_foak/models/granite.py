@@ -14,6 +14,7 @@
 
 # Standard
 from functools import partial
+import warnings
 
 # Third Party
 from fms_acceleration.model_patcher import (
@@ -22,15 +23,23 @@ from fms_acceleration.model_patcher import (
     combine_functions,
     combine_triggers,
 )
+from transformers import PretrainedConfig
 
 # Local
 from ..kernels.unsloth.cross_entropy_loss import FastCrossEntropyLoss
 from ..kernels.unsloth.rms_layernorm import fast_rms_layernorm
 from ..kernels.unsloth.rope_embedding import fast_rope_embedding
-from .utils import KEY_MLP, KEY_O, KEY_QKV, build_lora_fused_ops, trigger_fused_ops
+from .utils import (
+    KEY_MLP,
+    KEY_O,
+    KEY_QKV,
+    build_lora_fused_ops,
+    filter_mp_rules,
+    trigger_fused_ops,
+)
 
 
-def get_mp_rules(base_type: str):
+def get_mp_rules(base_type: str, config: PretrainedConfig = None):
     """
     Function to access all patch rules in this module.
     If it is a forward_builder rule with `base_type` in
@@ -47,7 +56,7 @@ def get_mp_rules(base_type: str):
     except ImportError:
         return []
 
-    return [
+    rules = [
         # TODO: have a generic version of this rule
         # - do regex on RMSNorm class name
         # - check on the tensors required for fast_rms_layernorm
@@ -133,3 +142,14 @@ def get_mp_rules(base_type: str):
             ),
         ),
     ]
+
+    # perform model specific filtering
+    if config and config.hidden_act != "silu":
+        warnings.warn(
+            f"Granite activation is {config.hdiden_act}, "
+            "thus disabling LoRA fused-op for MLP, since only SwiGLU "
+            "is supported. This only affects quantized-peft."
+        )
+        rules = filter_mp_rules(rules, {"mlp"}, drop=True)
+
+    return rules
