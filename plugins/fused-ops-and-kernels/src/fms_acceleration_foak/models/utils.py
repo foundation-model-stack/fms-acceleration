@@ -5,6 +5,7 @@ import os
 
 # Third Party
 from fms_acceleration.model_patcher import ModelPatcherRule, ModelPatcherTrigger
+from transformers import PretrainedConfig
 import torch
 
 # Local
@@ -21,6 +22,10 @@ from ..fused_ops.unsloth_lora.gptq.fast_lora import apply_lora_qkv as fused_op_q
 KEY_QKV = "qkv"
 KEY_O = "o"
 KEY_MLP = "mlp"
+
+# - need to update this for models
+# - activation keys are non-standard
+KEY_HIDDEN_ACTIVATIONS = ["hidden_act", "activation_function"]
 
 FUSED_OPS = {
     "auto_gptq": {
@@ -212,3 +217,16 @@ def filter_mp_rules(
 
     # this means if any if the filter terms appear, we keep
     return [r for r in rules if any(r.rule_id.endswith(x) for x in filter_endswith)]
+
+
+# helper function to get the hidden activation function str
+def get_hidden_activation_fn_key(config: PretrainedConfig):
+    for key in KEY_HIDDEN_ACTIVATIONS:
+        value = getattr(config, key, None)
+        if value:
+            return value
+
+    raise ValueError(
+        "Unable to determine activation function key for "
+        f"architecture {config.architectures}."
+    )

@@ -35,6 +35,7 @@ from .utils import (
     KEY_QKV,
     build_lora_fused_ops,
     filter_mp_rules,
+    get_hidden_activation_fn_key,
     trigger_fused_ops,
 )
 
@@ -144,9 +145,10 @@ def get_mp_rules(base_type: str, config: PretrainedConfig = None):
     ]
 
     # perform model specific filtering
-    if config and config.hidden_act != "silu":
+    act = get_hidden_activation_fn_key(config)
+    if config and act != "silu":
         warnings.warn(
-            f"Granite activation is {config.hdiden_act}, "
+            f"Granite Rules: activation is {act}, "
             "thus disabling LoRA fused-op for MLP, since only SwiGLU "
             "is supported. This only affects quantized-peft."
         )
