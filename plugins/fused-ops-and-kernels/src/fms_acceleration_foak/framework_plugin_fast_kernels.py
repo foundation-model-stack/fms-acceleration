@@ -23,7 +23,7 @@ from transformers import PretrainedConfig, TrainingArguments
 import torch
 
 # Local
-from .framework_plugin_fast_quantized_peft import lora_adapters_switch_ddp_from_fsdp
+from .utils import lora_adapters_switch_ddp_from_fsdp
 from .models.utils import filter_mp_rules
 
 

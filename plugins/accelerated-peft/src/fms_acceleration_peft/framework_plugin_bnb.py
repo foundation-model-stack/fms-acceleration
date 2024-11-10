@@ -235,7 +235,7 @@ class BNBAccelerationPlugin(AccelerationPlugin):
             # the meta device fix for quantized models is since this transformers version
             # or if trl is installed then its only for this version
             if _transformers_version >= "4.45" and (
-                not _trl_installed or (_trl_installed and _trl_version >= "0.12")
+                not _trl_installed or (_trl_installed and _trl_version >= "0.11.4")
             ):
                 # guarded
                 # NOTE: replace this later with a more specific accelerate version check
