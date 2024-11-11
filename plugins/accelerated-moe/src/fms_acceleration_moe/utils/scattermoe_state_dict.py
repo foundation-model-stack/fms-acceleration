@@ -24,7 +24,11 @@ from safetensors import safe_open
 import torch
 
 # Local
-from .scattermoe_constants import DIM_EXPERT, KEY_SCATTERMOE_ROUTER
+from .scattermoe_constants import (
+    DIM_EXPERT,
+    KEY_SCATTERMOE_ROUTER,
+    PARAM_NAME_WEIGHT_SCATTERMOE,
+)
 
 # This function creates a dictionary of keys and paths into the the sharded
 # safetensors checkpoint file, that are relevant to the "prefix" and "instance_name"
@@ -84,8 +88,24 @@ def get_checkpoint_meta_from_sharded_safetensor(
     expert_map: Dict = None,  # map -> [w1,w2,w3]
 ) -> Dict[str, List[Tuple]]:
     """
-    utilty function to infer the mapping from ScatterMoe to incoming model
-    based on the weight_map.
+    utilty function to infer the mapping of ScatterMoe parameters
+    from that of an incoming model model, based on a weight_map from a
+    sharded safetensor.
+
+    Parameters:
+        weight_map (dict): The weight map read in from a safetensor checkpoint.
+        prefix (str): the prefix where the MoE module lives (with respect to orig model).
+        instance_name (str): the name of the MoE module in the orig model
+        router_name (str): name of the router module as it is called in the MoE module
+            in the original model.
+        expert_name (str): name of the experts as they are called in the MoE module in
+            the orignal model. There are two patterns to use this.
+            i) specifiy a single string, and map them based on the
+                e.g., experts.w1 -> w1
+            ii) specify mutiple strings in order of w1, w2, ...
+                e.g., input_linear|output_linear|input_linear
+        expert_map (dict): This is used with pattern ii) described above in expert_name.
+            If not specified, will be the identity map, e.g., w1 -> w1
     """
 
     # insert in order
@@ -110,14 +130,14 @@ def get_checkpoint_meta_from_sharded_safetensor(
         if "|" in expert_name:
             expert_map = {}
             _names = expert_name.split("|")
-            assert len(_names) in {2, 3}, "expert name map has to be length 2/3"
+            assert len(_names) >= 2, "expert name map has to be at least length 2."
 
             for i, n in enumerate(_names):
                 if n not in expert_map:
                     expert_map[n] = []
-                expert_map[n].append(f"w{i+1}")
+                expert_map[n].append(PARAM_NAME_WEIGHT_SCATTERMOE[i])
         else:
-            expert_map = {x: [x] for x in ["w1", "w2", "w3"]}
+            expert_map = {x: [x] for x in PARAM_NAME_WEIGHT_SCATTERMOE}
 
     # state dict -> weights
     # 'router.weight': [(k, file),...]
@@ -166,7 +186,7 @@ def _maybe_reshape_scattermoe_expert_weights(
     intermediate_size: int,
 ):
     (_is_w1, _is_w2, _is_w3) = [
-        f"{x}.weight" in scatter_key for x in ["w1", "w2", "w3"]
+        f"{x}.weight" in scatter_key for x in PARAM_NAME_WEIGHT_SCATTERMOE
     ]
 
     if _is_w1 or _is_w2 or _is_w3:

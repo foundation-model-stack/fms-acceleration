@@ -217,7 +217,7 @@ def get_resolved_checkpoint_location(model_name_or_path: str):
 # - if the original pretrained_model_name_or_path is specified, will use the checkpoint as hints
 #   to map the ScatterMoE checkpoint to that of the original model. This is useful so that we
 #   can restore the checkpoint to be loaded by the original architecture.
-def get_scattermoe_state_dict(
+def recover_original_state_dict_from_dcp_checkpoint(
     dcp_checkpoint_dir: str,
     pretrained_model_name_or_path: str = None,
 ):
@@ -460,7 +460,7 @@ if __name__ == "__main__":
         checkpoint_dir = os.path.join(args.dcp_checkpoint_dir, checkpoint_dir[0])
 
     # get the converted statedict
-    state_dict = get_scattermoe_state_dict(
+    state_dict = recover_original_state_dict_from_dcp_checkpoint(
         checkpoint_dir, args.pretrained_model_name_or_path
     )
 
