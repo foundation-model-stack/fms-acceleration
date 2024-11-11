@@ -60,6 +60,7 @@ scenarios:
         framework_config: 
             - # without acceleration
             - moe-scattermoe-granite-ep8
+            - moe-scattermoe-granite-ep8-foak
         slow: True
         arguments:
             learning_rate: 5e-5

@@ -217,7 +217,7 @@ COMBINATIONS = [
     ("moe-scattermoe-granite-ep4", (KEY_SCATTERMOE_EP4,)),
     ("moe-scattermoe-granite-ep4-padding-free", (KEY_AADP_PADDING_FREE, KEY_SCATTERMOE_EP4,)),
     ("moe-scattermoe-granite-ep8", (KEY_SCATTERMOE_EP8,)),
-    ("moe-scattermoe-granite-ep8-padding-free", (KEY_AADP_PADDING_FREE, KEY_SCATTERMOE_EP8,)),
+    ("moe-scattermoe-granite-ep8-foak", (KEY_FAST_KERNELS, KEY_SCATTERMOE_EP8,)),
 ]
 
 

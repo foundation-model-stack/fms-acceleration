@@ -44,10 +44,12 @@ Notes on code extraction:
 
 Run the below in the top-level directory of this repo:
 - the `scattermoe` dep is not included by default, so the `-x` switch installs it.
+- consider disabling the `torch` memory logging to see improved speeds.
 
 ```
 tox -e run-benches \
     -x testenv:run-benches.deps+="-r plugins/accelerated-moe/requirements-khd.txt" \
+    -x testenv:run-benches.setenv+="MEMORY_LOGGING=nividia" \
     -- \
     "1 2 4" 128 benchmark_outputs scenarios-moe.yaml accelerated-moe-scatter
 ```

@@ -113,8 +113,8 @@ framework_configs:
         - accelerated-moe
       filename: moe-scattermoe-granite-ep8-sample-configuration.yaml
 
-    - shortname: moe-scattermoe-granite-ep8-padding-free
+    - shortname: moe-scattermoe-granite-ep8-foak
       plugins:
         - accelerated-moe
-        - attention-and-distributed-packing
-      filename: moe-scattermoe-granite-ep8-padding-free-sample-configuration.yaml
+        - fused-ops-and-kernels
+      filename: moe-scattermoe-granite-ep8-foak-sample-configuration.yaml
