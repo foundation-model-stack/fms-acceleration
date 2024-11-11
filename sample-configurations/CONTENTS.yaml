@@ -74,7 +74,7 @@ framework_configs:
         - fused-ops-and-kernels
       filename: foak-fast-kernels-sample-configuration.yaml
 
-    # moe configs
+    # -------  MOE CONFIGS ----------
     - shortname: moe-scattermoe-granite-ep1
       plugins:
         - accelerated-moe
@@ -85,6 +85,13 @@ framework_configs:
         - accelerated-moe
         - attention-and-distributed-packing
       filename: moe-scattermoe-granite-ep1-padding-free-sample-configuration.yaml
+
+    - shortname: moe-scattermoe-granite-ep1-padding-free-foak
+      plugins:
+        - accelerated-moe
+        - attention-and-distributed-packing
+        - fused-ops-and-kernels
+      filename: moe-scattermoe-granite-ep1-padding-foak-free-sample-configuration.yaml
 
     - shortname: moe-scattermoe-granite-ep2
       plugins:
@@ -97,6 +104,13 @@ framework_configs:
         - attention-and-distributed-packing
       filename: moe-scattermoe-granite-ep2-padding-free-sample-configuration.yaml
 
+    - shortname: moe-scattermoe-granite-ep2-padding-free-foak
+      plugins:
+        - accelerated-moe
+        - attention-and-distributed-packing
+        - fused-ops-and-kernels
+      filename: moe-scattermoe-granite-ep2-padding-foak-free-sample-configuration.yaml
+
     - shortname: moe-scattermoe-granite-ep4
       plugins:
         - accelerated-moe
@@ -107,6 +121,13 @@ framework_configs:
         - accelerated-moe
         - attention-and-distributed-packing
       filename: moe-scattermoe-granite-ep4-padding-free-sample-configuration.yaml
+
+    - shortname: moe-scattermoe-granite-ep4-padding-free-foak
+      plugins:
+        - accelerated-moe
+        - attention-and-distributed-packing
+        - fused-ops-and-kernels
+      filename: moe-scattermoe-granite-ep4-padding-foak-free-sample-configuration.yaml
 
     - shortname: moe-scattermoe-granite-ep8
       plugins:

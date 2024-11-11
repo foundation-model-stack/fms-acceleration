@@ -212,10 +212,13 @@ COMBINATIONS = [
     ("foak-fast-kernels", (KEY_FAST_KERNELS,)),
     ("moe-scattermoe-granite-ep1", (KEY_SCATTERMOE_EP1,)),
     ("moe-scattermoe-granite-ep1-padding-free", (KEY_AADP_PADDING_FREE, KEY_SCATTERMOE_EP1,)),
+    ("moe-scattermoe-granite-ep1-padding-free-foak", (KEY_AADP_PADDING_FREE, KEY_FAST_KERNELS, KEY_SCATTERMOE_EP1,)),
     ("moe-scattermoe-granite-ep2", (KEY_SCATTERMOE_EP2,)),
     ("moe-scattermoe-granite-ep2-padding-free", (KEY_AADP_PADDING_FREE, KEY_SCATTERMOE_EP2,)),
+    ("moe-scattermoe-granite-ep2-padding-free-foak", (KEY_AADP_PADDING_FREE, KEY_FAST_KERNELS, KEY_SCATTERMOE_EP2,)),
     ("moe-scattermoe-granite-ep4", (KEY_SCATTERMOE_EP4,)),
     ("moe-scattermoe-granite-ep4-padding-free", (KEY_AADP_PADDING_FREE, KEY_SCATTERMOE_EP4,)),
+    ("moe-scattermoe-granite-ep4-padding-free-foak", (KEY_AADP_PADDING_FREE, KEY_FAST_KERNELS, KEY_SCATTERMOE_EP4,)),
     ("moe-scattermoe-granite-ep8", (KEY_SCATTERMOE_EP8,)),
     ("moe-scattermoe-granite-ep8-foak", (KEY_FAST_KERNELS, KEY_SCATTERMOE_EP8,)),
 ]
