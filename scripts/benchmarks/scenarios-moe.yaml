@@ -43,8 +43,11 @@ scenarios:
             - moe-scattermoe-granite-ep2
             - moe-scattermoe-granite-ep4
             - moe-scattermoe-granite-ep1-padding-free
+            - moe-scattermoe-granite-ep1-padding-free-foak
             - moe-scattermoe-granite-ep2-padding-free
+            - moe-scattermoe-granite-ep2-padding-free-foak
             - moe-scattermoe-granite-ep4-padding-free
+            - moe-scattermoe-granite-ep4-padding-free-foak
         arguments:
             learning_rate: 5e-5
             torch_dtype: bfloat16

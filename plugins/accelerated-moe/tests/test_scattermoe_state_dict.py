@@ -119,13 +119,13 @@ PARAMETERS = [
 
 @pytest.mark.parametrize(
     (
-        "sharded_ckpt,prefix,module_name,router_name,expert_name,",
-        "num_layers,num_experts,expert_keys,sharded_ckpt",
+        "sharded_ckpt,prefix,module_name,router_name,expert_name,"
+        "num_layers,num_experts,expert_keys"
     ),
     PARAMETERS,
 )
 def test_get_metadata_from_sharded_safetensor_correctly(
-    sharded_cpkt: bool,
+    sharded_ckpt: bool,
     prefix: str,
     module_name: str,
     router_name: str,
@@ -135,7 +135,7 @@ def test_get_metadata_from_sharded_safetensor_correctly(
     expert_keys: List[str],
 ):
 
-    if sharded_cpkt:
+    if sharded_ckpt:
         weight_map = build_dummy_weight_map_sharded_moe(
             prefix,
             module_name,
@@ -170,7 +170,7 @@ def test_get_metadata_from_sharded_safetensor_correctly(
         assert _key in ckpt_metadata, f"unable top map scattermoe expert weight {n}."
 
         _n = len(ckpt_metadata[_key])
-        if sharded_cpkt:
+        if sharded_ckpt:
             assert (
                 _n == num_experts
             ), f"missing expert weights, only mapped {_n} weights out of {num_experts}."

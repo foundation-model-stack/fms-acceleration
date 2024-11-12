@@ -76,13 +76,14 @@ bash run_benchmarks.sh NUM_GPUS_MATRIX RESULT_DIR SCENARIOS_CONFIG SCENARIOS_FIL
 ```
 where:
 - `NUM_GPUS_MATRIX`: list of `num_gpu` settings to bench for, e.g. `"1 2"` will bench for 1 and 2 gpus.
+- `EFFECTIVE_BS_MATRIX`: list of effective batch sizes, e.g., `"4 8"` will bench for effective batch sizes 4 and 8.
 - `RESULT_DIR`: where the benchmark results will be placed.
 - `SCENARIOS_CONFIG`: the `scenarios.yaml` file.
 - `SCENARIOS_CONFIG`: specify to run only a specific `scenario` by providing the specific `scenario` name.
 
 The recommended way to run `benchmarks.sh` is using `tox` which handles the dependencies:
 ```
-tox -e run-benches -- NUM_GPUS_MATRIX RESULT_DIR SCENARIOS_CONFIG SCENARIOS_FILTER
+tox -e run-benches -- NUM_GPUS_MATRIX EFFECTIVE_BS_MATRIX RESULT_DIR SCENARIOS_CONFIG SCENARIOS_FILTER
 ```
 
 Alternatively run [`benchmark.py`](./benchmark.py) directly. To see the help do:

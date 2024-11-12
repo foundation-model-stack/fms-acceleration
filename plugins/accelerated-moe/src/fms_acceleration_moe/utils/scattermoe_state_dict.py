@@ -132,8 +132,8 @@ def get_checkpoint_meta_from_sharded_safetensor(
             _names = expert_name.split("|")
             _n, _n2 = len(_names), len(PARAM_NAME_WEIGHT_SCATTERMOE)
             assert (
-                2 <= _n < _n2
-            ), f"If expert_name has |, expect between 2 and {_n2} entries."
+                2 <= _n <= _n2
+            ), f"If expert_name has |, expect between 2 and {_n2} entries, but got {_n}."
 
             for i, n in enumerate(_names):
                 if n not in expert_map:

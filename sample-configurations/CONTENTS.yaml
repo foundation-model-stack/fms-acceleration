@@ -91,7 +91,7 @@ framework_configs:
         - accelerated-moe
         - attention-and-distributed-packing
         - fused-ops-and-kernels
-      filename: moe-scattermoe-granite-ep1-padding-foak-free-sample-configuration.yaml
+      filename: moe-scattermoe-granite-ep1-padding-free-foak-sample-configuration.yaml
 
     - shortname: moe-scattermoe-granite-ep2
       plugins:
@@ -109,7 +109,7 @@ framework_configs:
         - accelerated-moe
         - attention-and-distributed-packing
         - fused-ops-and-kernels
-      filename: moe-scattermoe-granite-ep2-padding-foak-free-sample-configuration.yaml
+      filename: moe-scattermoe-granite-ep2-padding-free-foak-sample-configuration.yaml
 
     - shortname: moe-scattermoe-granite-ep4
       plugins:
@@ -127,7 +127,7 @@ framework_configs:
         - accelerated-moe
         - attention-and-distributed-packing
         - fused-ops-and-kernels
-      filename: moe-scattermoe-granite-ep4-padding-foak-free-sample-configuration.yaml
+      filename: moe-scattermoe-granite-ep4-padding-free-foak-sample-configuration.yaml
 
     - shortname: moe-scattermoe-granite-ep8
       plugins:
