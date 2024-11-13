@@ -1,4 +1,5 @@
 # Copyright The FMS HF Tuning Authors
+# Copyright 2023 MegaBlocks authors
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,13 +13,5 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-KEY_PLUGINS = "plugins"
-PLUGIN_PREFIX = "fms_acceleration_"
-
-ACCELERATION_FRAMEWORK_ENV_KEY = "ACCELERATION_FRAMEWORK_CONFIG_FILE"
-
-# the order below is a linear precedence in which the plugins will be registered
-# and activated.
-# - hence the plugins that have model loaders should be on top of this list
-
-PLUGINS = ["peft", "foak", "aadp", "moe"]
+# Local
+from .expert_parallel import all_to_all_gather_inputs, scatter_with_routing_weights

@@ -305,12 +305,34 @@ class ConfigUtils:
             argument_list = ConfigUtils.convert_keyvalue_arguments_to_list(
                 combined_args
             )
-            argument_list.extend(
-                [
-                    "--per_device_train_batch_size",
-                    str(effective_batch_size // num_gpus),
-                ]
-            )
+            pdtbs = combined_args.get('per_device_train_batch_size')
+            grad_accum = combined_args.get('gradient_accumulation_steps')
+            if pdtbs is None and grad_accum is not None:
+                if grad_accum > 1:
+                    warnings.warn(
+                        f"Found gradient_accumulation_steps={grad_accum} and "
+                        "no per_device_train_batch_size specified, but for backward "
+                        "compatibility, ignoring gradient_accum in batch size "
+                        "computation (this behavior may change in the future)."
+                    )
+                argument_list.extend(
+                    [
+                        "--per_device_train_batch_size",
+                        str(effective_batch_size // num_gpus),
+                    ]
+                )
+            elif grad_accum is None and pdtbs is not None:
+                argument_list.extend(
+                    [
+                        "--gradient_accumulation_steps",
+                        str(effective_batch_size // num_gpus // pdtbs),
+                    ]
+                )
+            else:
+                raise ValueError(
+                    "Please specify only either per_device_train_batch_size or gradient_accumulation_steps "
+                    "and not both."
+                )
             args.append((num_gpus, framework_config, argument_list))
         return args
 
@@ -358,6 +380,12 @@ class ScenarioMatrix:
 
     def __init__(self, scenario: Dict, acceleration_config_map: Dict = None) -> None:
         assert "arguments" in scenario.keys(), "Missing `arguments` key in `scenario`"
+
+        # "slow" is a special key that indicates this scenario
+        # takes resources to run
+        # - "slow" scenarios are not run if not specified by a filter
+        self.slow = False
+
         for key, val in scenario.items():
             if key == "framework_config":
                 # if acceleration_config_map is None, then do not do mapping
@@ -689,7 +717,18 @@ def prepare_arguments(args, benchmark_dataset: BenchmarkDataset):
         if args.run_only_scenarios and _scn_name not in args.run_only_scenarios:
             print(f"Skipping scenario '{_scn_name}'")
             continue
+
+        # build scenario matrix
         scenario = ScenarioMatrix(scenario_config, acceleration_config_map)
+
+        if (
+            not args.run_only_scenarios
+            and scenarios.slow
+        ):
+            # unfiltered runs omit all "slow" marked scenarios
+            print(f"Skipping slow scenario '{_scn_name}' beacuse run_only_scenarios=None.")
+            continue
+
         scenario_matrices, scenario_constants = (
             scenario.get_scenario_matrices_and_defaults()
         )
