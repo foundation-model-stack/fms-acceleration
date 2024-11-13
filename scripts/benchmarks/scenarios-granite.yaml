@@ -108,3 +108,19 @@ scenarios:
     #         target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
     #         model_name_or_path: 
     #             - 'ibm/PowerLM-3b'
+
+    -   name: accelerated-moe
+        framework_config: 
+            - # without acceleration
+            - moe-scattermoe-granite
+            # add pf
+        slow: True
+        arguments:
+            learning_rate: 5e-5
+            torch_dtype: bfloat16
+            gradient_accumulation_steps: 16
+            logging_steps: 1
+            packing: False
+            adam_epsilon: 1e-8
+            model_name_or_path: 
+                - 'ibm/PowerMoE-3b'

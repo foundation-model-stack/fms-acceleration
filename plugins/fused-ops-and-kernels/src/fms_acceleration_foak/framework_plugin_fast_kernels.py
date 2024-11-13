@@ -44,6 +44,7 @@ def register_foak_model_patch_rules(
     from .models import (  # pylint: disable=import-outside-toplevel
         gpt_bigcode,
         granite,
+        granitemoe,
         llama,
         mistral,
         mixtral,
@@ -53,6 +54,7 @@ def register_foak_model_patch_rules(
     rules = [
         *gpt_bigcode.get_mp_rules(base_type),
         *granite.get_mp_rules(base_type, config),
+        *granitemoe.get_mp_rules(base_type),
         *llama.get_mp_rules(base_type, config),
         *mistral.get_mp_rules(base_type, config),
         *mixtral.get_mp_rules(base_type),
@@ -82,6 +84,7 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
     # NOTE: may remove this when we have generic model rules
     restricted_model_archs = [
         "GraniteForCausalLM",
+        "GraniteMoeForCausalLM",
         "GPTBigCodeForCausalLM",
         "MixtralForCausalLM",
         "LlamaForCausalLM",
