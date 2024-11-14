@@ -55,7 +55,7 @@ plugins:
         fast_loss: true
 
         # fast rms norm triton kernels
-        fast_rsm_layernorm: true
+        fast_rms_layernorm: true
 
         # fast RoPE embedding triton kernels
         fast_rope_embeddings: true

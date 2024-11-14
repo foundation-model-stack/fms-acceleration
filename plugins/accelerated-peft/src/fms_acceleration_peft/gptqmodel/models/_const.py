@@ -25,6 +25,7 @@ SUPPORTED_MODELS = [
     "llama",
     "mistral",
     "mixtral",
+    "granite",
     "gemma",
     "dbrx_converted",
 ]

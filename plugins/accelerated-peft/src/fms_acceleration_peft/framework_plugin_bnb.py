@@ -25,7 +25,11 @@ import warnings
 from fms_acceleration import AccelerationPlugin
 from peft import LoraConfig, get_peft_model
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig, TrainingArguments
+from transformers.utils.import_utils import _is_package_available
 import torch
+
+# Local
+from .fsdp_utils import put_selected_meta_tensors_on_cpu
 
 
 # this is a modified copy of the function from peft.utils.other, that we
@@ -120,6 +124,7 @@ class BNBAccelerationPlugin(AccelerationPlugin):
             and os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true"
         ):
             config_kwargs["bnb_4bit_quant_storage"] = torch_dtype
+
         elif world_size > 1:
             warnings.warn(
                 "Running in distributed mode but bnb_4bit_quant_storage is not set. "
@@ -152,6 +157,27 @@ class BNBAccelerationPlugin(AccelerationPlugin):
             attn_implementation=attn_implementation,
         )
 
+        if (
+            world_size > 1
+            and os.environ.get("ACCELERATE_USE_FSDP", "false").lower() == "true"
+        ):
+            config_kwargs["bnb_4bit_quant_storage"] = torch_dtype
+
+            _, _transformers_version = _is_package_available(
+                "transformers", return_version=True
+            )
+            _trl_installed, _trl_version = _is_package_available(
+                "trl", return_version=True
+            )
+
+            if _transformers_version >= "4.45" and (
+                not _trl_installed or (_trl_installed and _trl_version >= "0.12")
+            ):
+                # in low_cpu_mem_mode, if certain tensors like embeddings
+                # are in the meta device, then certain operations like
+                # embedding resizing will fail
+                put_selected_meta_tensors_on_cpu(model)
+
         return model
 
     @property
@@ -169,6 +195,11 @@ class BNBAccelerationPlugin(AccelerationPlugin):
         train_args: TrainingArguments,
         modifiable_args: Tuple[LoraConfig],
     ):
+        # - when using our prepare peft, we will enforce the mixed precision settings
+        assert (
+            train_args.bf16 is True or train_args.fp16 is True
+        ), f"{self.__class__} requires mixed precision argument `--fp16` or `--bf16`"
+
         (peft_config,) = modifiable_args  # unpack modifiable args
 
         # some assertions
@@ -185,6 +216,49 @@ class BNBAccelerationPlugin(AccelerationPlugin):
         model = get_peft_model(model, peft_config)
         modifiable_args = (None,)  # return a None
         return model, modifiable_args
+
+    def get_callbacks_and_ready_for_train(
+        self, model: torch.nn.Module = None, accelerator=None
+    ):
+        callbacks = []
+        if (
+            accelerator is not None
+            and getattr(accelerator.state, "fsdp_plugin", None) is not None
+        ):
+            _, _transformers_version = _is_package_available(
+                "transformers", return_version=True
+            )
+            _trl_installed, _trl_version = _is_package_available(
+                "trl", return_version=True
+            )
+
+            # the meta device fix for quantized models is since this transformers version
+            # or if trl is installed then its only for this version
+            if _transformers_version >= "4.45" and (
+                not _trl_installed or (_trl_installed and _trl_version >= "0.11.4")
+            ):
+                # guarded
+                # NOTE: replace this later with a more specific accelerate version check
+                try:
+                    # Third Party
+                    # pylint: disable=import-outside-toplevel
+                    from torch.distributed.utils import ensure_weights_retied
+
+                    # then its handled internally and there is nothing to do
+                except ImportError:
+                    # need to use our internal version
+                    # Local
+                    from .fsdp_utils import (  # pylint: disable=import-outside-toplevel
+                        ensure_weights_retied,
+                    )
+
+                    accelerator.state.fsdp_plugin.param_init_fn = ensure_weights_retied(
+                        accelerator.state.fsdp_plugin.param_init_fn,
+                        model if self._no_peft_model else model.get_base_model(),
+                        accelerator.device,
+                    )
+
+        return callbacks
 
 
 # register

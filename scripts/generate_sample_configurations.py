@@ -151,6 +151,10 @@ KEY_AADP_PADDING_FREE = "aadp-padding-free"
 KEY_AADP_MULTIPACK = "aadp-multipack"
 KEY_FAST_KERNELS = "foak-fast-kernels"
 KEY_FAST_KERNELS_LIGER = "foak-fast-kernels-liger"
+KEY_SCATTERMOE_EP1 = "moe-scattermoe-ep1"
+KEY_SCATTERMOE_EP2 = 'moe-scattermoe-ep2'
+KEY_SCATTERMOE_EP4 = 'moe-scattermoe-ep4'
+KEY_SCATTERMOE_EP8 = 'moe-scattermoe-ep8'
 
 CONFIGURATIONS = {
     KEY_AUTO_GPTQ: "plugins/accelerated-peft/configs/autogptq.yaml",
@@ -185,6 +189,19 @@ CONFIGURATIONS = {
     KEY_AADP_MULTIPACK: "plugins/attention-and-distributed-packing/configs/multipack.yaml",
     KEY_FAST_KERNELS: "plugins/fused-ops-and-kernels/configs/fast_kernels.yaml",
     KEY_FAST_KERNELS_LIGER: "plugins/fused-ops-and-kernels/configs/fast_kernels_liger.yaml",
+    KEY_SCATTERMOE_EP1: "plugins/accelerated-moe/configs/scattermoe.yaml",
+    KEY_SCATTERMOE_EP2: (
+        "plugins/accelerated-moe/configs/scattermoe.yaml",
+        [("training.moe.scattermoe.ep_degree", 2)],
+    ),
+    KEY_SCATTERMOE_EP4: (
+        "plugins/accelerated-moe/configs/scattermoe.yaml",
+        [("training.moe.scattermoe.ep_degree", 4)],
+    ),
+    KEY_SCATTERMOE_EP8: (
+        "plugins/accelerated-moe/configs/scattermoe.yaml",
+        [("training.moe.scattermoe.ep_degree", 8)],
+    ),
 }
 
 # list of (tag, combi) tuples
@@ -207,9 +224,17 @@ COMBINATIONS = [
     ("accelerated-peft-bnb-nf4-foak-padding-free", (KEY_AADP_PADDING_FREE,KEY_BNB_NF4, KEY_BNB_NF4_FOAK)),
     ("aadp-padding-free-multipack", (KEY_AADP_PADDING_FREE, KEY_AADP_MULTIPACK)),
     ("foak-fast-kernels", (KEY_FAST_KERNELS,)),
-    ("foak-fast-kernels-liger", (KEY_FAST_KERNELS_LIGER,)),
+    ("moe-scattermoe-granite-ep1", (KEY_SCATTERMOE_EP1,)),
+    ("moe-scattermoe-granite-ep1-padding-free-foak", (KEY_AADP_PADDING_FREE, KEY_FAST_KERNELS, KEY_SCATTERMOE_EP1,)),
+    ("moe-scattermoe-granite-ep2", (KEY_SCATTERMOE_EP2,)),
+    ("moe-scattermoe-granite-ep2-padding-free", (KEY_AADP_PADDING_FREE, KEY_SCATTERMOE_EP2,)),
+    ("moe-scattermoe-granite-ep2-padding-free-foak", (KEY_AADP_PADDING_FREE, KEY_FAST_KERNELS, KEY_SCATTERMOE_EP2,)),
+    ("moe-scattermoe-granite-ep4", (KEY_SCATTERMOE_EP4,)),
+    ("moe-scattermoe-granite-ep4-padding-free", (KEY_AADP_PADDING_FREE, KEY_SCATTERMOE_EP4,)),
+    ("moe-scattermoe-granite-ep4-padding-free-foak", (KEY_AADP_PADDING_FREE, KEY_FAST_KERNELS, KEY_SCATTERMOE_EP4,)),
+    ("moe-scattermoe-granite-ep8", (KEY_SCATTERMOE_EP8,)),
+    ("moe-scattermoe-granite-ep8-foak", (KEY_FAST_KERNELS, KEY_SCATTERMOE_EP8,)),
 ]
-
 
 # TODO: throw error if merge conflicts
 def merge_configs(config_contents: List[Dict]):

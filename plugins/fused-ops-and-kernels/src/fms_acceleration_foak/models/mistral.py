@@ -14,6 +14,7 @@
 
 # Standard
 from functools import partial
+import warnings
 
 # Third Party
 from fms_acceleration.model_patcher import (
@@ -22,6 +23,7 @@ from fms_acceleration.model_patcher import (
     combine_functions,
     combine_triggers,
 )
+from transformers import PretrainedConfig
 from transformers.models.mistral.modeling_mistral import (
     MistralForCausalLM,
     MistralAttention,
@@ -34,9 +36,19 @@ from ..kernels.unsloth.cross_entropy_loss import FastCrossEntropyLoss
 from ..kernels.unsloth.rms_layernorm import fast_rms_layernorm
 from ..kernels.unsloth.rope_embedding import fast_rope_embedding
 from ..kernels.liger.fused_linear_cross_entropy_loss import lce_forward
-from .utils import KEY_MLP, KEY_O, KEY_QKV, build_lora_fused_ops, trigger_fused_ops
 
-def get_mp_rules(base_type):
+from .utils import (
+    KEY_MLP,
+    KEY_O,
+    KEY_QKV,
+    build_lora_fused_ops,
+    filter_mp_rules,
+    get_hidden_activation_fn_key,
+    trigger_fused_ops,
+)
+
+
+def get_mp_rules(base_type: str, config: PretrainedConfig = None):
     """
     Function to access all patch rules in this module.
     If it is a forward_builder rule with `base_type` in
@@ -44,7 +56,7 @@ def get_mp_rules(base_type):
     function as a partial function with the base_type argument
     """
 
-    return [
+    rules = [
         # - do regex on RMSNorm class name
         # - check on the tensors required for fast_rms_layernorm
         ModelPatcherRule(
@@ -125,3 +137,15 @@ def get_mp_rules(base_type):
             ),
         ),
     ]
+
+    # perform model specific filtering
+    act = get_hidden_activation_fn_key(config)
+    if config and act != "silu":
+        warnings.warn(
+            f"Mistral rules: activation is {act}, "
+            "thus disabling LoRA fused-op for MLP, since only SwiGLU "
+            "is supported. This only affects quantized-peft."
+        )
+        rules = filter_mp_rules(rules, {"mlp"}, drop=True)
+
+    return rules

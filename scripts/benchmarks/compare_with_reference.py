@@ -63,24 +63,30 @@ def compare_results(df, ref, plot_columns, threshold_ratio=0.1):
         ref_series = ref[column].fillna(0)
         df_series = df[column].fillna(0)
         # Extract outliers base on some threshold % difference on referance
-        ds = abs(df_series - ref_series) / (ref_series + 1e-9)
-        outliers = ds.index[ds > threshold_ratio].to_list()
+        cmp = ref_series.to_frame()
+        cmp['metric'] = column
+        cmp = cmp.join(df_series.to_frame(), lsuffix='_ref')
+        cmp = cmp.rename(columns={f'{column}_ref': 'reference', column: 'new'})
+        cmp['ds'] = cmp.apply(
+            lambda x: (
+                abs(x.reference - x.new) / (x.reference + 1e-9)
+            ), axis=1
+        )
+        outliers = cmp[cmp.ds > threshold_ratio]
+        outliers = outliers.drop('ds', axis=1)
+
         plot_chart(
             ax,
-            ref_series,
-            df_series,
+            cmp['reference'],
+            cmp['new'],
             title=f"Metric: {column}",
             xlabel="Reference",
             ylabel="New",
         )
         charts.append((ax, f"compare-{column}.jpg"))
-        total_outliers += [
-            [column, *outlier, ref_series[outlier].item(), df_series[outlier].item()]
-            for outlier in outliers
-        ]
-    outliers_df = pd.DataFrame(
-        total_outliers, columns=["scenario", *df.index.names, "reference", "new"]
-    )
+        total_outliers.append(outliers)
+
+    outliers_df = pd.concat(total_outliers)
     return outliers_df, outliers, charts
 
 

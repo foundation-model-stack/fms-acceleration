@@ -43,20 +43,17 @@ scenarios:
         arguments:
             learning_rate: 2e-5
             model_name_or_path: 
-                # - 'ibm/PowerLM-3b'
                 - 'bigcode/gpt_bigcode-santacoder'
                 - 'mistralai/Mistral-7B-v0.1'
                 - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
                 - 'NousResearch/Llama-2-70b-hf'
             torch_dtype: bfloat16
-            bf16: True
 
     -   name: standard-peft
         framework_config: 
             - 
             - foak-fast-kernels
         arguments:
-            bf16: True
             learning_rate: 2e-4
             torch_dtype: bfloat16
             peft_method: lora
@@ -100,7 +97,6 @@ scenarios:
             lora_dropout: 0.1
             target_modules: ["q_proj", "k_proj", "v_proj", "o_proj", "c_attn"]
             model_name_or_path: 
-                # - 'ibm/PowerLM-3b'
                 - 'bigcode/gpt_bigcode-santacoder'
                 - 'mistralai/Mistral-7B-v0.1'
                 - 'mistralai/Mixtral-8x7B-Instruct-v0.1'

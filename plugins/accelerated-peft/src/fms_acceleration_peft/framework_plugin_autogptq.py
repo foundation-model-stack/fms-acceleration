@@ -29,6 +29,7 @@ from peft import LoraConfig, prepare_model_for_kbit_training
 from peft.tuners.lora.model import LoraModel
 from transformers import AutoModelForCausalLM, TrainingArguments
 from transformers.modeling_utils import is_fsdp_enabled
+from transformers.utils.import_utils import _is_package_available
 import torch
 import torch.distributed
 
@@ -37,6 +38,7 @@ from .autogptq_utils import (
     register_tensors_as_parameters_patch_rule,
     requires_installation_on_all_linears,
 )
+from .fsdp_utils import put_selected_meta_tensors_on_cpu
 
 
 class AutoGPTQAccelerationPlugin(AccelerationPlugin):
@@ -61,10 +63,6 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
         )
 
         if self.use_external_lib:
-            # Third Party
-            from transformers.utils.import_utils import (  # pylint: disable=import-outside-toplevel
-                _is_package_available,
-            )
 
             assert _is_package_available("auto_gptq") is True, (
                 "Unable to use external library, auto_gptq module not found. "
@@ -222,6 +220,11 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
             # replace
             AutoModelForCausalLM.from_config = _old_from_config
 
+            # in low_cpu_mem_mode, if certain tensors like embeddings
+            # are in the meta device, then certain operations like
+            # embedding resizing will fail
+            put_selected_meta_tensors_on_cpu(model)
+
         # AutoGPTQ does not set the torch_dtype of the model carefully
         model.config.torch_dtype = torch_dtype
 
@@ -319,10 +322,18 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
             )
 
         # Install GPTQ adapters using the AutoGPTQ package (with the above patches)
+        # - try to get a model config to auto determine the layers that can be helpful
+        #
+        model_type = (
+            model.config.model_type if hasattr(model.config, "model_type") else None
+        )
         model = get_gptq_peft_model(
             model,
             peft_config=peft_config,
-            auto_find_all_linears=requires_installation_on_all_linears(peft_config),
+            auto_find_all_linears=requires_installation_on_all_linears(
+                peft_config,
+                model_type=model_type,
+            ),
             train_mode=True,  # install adapaters for training
         )
 
@@ -342,6 +353,39 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
             )
 
         return model, modifiable_args
+
+    def get_callbacks_and_ready_for_train(
+        self, model: torch.nn.Module = None, accelerator=None
+    ):
+        callbacks = []
+        if (
+            accelerator is not None
+            and getattr(accelerator.state, "fsdp_plugin", None) is not None
+        ):
+
+            # for autogptq we will install the fix regardless of transformers or
+            # trl version, because those fixes were only for BNB. Here we control
+            # our own model loading
+            # NOTE: guard this later with a more specific accelerate version check
+            try:
+                # Third Party
+                # pylint: disable=import-outside-toplevel
+                from torch.distributed.utils import ensure_weights_retied
+
+                # then its handled internally and there is nothing to do
+            except ImportError:
+                # need to use our internal version
+                # Local
+                from .fsdp_utils import (  # pylint: disable=import-outside-toplevel
+                    ensure_weights_retied,
+                )
+
+                accelerator.state.fsdp_plugin.param_init_fn = ensure_weights_retied(
+                    accelerator.state.fsdp_plugin.param_init_fn,
+                    model.get_base_model(),
+                    accelerator.device,
+                )
+        return callbacks
 
 
 # register
