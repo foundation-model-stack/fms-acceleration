@@ -38,22 +38,18 @@
 scenarios:
     -   name: full-finetuning
         framework_config: 
-            - 
             - foak-fast-kernels
             - foak-fast-kernels-liger
         arguments:
             learning_rate: 2e-5
             model_name_or_path: 
-                - 'bigcode/gpt_bigcode-santacoder'
-                - 'mistralai/Mistral-7B-v0.1'
-                - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
-                - 'NousResearch/Llama-2-70b-hf'
+                # - 'mistralai/Mistral-7B-v0.1'
+                - 'meta-llama/Meta-Llama-3-8B'
             torch_dtype: bfloat16
             bf16: True
 
     -   name: standard-peft
         framework_config: 
-            - 
             - foak-fast-kernels
             - foak-fast-kernels-liger
         arguments:
@@ -66,13 +62,29 @@ scenarios:
             lora_dropout: 0.1
             target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
             model_name_or_path: 
-                - 'mistralai/Mistral-7B-v0.1'
-                - 'mistralai/Mixtral-8x7B-Instruct-v0.1'
-                - 'NousResearch/Llama-2-70b-hf'
+                # - 'mistralai/Mistral-7B-v0.1'
+                - 'meta-llama/Meta-Llama-3-8B'
+
+    -   name: accelerated-peft-bnb
+        framework_config: 
+            - accelerated-peft-bnb-foak
+            - accelerated-peft-bnb-foak-liger
+        arguments:
+            bf16: True
+            learning_rate: 2e-4
+            torch_dtype: bfloat16
+            peft_method: lora
+            r: 16
+            lora_alpha: 16
+            lora_dropout: 0.1
+            per_device_train_batch_size: 
+            target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
+            model_name_or_path: 
+                # - 'mistralai/Mistral-7B-v0.1'
+                - 'meta-llama/Meta-Llama-3-8B'
 
     -   name: accelerated-peft-gptq
         framework_config: 
-            - accelerated-peft-autogptq
             - accelerated-peft-autogptq-foak
             - accelerated-peft-autogptq-foak-liger
         arguments:
@@ -85,6 +97,5 @@ scenarios:
             lora_dropout: 0.1
             target_modules: ["q_proj", "k_proj", "v_proj", "o_proj"]
             model_name_or_path: 
-                - 'TheBloke/Mistral-7B-v0.1-GPTQ'
-                - 'TheBloke/Mixtral-8x7B-Instruct-v0.1-GPTQ'
-                - 'TheBloke/Llama-2-70B-GPTQ'
+                # - 'TheBloke/Mistral-7B-v0.1-GPTQ'
+                - 'TechxGenus/Meta-Llama-3-8B-GPTQ'

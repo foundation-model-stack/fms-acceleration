@@ -23,7 +23,6 @@ from fms_acceleration.model_patcher import (
     combine_triggers,
 )
 from transformers.models.mixtral.modeling_mixtral import (
-    MixtralForCausalLM,
     MixtralAttention,
     MixtralRMSNorm,
 )
@@ -32,7 +31,6 @@ from transformers.models.mixtral.modeling_mixtral import (
 from ..kernels.unsloth.cross_entropy_loss import FastCrossEntropyLoss
 from ..kernels.unsloth.rms_layernorm import fast_rms_layernorm
 from ..kernels.unsloth.rope_embedding import fast_rope_embedding
-from ..kernels.liger.fused_linear_cross_entropy_loss import lce_forward_mixtral
 from .utils import KEY_O, KEY_QKV, build_lora_fused_ops, trigger_fused_ops
 
 
@@ -94,11 +92,6 @@ def get_mp_rules(base_type):
                 FastCrossEntropyLoss,
                 "transformers.models.mixtral.modeling_mixtral",
             ),
-        ),
-        ModelPatcherRule(
-            rule_id="mixtral-fused-lce",
-            trigger=ModelPatcherTrigger(check=MixtralForCausalLM),
-            forward=lce_forward_mixtral,
         ),
         ModelPatcherRule(
             rule_id="mixtral-rope",
