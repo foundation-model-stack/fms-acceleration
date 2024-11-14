@@ -19,16 +19,21 @@ from typing import Dict, Set, Tuple
 from fms_acceleration import AccelerationPlugin, AccelerationPluginConfigError
 from peft import LoraConfig
 from peft.tuners.lora.layer import LoraLayer
-from transformers import TrainingArguments
+from transformers import PretrainedConfig, TrainingArguments
 import torch
 
 # Local
-from .framework_plugin_fast_quantized_peft import lora_adapters_switch_ddp_from_fsdp
+from .utils import lora_adapters_switch_ddp_from_fsdp
+from .models.utils import filter_mp_rules
 
 
 # consider rewriting register_foak_model_patch_rules into something
 # like this also
-def register_foak_model_patch_rules2(base_type: str, filter_endswith: Set[str] = None):
+def register_foak_model_patch_rules(
+    base_type: str,
+    filter_endswith: Set[str] = None,
+    config: PretrainedConfig = None,
+):
 
     # Third Party
     from fms_acceleration.model_patcher import (  # pylint: disable=import-outside-toplevel
@@ -45,20 +50,21 @@ def register_foak_model_patch_rules2(base_type: str, filter_endswith: Set[str] =
         mixtral,
     )
 
+    # create model specific rules
     rules = [
         *gpt_bigcode.get_mp_rules(base_type),
-        *granite.get_mp_rules(base_type),
+        *granite.get_mp_rules(base_type, config),
         *granitemoe.get_mp_rules(base_type),
-        *llama.get_mp_rules(base_type),
-        *mistral.get_mp_rules(base_type),
+        *llama.get_mp_rules(base_type, config),
+        *mistral.get_mp_rules(base_type, config),
         *mixtral.get_mp_rules(base_type),
     ]
 
-    if filter_endswith is not None:
-        # filter rules
-        rules = [
-            r for r in rules if any(r.rule_id.endswith(x) for x in filter_endswith)
-        ]
+    # for filtering rules that apply regardless of model arch
+    # - this would be useful for implementing switches for
+    #   turning off rules that affect all models
+    if filter_endswith:
+        rules = filter_mp_rules(rules, filter_endswith)
 
     for _rule in rules:
         ModelPatcher.register(_rule)
@@ -151,18 +157,22 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
 
         terms = set()
         for k, v in self.configurations.items():
+            if isinstance(v, bool) and v is False:
+                continue
+
             if k in FILTER_MAP and k not in omitted:
                 ts = FILTER_MAP[k]
                 if isinstance(ts, str):
                     ts = {ts}
-                if isinstance(v, bool) and v is False:
-                    continue
+
                 terms.update(ts)
 
         # wrapper function to register foak patches
         # - the base layer setting below will be ignored in non quantized-lora settings
-        register_foak_model_patch_rules2(
-            base_type=self.configurations["base_layer"], filter_endswith=terms
+        register_foak_model_patch_rules(
+            base_type=self.configurations["base_layer"],
+            filter_endswith=terms,
+            config=model.config,
         )
         return model, modifiable_args
 

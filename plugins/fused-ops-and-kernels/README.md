@@ -13,7 +13,6 @@ This library contains fused operations and custom kernels, to be expanded over t
 
 Plugin | Description | Depends | Loading | Augmentation | Callbacks
 --|--|--|--|--|--
-[fast_quantized_peft](./src/fms_accelerate_foak/framework_plugin_fast_quantized_peft.py) | LoRA fused ops, fast cross-entropy, fast rms, fast RoPE (**Disabled**) | Contains extracted code |  | ✅
 [fast_kernels](./src/fms_accelerate_foak/framework_plugin_fast_kernels.py) | Enhanced version of `fast_quantized_peft`, also works for full-FT and non-quant peft | Contains extracted code |  | ✅
 
 ### Supported DataType Settings
