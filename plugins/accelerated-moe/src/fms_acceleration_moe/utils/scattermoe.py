@@ -35,7 +35,7 @@ try:
 except ImportError as e:
     raise ImportError(
         "kernel-hyperdrive PyPI package not found. Install it: "
-        "pip install -r plugins/accelerated-moe/requirements-scattermoe.txt"
+        "pip install -r plugins/accelerated-moe/requirements-khd.txt"
     ) from e
 
 # Local
