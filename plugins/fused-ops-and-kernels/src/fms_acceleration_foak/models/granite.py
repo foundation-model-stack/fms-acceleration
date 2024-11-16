@@ -26,10 +26,10 @@ from fms_acceleration.model_patcher import (
 from transformers import PretrainedConfig
 
 # Local
+from ..fused_ops.liger_ce.fused_linear_cross_entropy_loss import lce_forward
 from ..kernels.unsloth.cross_entropy_loss import FastCrossEntropyLoss
 from ..kernels.unsloth.rms_layernorm import fast_rms_layernorm
 from ..kernels.unsloth.rope_embedding import fast_rope_embedding
-from ..kernels.liger.fused_linear_cross_entropy_loss import lce_forward
 from .utils import (
     KEY_MLP,
     KEY_O,
@@ -51,8 +51,8 @@ def get_mp_rules(base_type: str, config: PretrainedConfig = None):
     try:
         # Third Party
         from transformers.models.granite.modeling_granite import (  # pylint: disable=import-outside-toplevel
-            GraniteForCausalLM,
             GraniteAttention,
+            GraniteForCausalLM,
             GraniteMLP,
             GraniteRMSNorm,
         )

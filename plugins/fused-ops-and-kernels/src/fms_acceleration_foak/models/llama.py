@@ -25,17 +25,17 @@ from fms_acceleration.model_patcher import (
 )
 from transformers import PretrainedConfig
 from transformers.models.llama.modeling_llama import (
-    LlamaForCausalLM,
     LlamaAttention,
+    LlamaForCausalLM,
     LlamaMLP,
     LlamaRMSNorm,
 )
 
 # Local
+from ..fused_ops.liger_ce.fused_linear_cross_entropy_loss import lce_forward
 from ..kernels.unsloth.cross_entropy_loss import FastCrossEntropyLoss
 from ..kernels.unsloth.rms_layernorm import fast_rms_layernorm
 from ..kernels.unsloth.rope_embedding import fast_rope_embedding
-from ..kernels.liger.fused_linear_cross_entropy_loss import lce_forward
 from .utils import (
     KEY_MLP,
     KEY_O,

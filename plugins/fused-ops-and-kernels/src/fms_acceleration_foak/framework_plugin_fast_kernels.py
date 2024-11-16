@@ -23,8 +23,8 @@ from transformers import PretrainedConfig, TrainingArguments
 import torch
 
 # Local
-from .utils import lora_adapters_switch_ddp_from_fsdp
 from .models.utils import filter_mp_rules
+from .utils import lora_adapters_switch_ddp_from_fsdp
 
 
 def validate_plugin_args(configurations):
@@ -32,6 +32,7 @@ def validate_plugin_args(configurations):
     assert (
         configurations["fused_linear_loss"] != configurations["fast_loss"]
     ), "If using `fused_linear_loss`, `fast_loss` must be set to False"
+
 
 # consider rewriting register_foak_model_patch_rules into something
 # like this also
@@ -138,7 +139,6 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
         )
 
         validate_plugin_args(self.configurations)
-
 
     @property
     def requires_agumentation(self):
