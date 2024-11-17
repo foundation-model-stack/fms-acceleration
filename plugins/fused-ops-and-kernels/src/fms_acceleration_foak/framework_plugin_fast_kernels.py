@@ -27,13 +27,6 @@ from .models.utils import filter_mp_rules
 from .utils import lora_adapters_switch_ddp_from_fsdp
 
 
-def validate_plugin_args(configurations):
-    # Consider making this a more graceful fallback?
-    assert (
-        configurations["fused_linear_loss"] != configurations["fast_loss"]
-    ), "If using `fused_linear_loss`, `fast_loss` must be set to False"
-
-
 # consider rewriting register_foak_model_patch_rules into something
 # like this also
 def register_foak_model_patch_rules(
@@ -80,10 +73,12 @@ def register_foak_model_patch_rules(
 # maybe this we should define envvars
 FILTER_MAP = {
     "fused_lora": {"qkvo", "mlp"},
-    "fast_loss": "cross-ent",
+    "fast_loss": {
+        True: "cross-ent",
+        "fused_ce_liger": "fused-lce",
+    },
     "fast_rms_layernorm": "rms",
     "fast_rope_embeddings": "rope",
-    "fused_linear_loss": "fused-lce",
 }
 
 
@@ -117,28 +112,21 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
             key="base_layer", values=["auto_gptq", "bitsandbytes"], default="auto_gptq"
         )
         self.configurations["fused_lora"] = self._check_config_and_maybe_check_values(
-            key="fused_lora", values=[False, True], default=True
+            key="fused_lora", values=[False, True], default=False
         )
         self.configurations["fast_loss"] = self._check_config_and_maybe_check_values(
-            key="fast_loss", values=[False, True], default=True
+            key="fast_loss", values=[False, True, "fused_ce_liger"], default=False
         )
         self.configurations["fast_rms_layernorm"] = (
             self._check_config_and_maybe_check_values(
-                key="fast_rms_layernorm", values=[False, True], default=True
+                key="fast_rms_layernorm", values=[False, True], default=False
             )
         )
         self.configurations["fast_rope_embeddings"] = (
             self._check_config_and_maybe_check_values(
-                key="fast_rope_embeddings", values=[False, True], default=True
+                key="fast_rope_embeddings", values=[False, True], default=False
             )
         )
-        self.configurations["fused_linear_loss"] = (
-            self._check_config_and_maybe_check_values(
-                key="fused_linear_loss", values=[False, True], default=False
-            )
-        )
-
-        validate_plugin_args(self.configurations)
 
     @property
     def requires_agumentation(self):
@@ -177,6 +165,8 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
 
             if k in FILTER_MAP and k not in omitted:
                 ts = FILTER_MAP[k]
+                if isinstance(ts, dict) and v in ts:
+                    ts = ts[v]
                 if isinstance(ts, str):
                     ts = {ts}
 
