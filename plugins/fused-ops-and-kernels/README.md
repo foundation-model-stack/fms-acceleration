@@ -79,10 +79,21 @@ It is realtively easy by following an existing template, in what follows we use 
     )
     ```
 
+### Running Liger Kernel Benchmarks
+
+The benchmarks were ran seperately for each `num_gpu` entry; they can be run together in a single command, but this is more efficient.
+
+```
+tox -e run-benches -- 1 "4 8 16 32" benchmark_outputs_1 scenarios-liger.yaml none
+tox -e run-benches 2 "8 16 32 64" benchmark_outputs_2 scenarios-liger.yaml none
+tox -e run-benches 4 "16 32 64 128" benchmark_outputs_3 scenarios-liger.yaml none
+```
+
+
 ## Known Issues
 
 - MixedPrecision `--fp16` or `--bf16` should be used with `fast_lora`.
 - `fast_lora` has issues with FSDP V1 with the `peft` style of FSDP wrapping. 
     * This is because the adapter's forward functions are bypassed in the fused ops.
     * For AutoGPTQ/QLoRA this is addressed by distributing the adapters using DDP so they will be unsharded in time for the fused ops.
-- `fast_rope_embeddings` does not work with position_ids. Currently `position_ids` are ignored and could give wrong results.
+- `fast_rope_embeddings` does not work with `postion_ids`, it seems like HF has depracated passing these ids into the rope embedding methods.
