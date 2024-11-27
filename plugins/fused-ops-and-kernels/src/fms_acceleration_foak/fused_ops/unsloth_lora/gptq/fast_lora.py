@@ -211,7 +211,7 @@ class LoRA_MLP(torch.autograd.Function):
     """
 
     @staticmethod
-    @torch.amp.custom_fwd
+    @torch.amp.custom_fwd(device_type='cuda')
     def forward(
         ctx,
         X: torch.Tensor,
@@ -495,7 +495,7 @@ class LoRA_QKV(torch.autograd.Function):
     """
 
     @staticmethod
-    @torch.amp.custom_fwd
+    @torch.amp.custom_fwd(device_type='cuda')
     def forward(
         ctx,
         X: torch.Tensor,
@@ -768,7 +768,7 @@ class LoRA_W(torch.autograd.Function):
     """
 
     @staticmethod
-    @torch.amp.custom_fwd
+    @torch.amp.custom_fwd(device_type='cuda')
     def forward(
         ctx,
         X: torch.Tensor,
