@@ -17,7 +17,7 @@
 import itertools
 
 # Third Party
-from torch.cuda.amp import custom_bwd, custom_fwd
+from torch.amp import custom_bwd, custom_fwd
 import torch
 import triton
 import triton.language as tl

@@ -4,13 +4,11 @@
 
 # with modifications from The IBM Tuning Team
 
-import math
 from dataclasses import dataclass
 from logging import getLogger
 from typing import Optional
 
 import torch
-from torch.cuda.amp import custom_bwd, custom_fwd
 
 from .triton.kernels import dequant248
 from ..swiglu import swiglu_DWf_DW_dfg_kernel, swiglu_fg_kernel
@@ -213,7 +211,7 @@ class LoRA_MLP(torch.autograd.Function):
     """
 
     @staticmethod
-    @torch.cuda.amp.custom_fwd
+    @torch.amp.custom_fwd
     def forward(
         ctx,
         X: torch.Tensor,
@@ -497,7 +495,7 @@ class LoRA_QKV(torch.autograd.Function):
     """
 
     @staticmethod
-    @torch.cuda.amp.custom_fwd
+    @torch.amp.custom_fwd
     def forward(
         ctx,
         X: torch.Tensor,
@@ -770,7 +768,7 @@ class LoRA_W(torch.autograd.Function):
     """
 
     @staticmethod
-    @torch.cuda.amp.custom_fwd
+    @torch.amp.custom_fwd
     def forward(
         ctx,
         X: torch.Tensor,
