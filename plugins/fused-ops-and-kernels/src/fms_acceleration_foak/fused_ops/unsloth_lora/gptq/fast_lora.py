@@ -309,7 +309,7 @@ class LoRA_MLP(torch.autograd.Function):
         return i
 
     @staticmethod
-    @torch.cuda.amp.custom_bwd
+    @torch.amp.custom_bwd
     def backward(ctx, dY: torch.Tensor):
         (
             gate_qweight,
@@ -591,7 +591,7 @@ class LoRA_QKV(torch.autograd.Function):
         return Q, K, V
 
     @staticmethod
-    @torch.cuda.amp.custom_bwd
+    @torch.amp.custom_bwd
     def backward(ctx, dQ, dK, dV):
         (
             Q_qweight,
@@ -807,7 +807,7 @@ class LoRA_W(torch.autograd.Function):
         return XW
 
     @staticmethod
-    @torch.cuda.amp.custom_bwd
+    @torch.amp.custom_bwd
     def backward(ctx, dY: torch.Tensor):
         O_qweight, O_scales, O_qzeros, O_g_idx, O_bits, S = ctx.custom_saved_tensors
         A, B, X, OX = ctx.saved_tensors
