@@ -73,7 +73,10 @@ def register_foak_model_patch_rules(
 # maybe this we should define envvars
 FILTER_MAP = {
     "fused_lora": {"qkvo", "mlp"},
-    "fast_loss": "cross-ent",
+    "fast_loss": {
+        True: "cross-ent",
+        "fused_ce_liger": "fused-lce",
+    },
     "fast_rms_layernorm": "rms",
     "fast_rope_embeddings": "rope",
 }
@@ -109,19 +112,19 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
             key="base_layer", values=["auto_gptq", "bitsandbytes"], default="auto_gptq"
         )
         self.configurations["fused_lora"] = self._check_config_and_maybe_check_values(
-            key="fused_lora", values=[False, True], default=True
+            key="fused_lora", values=[False, True], default=False
         )
         self.configurations["fast_loss"] = self._check_config_and_maybe_check_values(
-            key="fast_loss", values=[False, True], default=True
+            key="fast_loss", values=[False, True, "fused_ce_liger"], default=False
         )
         self.configurations["fast_rms_layernorm"] = (
             self._check_config_and_maybe_check_values(
-                key="fast_rms_layernorm", values=[False, True], default=True
+                key="fast_rms_layernorm", values=[False, True], default=False
             )
         )
         self.configurations["fast_rope_embeddings"] = (
             self._check_config_and_maybe_check_values(
-                key="fast_rope_embeddings", values=[False, True], default=True
+                key="fast_rope_embeddings", values=[False, True], default=False
             )
         )
 
@@ -162,6 +165,8 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
 
             if k in FILTER_MAP and k not in omitted:
                 ts = FILTER_MAP[k]
+                if isinstance(ts, dict) and v in ts:
+                    ts = ts[v]
                 if isinstance(ts, str):
                     ts = {ts}
 

@@ -16,7 +16,7 @@ training:
     # - the FastQuantized version is all-or-nothing
 
     # fast loss triton kernels
-    fast_loss: True
+    fast_loss: fused_ce_liger
 
     # fast rms norm triton kernels
     fast_rms_layernorm: True

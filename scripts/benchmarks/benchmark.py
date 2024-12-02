@@ -723,7 +723,7 @@ def prepare_arguments(args, benchmark_dataset: BenchmarkDataset):
 
         if (
             not args.run_only_scenarios
-            and scenarios.slow
+            and scenario.slow
         ):
             # unfiltered runs omit all "slow" marked scenarios
             print(f"Skipping slow scenario '{_scn_name}' beacuse run_only_scenarios=None.")

@@ -29,3 +29,11 @@ only-include = ["src/fms_acceleration_foak"]
 
 [tool.hatch.build.targets.wheel.sources]
 "src" = ""
+
+[tool.black]
+force-exclude = '''
+/(
+.*unsloth.*
+| .*liger.*
+)/
+'''

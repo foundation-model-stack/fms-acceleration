@@ -206,7 +206,7 @@ class AccelerationPlugin:
                 t = list(t.keys())[0]  # otherwise take the first value
 
             if t not in values:
-                if default is None:
+                if t is not None or default is None:
                     raise AccelerationPluginConfigError(
                         f"{self.__class__.__name__}: Value at '{key}' was '{t}'. "
                         f"Not found in expected set '{values}'."

@@ -26,11 +26,13 @@ from fms_acceleration.model_patcher import (
 from transformers import PretrainedConfig
 from transformers.models.llama.modeling_llama import (
     LlamaAttention,
+    LlamaForCausalLM,
     LlamaMLP,
     LlamaRMSNorm,
 )
 
 # Local
+from ..fused_ops.liger_ce.fused_linear_cross_entropy_loss import lce_forward
 from ..kernels.unsloth.cross_entropy_loss import FastCrossEntropyLoss
 from ..kernels.unsloth.rms_layernorm import fast_rms_layernorm
 from ..kernels.unsloth.rope_embedding import fast_rope_embedding
@@ -115,8 +117,11 @@ def get_mp_rules(base_type: str, config: PretrainedConfig = None):
                 base_type=base_type,
             ),
         ),
-        # TODO: have a generic version of this rule
-        # - get the module_name and reload on that
+        ModelPatcherRule(
+            rule_id="llama-fused-lce",
+            trigger=ModelPatcherTrigger(check=LlamaForCausalLM),
+            forward=lce_forward,
+        ),
         ModelPatcherRule(
             rule_id="llama-cross-ent",
             import_and_maybe_reload=(
