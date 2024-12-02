@@ -81,12 +81,14 @@ It is realtively easy by following an existing template, in what follows we use 
 
 ### Running Liger Kernel Benchmarks
 
-The benchmarks were ran seperately for each `num_gpu` entry; they can be run together in a single command, but this is more efficient.
+Using the [scenarios-liger.yaml](../../scripts/benchmarks/scenarios-liger.yaml), this will run full fine tuning, lora peft, autoGPTQ lora peft, and bits-and-bytes lora peft with the triton kernels (Fast RMS, RoPE, CrossEnt) as a base and then run with the liger kernel for LigerFusedLinearCrossEntropy as well as Fast RMS, RoPE to compare results. It only runs against mistral and llama models.
 
-```
+The benchmarks were ran separately for each `num_gpu` entry; they can be run together in a single command, but this is more efficient.
+
+```sh
 tox -e run-benches -- 1 "4 8 16 32" benchmark_outputs_1 scenarios-liger.yaml none
-tox -e run-benches 2 "8 16 32 64" benchmark_outputs_2 scenarios-liger.yaml none
-tox -e run-benches 4 "16 32 64 128" benchmark_outputs_3 scenarios-liger.yaml none
+tox -e run-benches -- 2 "8 16 32 64" benchmark_outputs_2 scenarios-liger.yaml none
+tox -e run-benches -- 4 "16 32 64 128" benchmark_outputs_3 scenarios-liger.yaml none
 ```
 
 
