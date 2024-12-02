@@ -57,7 +57,7 @@ class LoRA_MLP(torch.autograd.Function):
     Don't forget to see our blog post for more details!
     """
     @staticmethod
-    @torch.cuda.amp.custom_fwd
+    @torch.amp.custom_fwd(device_type='cuda')
     def forward(ctx, X : torch.Tensor,
                 gateW, gateW_quant, gate_bias, gateA, gateB, gateS,
                   upW,   upW_quant, up_bias, upA,   upB,   upS,
@@ -104,7 +104,7 @@ class LoRA_MLP(torch.autograd.Function):
 
 
     @staticmethod
-    @torch.cuda.amp.custom_bwd
+    @torch.amp.custom_bwd(device_type='cuda')
     def backward(ctx, dY : torch.Tensor):
         gateW, gateW_quant, gateS, upW, upW_quant, upS, downW, downW_quant, downS, \
             _backward_function = ctx.custom_saved_tensors
@@ -251,7 +251,7 @@ class LoRA_QKV(torch.autograd.Function):
     dC/dBv = A.T @ X.T @ D(Wv)
     """
     @staticmethod
-    @torch.cuda.amp.custom_fwd
+    @torch.amp.custom_fwd(device_type='cuda')
     def forward(ctx, X : torch.Tensor,
                 QW, QW_quant, Q_bias, QA, QB, QS,
                 KW, KW_quant, K_bias, KA, KB, KS,
@@ -294,7 +294,7 @@ class LoRA_QKV(torch.autograd.Function):
     pass
 
     @staticmethod
-    @torch.cuda.amp.custom_bwd
+    @torch.amp.custom_bwd(device_type='cuda')
     def backward(ctx, dQ, dK, dV):
         QW, QW_quant, QS, KW, KW_quant, KS, VW, VW_quant, VS = \
             ctx.custom_saved_tensors
@@ -404,7 +404,7 @@ class LoRA_W(torch.autograd.Function):
     dC/dBv = A.T @ X.T @ D(Wv)
     """
     @staticmethod
-    @torch.cuda.amp.custom_fwd
+    @torch.amp.custom_fwd(device_type='cuda')
     def forward(ctx, X : torch.Tensor,
                 W, W_quant, bias, A, B, S, dropout_O):
         dtype = X.dtype
@@ -423,7 +423,7 @@ class LoRA_W(torch.autograd.Function):
     pass
 
     @staticmethod
-    @torch.cuda.amp.custom_bwd
+    @torch.amp.custom_bwd(device_type='cuda')
     def backward(ctx, dY : torch.Tensor):
         W, W_quant, S = ctx.custom_saved_tensors
         A, B, X, OX = ctx.saved_tensors

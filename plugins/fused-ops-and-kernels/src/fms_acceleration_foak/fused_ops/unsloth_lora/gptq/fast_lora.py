@@ -4,13 +4,11 @@
 
 # with modifications from The IBM Tuning Team
 
-import math
 from dataclasses import dataclass
 from logging import getLogger
 from typing import Optional
 
 import torch
-from torch.cuda.amp import custom_bwd, custom_fwd
 
 from .triton.kernels import dequant248
 from ..swiglu import swiglu_DWf_DW_dfg_kernel, swiglu_fg_kernel
@@ -213,7 +211,7 @@ class LoRA_MLP(torch.autograd.Function):
     """
 
     @staticmethod
-    @torch.cuda.amp.custom_fwd
+    @torch.amp.custom_fwd(device_type='cuda')
     def forward(
         ctx,
         X: torch.Tensor,
@@ -309,7 +307,7 @@ class LoRA_MLP(torch.autograd.Function):
         return i
 
     @staticmethod
-    @torch.cuda.amp.custom_bwd
+    @torch.amp.custom_bwd(device_type='cuda')
     def backward(ctx, dY: torch.Tensor):
         (
             gate_qweight,
@@ -497,7 +495,7 @@ class LoRA_QKV(torch.autograd.Function):
     """
 
     @staticmethod
-    @torch.cuda.amp.custom_fwd
+    @torch.amp.custom_fwd(device_type='cuda')
     def forward(
         ctx,
         X: torch.Tensor,
@@ -591,7 +589,7 @@ class LoRA_QKV(torch.autograd.Function):
         return Q, K, V
 
     @staticmethod
-    @torch.cuda.amp.custom_bwd
+    @torch.amp.custom_bwd(device_type='cuda')
     def backward(ctx, dQ, dK, dV):
         (
             Q_qweight,
@@ -770,7 +768,7 @@ class LoRA_W(torch.autograd.Function):
     """
 
     @staticmethod
-    @torch.cuda.amp.custom_fwd
+    @torch.amp.custom_fwd(device_type='cuda')
     def forward(
         ctx,
         X: torch.Tensor,
@@ -807,7 +805,7 @@ class LoRA_W(torch.autograd.Function):
         return XW
 
     @staticmethod
-    @torch.cuda.amp.custom_bwd
+    @torch.amp.custom_bwd(device_type='cuda')
     def backward(ctx, dY: torch.Tensor):
         O_qweight, O_scales, O_qzeros, O_g_idx, O_bits, S = ctx.custom_saved_tensors
         A, B, X, OX = ctx.saved_tensors
