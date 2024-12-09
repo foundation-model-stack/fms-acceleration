@@ -14,7 +14,7 @@
 
 # Standard
 from collections import defaultdict
-from typing import List
+from typing import List, Dict
 import json
 import os
 import re
@@ -31,6 +31,9 @@ from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
 from transformers import PretrainedConfig
 import torch
 import torch.distributed.checkpoint as dcp
+from safetensors.torch import load_file, save_file
+from transformers.utils import SAFE_WEIGHTS_INDEX_NAME, SAFE_WEIGHTS_NAME, CONFIG_NAME
+import shutil
 
 # Local
 from .scattermoe_constants import (
@@ -212,13 +215,50 @@ def get_resolved_checkpoint_location(model_name_or_path: str):
     PretrainedConfig._dict_from_json_file = _old_func
     return os.path.dirname(result)
 
+# function to get the state dict from dcp_checkpoint
+def get_state_dict_from_dcp_checkpoint(
+    checkpoint_dir: str,
+):
+    # guarded, load some internal functions
+    # pylint: disable=import-outside-toplevel
+    # Third Party
+    from torch.distributed.checkpoint.default_planner import _EmptyStateDictLoadPlanner
+    from torch.distributed.checkpoint.metadata import STATE_DICT_TYPE
+    from torch.distributed.checkpoint.state_dict_loader import _load_state_dict
+
+    sd: STATE_DICT_TYPE = {}
+    _load_state_dict(
+        sd,
+        storage_reader=dcp.FileSystemReader(checkpoint_dir),
+        planner=_EmptyStateDictLoadPlanner(),
+        no_dist=True,
+    )
+    return [KEY_MODEL]
+
+# function to get state dict from regular checkoint
+def get_state_dict_from_safe_checkpoint(
+    checkpoint_dir: str,
+):
+    # Load the index
+    safe_index_file = os.path.join(checkpoint_dir, SAFE_WEIGHTS_INDEX_NAME)
+
+    with open(safe_index_file, "r", encoding="utf-8") as f:
+        index = json.load(f)
+
+    state_dict = {}
+    shard_files = list(set(index["weight_map"].values()))
+    for shard_file in shard_files:
+        for key, v in load_file(os.path.join(checkpoint_dir, shard_file)).items():
+            state_dict[key] = v
+
+    return state_dict
 
 # function to get the ScatterMoE state dict from its DCP checkpoint
 # - if the original pretrained_model_name_or_path is specified, will use the checkpoint as hints
 #   to map the ScatterMoE checkpoint to that of the original model. This is useful so that we
 #   can restore the checkpoint to be loaded by the original architecture.
-def recover_original_state_dict_from_dcp_checkpoint(
-    dcp_checkpoint_dir: str,
+def recover_original_state_dict_from_checkpoint(
+    sd: Dict,
     pretrained_model_name_or_path: str = None,
 ):
     """
@@ -230,26 +270,6 @@ def recover_original_state_dict_from_dcp_checkpoint(
 
     # reference dcp_to_torch_save from torch.distributed.checkpoint.format_utils.py
     # - strategy is to use _EmptyStateDictLoadPlanner to populate the state dict, then we remap
-
-    # guarded, load some internal functions
-    # pylint: disable=import-outside-toplevel
-    # Third Party
-    from torch.distributed.checkpoint.default_planner import _EmptyStateDictLoadPlanner
-    from torch.distributed.checkpoint.metadata import STATE_DICT_TYPE
-    from torch.distributed.checkpoint.state_dict_loader import _load_state_dict
-
-    sd: STATE_DICT_TYPE = {}
-    _load_state_dict(
-        sd,
-        storage_reader=dcp.FileSystemReader(dcp_checkpoint_dir),
-        planner=_EmptyStateDictLoadPlanner(),
-        no_dist=True,
-    )
-    sd = sd[KEY_MODEL]
-
-    # if not provided
-    if pretrained_model_name_or_path is None:
-        return sd
 
     # now do the remap
     loc = get_resolved_checkpoint_location(pretrained_model_name_or_path)
@@ -397,6 +417,15 @@ def recover_original_state_dict_from_dcp_checkpoint(
 
     return sd
 
+def save_single_safetensor(
+    state_dict: Dict, 
+    save_directory: str, 
+    metadata: Dict,
+):
+    save_file(
+        state_dict, os.path.join(save_directory, SAFE_WEIGHTS_NAME), 
+        metadata,
+    )
 
 # --------------------------- SCRIPT -------------------------
 
@@ -417,8 +446,8 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "dcp_checkpoint_dir",
-        help="Path to the distributed checkpoint.",
+        "checkpoint_dir",
+        help="Path to the checkpoint.",
     )
 
     parser.add_argument(
@@ -436,33 +465,48 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # search for the checkpint. By the code above, it must
+    # search for an FSDP checkpoint. If it is an FSDP checkpoint, it must
     # start with FSDP_MODEL_NAME
-    if args.dcp_checkpoint_dir.startswith(FSDP_MODEL_NAME):
-        checkpoint_dir = args.dcp_checkpoint_dir
+    if args.checkpoint_dir.startswith(FSDP_MODEL_NAME):
+        checkpoint_dir = args.checkpoint_dir
+        loader = get_state_dict_from_dcp_checkpoint
     else:
         checkpoint_dir = [
             x
-            for x in os.listdir(args.dcp_checkpoint_dir)
-            if os.path.isdir(os.path.join(args.dcp_checkpoint_dir, x))
+            for x in os.listdir(args.checkpoint_dir)
+            if os.path.isdir(os.path.join(args.checkpoint_dir, x))
             and x.startswith(FSDP_MODEL_NAME)
         ]
-        if len(checkpoint_dir) > 1:
+        if len(checkpoint_dir) == 1:
+            checkpoint_dir = os.path.join(args.checkpoint_dir, checkpoint_dir[0])
+            loader = get_state_dict_from_dcp_checkpoint
+        elif len(checkpoint_dir) > 1:
             raise ValueError(
-                f"Found > 1 dirs in dcp checkpoint dir {args.dcp_checkpoint_dir} "
+                f"Found > 1 dirs in dcp checkpoint dir {args.checkpoint_dir} "
                 f"that starts with {FSDP_MODEL_NAME}. Please spectify the exact dir."
             )
-        if len(checkpoint_dir) == 0:
-            raise ValueError(
-                f"Found no dirs in dcp checkpoint dir {args.dcp_checkpoint_dir} "
-                f"that starts with {FSDP_MODEL_NAME}. Nothing to convert"
-            )
-        checkpoint_dir = os.path.join(args.dcp_checkpoint_dir, checkpoint_dir[0])
+        else:
+            # then take it as a safetensors checkpoint
+            # - do not support .bin checkpoints
+            checkpoint_dir = args.checkpoint_dir
+            loader = get_state_dict_from_safe_checkpoint
 
-    # get the converted statedict
-    state_dict = recover_original_state_dict_from_dcp_checkpoint(
-        checkpoint_dir, args.pretrained_model_name_or_path
+    # get the state_dict
+    state_dict = loader(checkpoint_dir)
+
+    # recover the original state dict
+    state_dict = recover_original_state_dict_from_checkpoint(
+        state_dict, 
+        args.pretrained_model_name_or_path
     )
 
-    # save it
-    torch.save(state_dict, args.output_dir)
+    # save it as a safetensors file
+    save_single_safetensor(state_dict, args.output_dir, {"format": "pt"})
+
+    # copy the config file if needed
+    config_file = os.path.exist(os.path.join(checkpoint_dir, CONFIG_NAME))
+    if os.path.exist(config_file):
+        shutil.copyfile(
+            config_file, os.path.join(args.output_dir, CONFIG_NAME)
+        )
+    
