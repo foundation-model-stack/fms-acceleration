@@ -14,14 +14,16 @@
 
 # Standard
 from collections import defaultdict
-from typing import List, Dict
+from typing import Dict, List
 import json
 import os
 import re
+import shutil
 
 # Third Party
 from accelerate.logging import get_logger
 from accelerate.utils.constants import FSDP_MODEL_NAME, OPTIMIZER_NAME
+from safetensors.torch import load_file, save_file
 from torch.distributed.checkpoint.default_planner import (
     DefaultLoadPlanner,
     DefaultSavePlanner,
@@ -29,11 +31,9 @@ from torch.distributed.checkpoint.default_planner import (
 from torch.distributed.checkpoint.state_dict import get_state_dict, set_state_dict
 from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
 from transformers import PretrainedConfig
+from transformers.utils import CONFIG_NAME, SAFE_WEIGHTS_INDEX_NAME, SAFE_WEIGHTS_NAME
 import torch
 import torch.distributed.checkpoint as dcp
-from safetensors.torch import load_file, save_file
-from transformers.utils import SAFE_WEIGHTS_INDEX_NAME, SAFE_WEIGHTS_NAME, CONFIG_NAME
-import shutil
 
 # Local
 from .scattermoe_constants import (
@@ -215,9 +215,10 @@ def get_resolved_checkpoint_location(model_name_or_path: str):
     PretrainedConfig._dict_from_json_file = _old_func
     return os.path.dirname(result)
 
+
 # function to get the state dict from dcp_checkpoint
 def get_state_dict_from_dcp_checkpoint(
-    checkpoint_dir: str,
+    dcp_checkpoint_dir: str,
 ):
     # guarded, load some internal functions
     # pylint: disable=import-outside-toplevel
@@ -229,29 +230,32 @@ def get_state_dict_from_dcp_checkpoint(
     sd: STATE_DICT_TYPE = {}
     _load_state_dict(
         sd,
-        storage_reader=dcp.FileSystemReader(checkpoint_dir),
+        storage_reader=dcp.FileSystemReader(dcp_checkpoint_dir),
         planner=_EmptyStateDictLoadPlanner(),
         no_dist=True,
     )
     return [KEY_MODEL]
 
+
 # function to get state dict from regular checkoint
+# - note this assumes sharded safetensors, we do not support
+#  the non-sharded case for now
 def get_state_dict_from_safe_checkpoint(
-    checkpoint_dir: str,
+    safe_checkpoint_dir: str,
 ):
     # Load the index
-    safe_index_file = os.path.join(checkpoint_dir, SAFE_WEIGHTS_INDEX_NAME)
-
+    safe_index_file = os.path.join(safe_checkpoint_dir, SAFE_WEIGHTS_INDEX_NAME)
     with open(safe_index_file, "r", encoding="utf-8") as f:
         index = json.load(f)
 
-    state_dict = {}
+    sd = {}
     shard_files = list(set(index["weight_map"].values()))
     for shard_file in shard_files:
-        for key, v in load_file(os.path.join(checkpoint_dir, shard_file)).items():
-            state_dict[key] = v
+        for key, v in load_file(os.path.join(safe_checkpoint_dir, shard_file)).items():
+            sd[key] = v
 
-    return state_dict
+    return sd
+
 
 # function to get the ScatterMoE state dict from its DCP checkpoint
 # - if the original pretrained_model_name_or_path is specified, will use the checkpoint as hints
@@ -417,15 +421,18 @@ def recover_original_state_dict_from_checkpoint(
 
     return sd
 
+
 def save_single_safetensor(
-    state_dict: Dict, 
-    save_directory: str, 
+    sd: Dict,
+    save_directory: str,
     metadata: Dict,
 ):
     save_file(
-        state_dict, os.path.join(save_directory, SAFE_WEIGHTS_NAME), 
+        sd,
+        os.path.join(save_directory, SAFE_WEIGHTS_NAME),
         metadata,
     )
+
 
 # --------------------------- SCRIPT -------------------------
 
@@ -461,6 +468,7 @@ if __name__ == "__main__":
             "the original pretrained model checkpoint (from which this "
             "checkpoint is obtained)."
         ),
+        default=None,
     )
 
     args = parser.parse_args()
@@ -491,22 +499,31 @@ if __name__ == "__main__":
             checkpoint_dir = args.checkpoint_dir
             loader = get_state_dict_from_safe_checkpoint
 
+    # - pretrained model name
+    _name_or_path = args.pretrained_model_name_or_path
+
+    # assume output directory exists, we do not create it
+    # - copy the config file if exists
+    config_file = os.path.join(checkpoint_dir, CONFIG_NAME)
+    target_config_file = os.path.join(args.output_dir, CONFIG_NAME)
+    if os.path.exists(config_file):
+        shutil.copyfile(config_file, target_config_file)
+
+        # try to populate pretrained_model_name_or_path from the config path
+        # if it was None
+        if not _name_or_path:
+            with open(target_config_file, "r", encoding="utf-8") as file:
+                _name_or_path = json.load(file).get("_name_or_path")
+
     # get the state_dict
     state_dict = loader(checkpoint_dir)
 
     # recover the original state dict
-    state_dict = recover_original_state_dict_from_checkpoint(
-        state_dict, 
-        args.pretrained_model_name_or_path
-    )
+    state_dict = recover_original_state_dict_from_checkpoint(state_dict, _name_or_path)
 
     # save it as a safetensors file
-    save_single_safetensor(state_dict, args.output_dir, {"format": "pt"})
-
-    # copy the config file if needed
-    config_file = os.path.exist(os.path.join(checkpoint_dir, CONFIG_NAME))
-    if os.path.exist(config_file):
-        shutil.copyfile(
-            config_file, os.path.join(args.output_dir, CONFIG_NAME)
-        )
-    
+    save_single_safetensor(
+        {k: v.contiguous() for k, v in state_dict.items()},
+        args.output_dir,
+        metadata={"format": "pt"},
+    )
