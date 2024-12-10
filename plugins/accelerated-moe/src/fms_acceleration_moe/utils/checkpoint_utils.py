@@ -433,7 +433,9 @@ def save_sharded_safetensors(
         ".safetensors", "{suffix}.safetensors"
     )
     state_dict_split = split_torch_state_dict_into_shards(
-        input_state_dict, filename_pattern=filename_pattern, max_shard_size=max_shard_size
+        input_state_dict,
+        filename_pattern=filename_pattern,
+        max_shard_size=max_shard_size,
     )
     index = {
         "metadata": state_dict_split.metadata,
