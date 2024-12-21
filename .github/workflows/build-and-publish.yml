@@ -52,6 +52,6 @@ jobs:
 
       - if: steps.changes.outputs.plugins == 'true'
         name: "Upload to PyPI"
-        uses: pypa/gh-action-pypi-publish@ec4db0b4ddc65acdf4bff5fa45ac92d78b56bdf0 # v1.9.0
+        uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: plugins/${{ matrix.plugin_name }}/dist
