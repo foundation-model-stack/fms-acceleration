@@ -199,7 +199,12 @@ For deeper dive into details see [framework/README.md](./plugins/framework/READM
 
 ## Maintainers
 
-IBM Research, Singapore
+IBM Research
 - Fabian Lim flim@sg.ibm.com
-- Aaron Chew aaron.chew1@sg.ibm.com
-- Laura Wynter lwynter@sg.ibm.com
+- Anh Uong anh.uong@ibm.com
+- Will Johnson Will.Johnson@ibm.com
+- Abhishek Maurya maurya.abhishek@ibm.com
+
+Past Contributors
+- Aaron Chew 
+- Laura Wynter 
