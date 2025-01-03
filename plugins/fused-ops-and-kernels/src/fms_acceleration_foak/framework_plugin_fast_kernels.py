@@ -23,8 +23,7 @@ from transformers import PretrainedConfig, TrainingArguments
 import torch
 
 # Local
-from .models.utils import filter_mp_rules
-from .utils import lora_adapters_switch_ddp_from_fsdp
+from .utils import filter_mp_rules, lora_adapters_switch_ddp_from_fsdp
 
 
 # consider rewriting register_foak_model_patch_rules into something

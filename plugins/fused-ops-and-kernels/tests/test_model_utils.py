@@ -2,7 +2,7 @@
 from fms_acceleration.model_patcher import ModelPatcherRule
 
 # First Party
-from fms_acceleration_foak.models.utils import filter_mp_rules
+from fms_acceleration_foak.utils import filter_mp_rules
 
 
 def test_filter_mp_rules():
