@@ -1,10 +1,10 @@
 # Standard
 from functools import partial
-from typing import Callable, List, Set, Type
+from typing import Callable, List, Type
 import os
 
 # Third Party
-from fms_acceleration.model_patcher import ModelPatcherRule, ModelPatcherTrigger
+from fms_acceleration.model_patcher import ModelPatcherTrigger
 from transformers import PretrainedConfig
 import torch
 
@@ -201,22 +201,6 @@ def trigger_fused_ops(
     # are all loralayers
     _mods = [getattr(module, x) for x in submodule_names]
     return isinstance(module, attn_cls) and all(_is_loralayer(x) for x in _mods)
-
-
-# helper function to filter rules
-def filter_mp_rules(
-    rules: List[ModelPatcherRule],
-    filter_endswith: Set[str],
-    drop: bool = False,
-):
-    if drop:
-        # this means if any of the filter terms appear, we drop
-        return [
-            r for r in rules if not any(r.rule_id.endswith(x) for x in filter_endswith)
-        ]
-
-    # this means if any if the filter terms appear, we keep
-    return [r for r in rules if any(r.rule_id.endswith(x) for x in filter_endswith)]
 
 
 # helper function to get the hidden activation function str

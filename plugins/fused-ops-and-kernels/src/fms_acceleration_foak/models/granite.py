@@ -30,12 +30,12 @@ from ..fused_ops.liger_ce.fused_linear_cross_entropy_loss import lce_forward
 from ..kernels.unsloth.cross_entropy_loss import FastCrossEntropyLoss
 from ..kernels.unsloth.rms_layernorm import fast_rms_layernorm
 from ..kernels.unsloth.rope_embedding import fast_rope_embedding
+from ..utils import filter_mp_rules
 from .utils import (
     KEY_MLP,
     KEY_O,
     KEY_QKV,
     build_lora_fused_ops,
-    filter_mp_rules,
     get_hidden_activation_fn_key,
     trigger_fused_ops,
 )

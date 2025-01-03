@@ -12,8 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Standard
+from typing import List, Set
+
 # Third Party
 from accelerate.utils import set_module_tensor_to_device
+from fms_acceleration.model_patcher import ModelPatcherRule
 from transformers.modeling_utils import is_fsdp_enabled
 import torch
 import torch.distributed as dist
@@ -74,3 +78,19 @@ def lora_adapters_switch_ddp_from_fsdp(modules, fsdp_plugin):
         # - this has to be done after all weight replacement happens
         A.weight.register_hook(_all_reduce_hook)
         B.weight.register_hook(_all_reduce_hook)
+
+
+# helper function to filter rules
+def filter_mp_rules(
+    rules: List[ModelPatcherRule],
+    filter_endswith: Set[str],
+    drop: bool = False,
+):
+    if drop:
+        # this means if any of the filter terms appear, we drop
+        return [
+            r for r in rules if not any(r.rule_id.endswith(x) for x in filter_endswith)
+        ]
+
+    # this means if any if the filter terms appear, we keep
+    return [r for r in rules if any(r.rule_id.endswith(x) for x in filter_endswith)]
