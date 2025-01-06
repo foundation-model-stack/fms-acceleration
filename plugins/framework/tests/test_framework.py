@@ -68,7 +68,7 @@ def test_model_with_no_config_raises():
 
     # create model and (incomplete) plugin with requires_augmentation = True
     model_no_config = torch.nn.Module()  # empty model
-    incomplete_plugin = create_plugin_cls(requires_agumentation=True)
+    incomplete_plugin = create_plugin_cls(requires_augmentation=True)
 
     # register and activate 1 incomplete plugin, and:
     # 1. test correct plugin registration and activation.
@@ -104,11 +104,11 @@ def test_single_plugin():
     empty_plugin = create_plugin_cls()
     incomplete_plugin = create_plugin_cls(
         restricted_models={"CausalLM"},
-        requires_agumentation=True,
+        requires_augmentation=True,
     )
     plugin = create_plugin_cls(
         restricted_models={"CausalLM"},
-        requires_agumentation=True,
+        requires_augmentation=True,
         requires_custom_loading=True,
         agumentation=dummy_augmentation,
         model_loader=dummy_custom_loader,
@@ -175,15 +175,15 @@ def test_two_plugins():
 
     model = create_noop_model_with_archs(archs=["CausalLM"])
     incomp_plugin1 = create_plugin_cls(
-        restricted_models={"CausalLM"}, requires_agumentation=True
+        restricted_models={"CausalLM"}, requires_augmentation=True
     )
-    incomp_plugin2 = create_plugin_cls(requires_agumentation=True)
+    incomp_plugin2 = create_plugin_cls(requires_augmentation=True)
     incomp_plugin3 = create_plugin_cls(
-        class_name="PluginNoop2", requires_agumentation=True
+        class_name="PluginNoop2", requires_augmentation=True
     )
     plugin1 = create_plugin_cls(
         restricted_models={"CausalLM"},
-        requires_agumentation=True,
+        requires_augmentation=True,
         requires_custom_loading=True,
         agumentation=dummy_augmentation,
         model_loader=dummy_custom_loader,
@@ -191,7 +191,7 @@ def test_two_plugins():
     plugin2 = create_plugin_cls(
         class_name="PluginNoop2",
         restricted_models={"CausalLM"},
-        requires_agumentation=True,
+        requires_augmentation=True,
         requires_custom_loading=True,
         agumentation=dummy_augmentation,
         model_loader=dummy_custom_loader,
@@ -199,7 +199,7 @@ def test_two_plugins():
     plugin3_no_loader = create_plugin_cls(
         class_name="PluginNoop2",
         restricted_models={"CausalLM"},
-        requires_agumentation=True,
+        requires_augmentation=True,
         agumentation=dummy_augmentation,
     )
     train_args = None  # dummy for now
@@ -299,7 +299,7 @@ def test_plugin_registration_order():
     for class_name in ["PluginDEF", "PluginABC"]:
         plugin = create_plugin_cls(
             class_name=class_name,
-            requires_agumentation=True,
+            requires_augmentation=True,
             agumentation=hook_builder(act_order=plugin_activation_order),
         )
         plugins_to_be_installed.append((class_name, plugin))
@@ -319,7 +319,7 @@ def test_plugin_registration_combination_logic():
 
     plugin = create_plugin_cls(
         restricted_models={"CausalLM"},
-        requires_agumentation=True,
+        requires_augmentation=True,
         agumentation=dummy_augmentation,
     )
 

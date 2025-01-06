@@ -159,7 +159,7 @@ def create_plugin_cls(
     restricted_models: Set = None,
     require_pkgs: Set = None,
     requires_custom_loading: bool = False,
-    requires_agumentation: bool = False,
+    requires_augmentation: bool = False,
     agumentation: Callable = None,
     model_loader: Callable = None,
 ):
@@ -174,7 +174,7 @@ def create_plugin_cls(
         "restricted_model_archs": restricted_models,
         "require_packages": require_pkgs,
         "requires_custom_loading": requires_custom_loading,
-        "requires_agumentation": requires_agumentation,
+        "requires_augmentation": requires_augmentation,
     }
 
     if agumentation is not None:

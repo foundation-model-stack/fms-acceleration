@@ -185,7 +185,7 @@ class BNBAccelerationPlugin(AccelerationPlugin):
         return True
 
     @property
-    def requires_agumentation(self):
+    def requires_augmentation(self):
         # will skip the augmentation if _no_peft_model == True
         return not self._no_peft_model
 

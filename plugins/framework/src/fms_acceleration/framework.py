@@ -202,7 +202,7 @@ class AccelerationFramework:
                     f"Model architectures in '{model_archs}' are supported for '{plugin_name}'."
                 )
 
-            if plugin.requires_agumentation:
+            if plugin.requires_augmentation:
                 model, modifiable_args = plugin.augmentation(
                     model, train_args, modifiable_args=modifiable_args
                 )
@@ -214,8 +214,8 @@ class AccelerationFramework:
         return len(self.plugins_require_custom_loading) > 0
 
     @property
-    def requires_agumentation(self):
-        return any(x.requires_agumentation for _, x in self.active_plugins)
+    def requires_augmentation(self):
+        return any(x.requires_augmentation for _, x in self.active_plugins)
 
     def get_callbacks_and_ready_for_train(
         self, model: torch.nn.Module = None, accelerator: Accelerator = None

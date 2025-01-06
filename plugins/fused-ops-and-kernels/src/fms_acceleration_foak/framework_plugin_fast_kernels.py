@@ -129,7 +129,7 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
 
     @property
     def requires_agumentation(self):
-        return True
+        requires_augmentation
 
     def augmentation(
         self,

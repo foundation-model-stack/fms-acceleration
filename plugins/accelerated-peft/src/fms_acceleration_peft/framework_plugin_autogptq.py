@@ -241,7 +241,7 @@ class AutoGPTQAccelerationPlugin(AccelerationPlugin):
         return True
 
     @property
-    def requires_agumentation(self):
+    def requires_augmentation(self):
         return True
 
     def augmentation(

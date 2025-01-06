@@ -47,7 +47,7 @@ def test_configure_gptq_foak_plugin():
 
         # check flags and callbacks
         assert framework.requires_custom_loading is False
-        assert framework.requires_agumentation
+        assert framework.requires_augmentation
         assert len(framework.get_callbacks_and_ready_for_train()) == 0
 
     # attempt to activate plugin with configuration pointing to wrong path
