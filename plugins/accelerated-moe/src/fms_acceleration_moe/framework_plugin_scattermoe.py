@@ -53,84 +53,30 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
         )
 
     @property
-    def requires_custom_loading(self):
+    def requires_agumentation(self):
         return True
 
-    # def model_loader(self, model_name: str, **kwargs):
-
-    #     # load the model
-    #     model = AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
-
-    #     rank, world_size = 0, 1
-    #     if torch.distributed.is_initialized():
-    #         world_size = torch.distributed.get_world_size()
-    #         rank = torch.distributed.get_rank()
-
-    #     # shard the MOE, and store the component names, eventually needed
-    #     # to configure the FSDP
-    #     self._moe_component_module_names = prepare_scattermoe(
-    #         model,
-    #         checkpoint_name_or_path=model_name,
-    #         rank=rank,
-    #         world_size=world_size,
-    #         ep_degree=self._ep_degree,
-    #         mixed_precision=False,  # Currently this is hardcoded to OFF
-    #     )
-
-    #     # NOTE: there is currently no good way to get the mixed precision
-    #     # flag from train_args. It will be better to handle this if
-    #     # when we move the sharding to augmentation.
-    #     # https://github.com/foundation-model-stack/fms-acceleration/issues/103
-
-    #     return model
     def augmentation(
         self,
         model,
         train_args: TrainingArguments,
         modifiable_args: Tuple[LoraConfig],
     ):
-        # guarded because multipack has numba dependencies
-        # Third Party
-        # pylint: disable=import-outside-toplevel
-        from fms_acceleration.accelerator_patcher import (
-            AcceleratorPatcher,
-            AcceleratorPatcherComponent,
-        )
-
-        # Local
-        from .aadp_utils import (  # pylint: disable=import-outside-toplevel
-            calculate_token_lengths,
-        )
-        from .multipack_sampler import (  # pylint: disable=import-outside-toplevel
-            MultipackDistributedBatchSampler,
-        )
-
-        rank, num_bins = 0, 1
+        rank, world_size = 0, 1
         if torch.distributed.is_initialized():
-            num_bins = torch.distributed.get_world_size()
+            world_size = torch.distributed.get_world_size()
             rank = torch.distributed.get_rank()
-        else:
-            # NOTE: or should we do a silent fallback
-            raise AssertionError(
-                "Multipack dataloader only works for distributed training."
-            )
 
-        # some checks
-        def _prereq(dataloader: DataLoader):
-            return hasattr(dataloader, "dataset")
-        
-        def 
+        model_name = model.config.name_or_path
 
-        AcceleratorPatcher.replace(
-            "scattermoe",
-            AcceleratorPatcherComponent.data_loader,
-            replacement_builder=_build_scattermoe_dataloader,
-            pre_requisite_check=_prereq,
-            skip_prepare=True,
+        self._moe_component_module_names = prepare_scattermoe(
+            model,
+            checkpoint_name_or_path=model_name,
+            rank=rank,
+            world_size=world_size,
+            ep_degree=self._ep_degree,
+            mixed_precision=False,  # Currently this is hardcoded to OFF
         )
-
-        # take a pointer to train args
-        self._train_args = train_args
         return model, modifiable_args
 
 
