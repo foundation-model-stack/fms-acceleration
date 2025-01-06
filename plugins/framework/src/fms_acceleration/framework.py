@@ -199,7 +199,7 @@ class AccelerationFramework:
                 x in model_archs for x in plugin.restricted_model_archs
             ):
                 raise ValueError(
-                    f"Model architectures in '{model_archs}' are supported for '{plugin_name}'."
+                    f"Model architectures in '{model_archs}' are not supported for '{plugin_name}'."
                 )
 
             if plugin.requires_augmentation:
