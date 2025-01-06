@@ -110,7 +110,7 @@ def test_single_plugin():
         restricted_models={"CausalLM"},
         requires_augmentation=True,
         requires_custom_loading=True,
-        agumentation=dummy_augmentation,
+        augmentation=dummy_augmentation,
         model_loader=dummy_custom_loader,
     )
     train_args = None  # dummy for now
@@ -185,7 +185,7 @@ def test_two_plugins():
         restricted_models={"CausalLM"},
         requires_augmentation=True,
         requires_custom_loading=True,
-        agumentation=dummy_augmentation,
+        augmentation=dummy_augmentation,
         model_loader=dummy_custom_loader,
     )
     plugin2 = create_plugin_cls(
@@ -193,14 +193,14 @@ def test_two_plugins():
         restricted_models={"CausalLM"},
         requires_augmentation=True,
         requires_custom_loading=True,
-        agumentation=dummy_augmentation,
+        augmentation=dummy_augmentation,
         model_loader=dummy_custom_loader,
     )
     plugin3_no_loader = create_plugin_cls(
         class_name="PluginNoop2",
         restricted_models={"CausalLM"},
         requires_augmentation=True,
-        agumentation=dummy_augmentation,
+        augmentation=dummy_augmentation,
     )
     train_args = None  # dummy for now
 
@@ -300,7 +300,7 @@ def test_plugin_registration_order():
         plugin = create_plugin_cls(
             class_name=class_name,
             requires_augmentation=True,
-            agumentation=hook_builder(act_order=plugin_activation_order),
+            augmentation=hook_builder(act_order=plugin_activation_order),
         )
         plugins_to_be_installed.append((class_name, plugin))
 
@@ -320,7 +320,7 @@ def test_plugin_registration_combination_logic():
     plugin = create_plugin_cls(
         restricted_models={"CausalLM"},
         requires_augmentation=True,
-        agumentation=dummy_augmentation,
+        augmentation=dummy_augmentation,
     )
 
     configuration_contents = {"existing1": {"key1": 1}, "existing2": {"key1": 1}}

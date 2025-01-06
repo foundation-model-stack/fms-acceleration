@@ -160,7 +160,7 @@ def create_plugin_cls(
     require_pkgs: Set = None,
     requires_custom_loading: bool = False,
     requires_augmentation: bool = False,
-    agumentation: Callable = None,
+    augmentation: Callable = None,
     model_loader: Callable = None,
 ):
     "helper function to create plugin class"
@@ -177,8 +177,8 @@ def create_plugin_cls(
         "requires_augmentation": requires_augmentation,
     }
 
-    if agumentation is not None:
-        attributes["augmentation"] = agumentation
+    if augmentation is not None:
+        attributes["augmentation"] = augmentation
 
     if model_loader is not None:
         attributes["model_loader"] = model_loader
