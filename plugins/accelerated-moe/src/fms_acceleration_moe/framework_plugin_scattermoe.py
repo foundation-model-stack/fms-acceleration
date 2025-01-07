@@ -17,8 +17,8 @@ from typing import Dict, Tuple
 
 # Third Party
 from fms_acceleration import AccelerationPlugin
-from transformers import TrainingArguments
 from peft import LoraConfig
+from transformers import TrainingArguments
 import torch
 
 # Local
@@ -78,7 +78,6 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
             mixed_precision=False,  # Currently this is hardcoded to OFF
         )
         return model, modifiable_args
-
 
     def get_callbacks_and_ready_for_train(
         self, model: torch.nn.Module = None, accelerator=None
