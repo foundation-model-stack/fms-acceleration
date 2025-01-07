@@ -17,7 +17,7 @@ from typing import Dict, Tuple
 
 # Third Party
 from fms_acceleration import AccelerationPlugin
-from transformers import AutoModelForCausalLM, TrainingArguments
+from transformers import TrainingArguments
 from peft import LoraConfig
 import torch
 
