@@ -558,7 +558,7 @@ class BaseGPTQModel(nn.Module):
         self.quantize_config.meta_set_versionable(
             key=META_FIELD_QUANTIZER,
             value=META_QUANTIZER_GPTQMODEL,
-            version=__version__,
+            version="1.0.0",
         )
 
         # The config, quantize_config and model may be edited in place in save_quantized.
