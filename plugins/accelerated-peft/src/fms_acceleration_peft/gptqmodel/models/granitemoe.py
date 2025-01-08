@@ -25,11 +25,6 @@ class GraniteMoeGPTQ(BaseGPTQModel):
     layer_modules = [
         ["self_attn.k_proj", "self_attn.v_proj", "self_attn.q_proj"],
         ["self_attn.o_proj"],
-        [
-            "block_sparse_moe.input_linear",
-        ],
-        [
-            "block_sparse_moe.output_linear",
-        ],
-        ["block_sparse_moe.router.layer"],
+        ["block_sparse_moe.input_linear", "block_sparse_moe.output_linear", "block_sparse_moe.router.layer"],
+        ["input_layernorm", "post_attention_layernorm"]
     ]
