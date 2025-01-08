@@ -67,6 +67,11 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
             world_size = torch.distributed.get_world_size()
             rank = torch.distributed.get_rank()
 
+        if not hasattr(model.config, "name_or_path") or not model.config.name_or_path:
+            raise ValueError(
+                "The model configuration is missing the 'name_or_path' attribute."
+            )
+
         model_name = model.config.name_or_path
 
         self._moe_component_module_names = prepare_scattermoe(
