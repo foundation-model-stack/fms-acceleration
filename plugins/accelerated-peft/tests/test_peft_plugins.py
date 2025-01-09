@@ -54,7 +54,7 @@ def test_configure_gptq_plugin():
 
         # check flags and callbacks
         assert framework.requires_custom_loading
-        assert framework.requires_agumentation
+        assert framework.requires_augmentation
         assert len(framework.get_callbacks_and_ready_for_train()) == 0
 
     # attempt to activate plugin with configuration pointing to wrong path
@@ -171,7 +171,7 @@ def test_configure_bnb_plugin():
 
         # check flags and callbacks
         assert framework.requires_custom_loading
-        assert framework.requires_agumentation
+        assert framework.requires_augmentation
         assert len(framework.get_callbacks_and_ready_for_train()) == 0
 
     # test valid combinatinos
@@ -187,7 +187,7 @@ def test_configure_bnb_plugin():
         ):
             # check flags and callbacks
             assert framework.requires_custom_loading
-            assert framework.requires_agumentation
+            assert framework.requires_augmentation
             assert len(framework.get_callbacks_and_ready_for_train()) == 0
 
     # test no_peft_model is true skips plugin.augmentation
@@ -202,7 +202,7 @@ def test_configure_bnb_plugin():
             require_packages_check=False,
         ):
             # check flags and callbacks
-            assert (not correct_value) == framework.requires_agumentation
+            assert (not correct_value) == framework.requires_augmentation
 
     # attempt to activate plugin with configuration pointing to wrong path
     # - raise with message that no plugins can be configured

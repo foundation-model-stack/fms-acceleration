@@ -159,8 +159,8 @@ def create_plugin_cls(
     restricted_models: Set = None,
     require_pkgs: Set = None,
     requires_custom_loading: bool = False,
-    requires_agumentation: bool = False,
-    agumentation: Callable = None,
+    requires_augmentation: bool = False,
+    augmentation: Callable = None,
     model_loader: Callable = None,
 ):
     "helper function to create plugin class"
@@ -174,11 +174,11 @@ def create_plugin_cls(
         "restricted_model_archs": restricted_models,
         "require_packages": require_pkgs,
         "requires_custom_loading": requires_custom_loading,
-        "requires_agumentation": requires_agumentation,
+        "requires_augmentation": requires_augmentation,
     }
 
-    if agumentation is not None:
-        attributes["augmentation"] = agumentation
+    if augmentation is not None:
+        attributes["augmentation"] = augmentation
 
     if model_loader is not None:
         attributes["model_loader"] = model_loader
