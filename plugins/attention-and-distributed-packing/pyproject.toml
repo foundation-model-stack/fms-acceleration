@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fms-acceleration-aadp"
-version = '0.1.1.dev'
+version = '0.2.0'
 description = "FMS Acceleration Plugin for Attention and Distributed Packing Optimizations"
 authors = [
   {name = "Fabian Lim", email = "flim@sg.ibm.com"},
