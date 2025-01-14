@@ -171,7 +171,7 @@ class AccelerationPlugin:
         return False
 
     @property
-    def requires_agumentation(self):
+    def requires_augmentation(self):
         return False
 
     def model_loader(self, model_name: str, **kwargs):

@@ -61,7 +61,7 @@ class MultipackDataloaderAccelerationPlugin(AccelerationPlugin):
             assert self._pad_token_id is not None, "need to get pad token id"
 
     @property
-    def requires_agumentation(self):
+    def requires_augmentation(self):
         return True
 
     def augmentation(
