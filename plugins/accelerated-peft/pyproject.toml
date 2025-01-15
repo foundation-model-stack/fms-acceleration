@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fms-acceleration-peft"
-version = '0.3.5.dev'
+version = '0.4.0.dev'
 description = "FMS Acceleration for PeFT"
 authors = [
   {name = "Fabian Lim", email = "flim@sg.ibm.com"},
