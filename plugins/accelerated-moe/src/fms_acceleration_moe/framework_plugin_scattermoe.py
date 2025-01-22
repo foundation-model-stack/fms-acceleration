@@ -13,11 +13,12 @@
 # limitations under the License.
 
 # Standard
-from typing import Dict
+from typing import Dict, Tuple
 
 # Third Party
 from fms_acceleration import AccelerationPlugin
-from transformers import AutoModelForCausalLM
+from peft import LoraConfig
+from transformers import TrainingArguments
 import torch
 
 # Local
@@ -52,21 +53,27 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
         )
 
     @property
-    def requires_custom_loading(self):
+    def requires_augmentation(self):
         return True
 
-    def model_loader(self, model_name: str, **kwargs):
-
-        # load the model
-        model = AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
-
+    def augmentation(
+        self,
+        model,
+        train_args: TrainingArguments,
+        modifiable_args: Tuple[LoraConfig],
+    ):
         rank, world_size = 0, 1
         if torch.distributed.is_initialized():
             world_size = torch.distributed.get_world_size()
             rank = torch.distributed.get_rank()
 
-        # shard the MOE, and store the component names, eventually needed
-        # to configure the FSDP
+        if not hasattr(model.config, "name_or_path") or not model.config.name_or_path:
+            raise ValueError(
+                "The model configuration is missing the 'name_or_path' attribute."
+            )
+
+        model_name = model.config.name_or_path
+
         self._moe_component_module_names = prepare_scattermoe(
             model,
             checkpoint_name_or_path=model_name,
@@ -75,13 +82,7 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
             ep_degree=self._ep_degree,
             mixed_precision=False,  # Currently this is hardcoded to OFF
         )
-
-        # NOTE: there is currently no good way to get the mixed precision
-        # flag from train_args. It will be better to handle this if
-        # when we move the sharding to augmentation.
-        # https://github.com/foundation-model-stack/fms-acceleration/issues/103
-
-        return model
+        return model, modifiable_args
 
     def get_callbacks_and_ready_for_train(
         self, model: torch.nn.Module = None, accelerator=None
