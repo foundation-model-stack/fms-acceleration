@@ -106,6 +106,12 @@ def find_layers(module, layers=None, name=""):
     for layer in layers:
         if isinstance(module, layer):
             return {name: module}
+    
+    # ADD FOR module GraniteMoeParallelExperts: https://github.com/huggingface/transformers/blob/b5aaf875090388e2bbdbf2d8641ed7967365f435/src/transformers/models/granitemoe/modeling_granitemoe.py#L258C7-L258C32
+    if hasattr(module, "weight") and isinstance(module.weight, torch.nn.Parameter):
+        if module.weight.ndim == 3:
+            return {name: module}
+    
     res = {}
     for name1, child in module.named_children():
         res.update(

@@ -45,7 +45,7 @@ model, (peft_config,) = framework.augmentation(
 )
 ```
 
-We also provide `framework.requires_agumentation` to check if augumentation is required by the plugins.
+We also provide `framework.requires_augmentation` to check if augumentation is required by the plugins.
 
 Finally pass the model to train:
 

@@ -30,6 +30,19 @@ class GPTQ:
             W = W.flatten(1)
         if isinstance(self.layer, transformers.pytorch_utils.Conv1D):
             W = W.t()
+
+        # Suppose your layer weight is [num_experts, out_features, in_features].
+        original_shape = layer.weight.shape  # e.g. (num_experts, out_features, in_features)
+
+        if len(original_shape) == 3:
+            # Flatten to 2D so GPTQ can treat it as rows × cols
+            # rows = num_experts * out_features, cols = in_features
+            W = W.reshape(original_shape[0] * original_shape[1], original_shape[2])
+            self._is_3d = True
+            self._original_shape = original_shape
+        else:
+            self._is_3d = False # 2D   
+            
         self.rows = W.shape[0]
         self.columns = W.shape[1]
         self.H = torch.zeros((self.columns, self.columns), device=self.dev)
@@ -196,6 +209,15 @@ class GPTQ:
         self.layer.weight.data = Q.reshape(self.layer.weight.shape).type_as(
             self.layer.weight.data
         )
+        
+        # Q is 2D after the Cholesky-based quantization step
+        if self._is_3d:
+            # Reshape Q back to [num_experts, out_features, in_features]
+            Q = Q.reshape(self._original_shape)
+
+        # Now assign it back to the parameter
+        self.layer.weight.data = Q.type_as(self.layer.weight.data)
+
         if os.environ.get("DEBUG"):
             logger.debug(torch.sum((self.layer(self.inp1) - self.out1) ** 2))
 
