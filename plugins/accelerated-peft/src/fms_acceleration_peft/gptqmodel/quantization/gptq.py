@@ -74,35 +74,7 @@ class GPTQ:
             self.inp1 = inp
             self.out1 = out
         # Update entire H_list and nsamples_list
-        if self.is_moe:
-            # print("INSIDE ADD_BATCH FOR MOE: inp, type(inp), inp.shape", inp, type(inp), inp.shape)
-            for expert_idx in range(self.num_experts):    
-                H = self.H_list[expert_idx]
-                nsamples = self.nsamples_list[expert_idx]
-                
-                # if len(inp.shape) == 2:
-                #     inp = inp.unsqueeze(0)
-                # tmp = inp.shape[0]
-                # print("INSIDE ADD_BATCH FOR MOE 2: inp, inp.shape, tmp", inp, inp.shape, tmp)
-
-                # Below is doing reverse of above
-                # if len(inp.shape) == 3:
-                #     inp = inp.reshape((-1, inp.shape[-1]))
-                #     print("INSIDE ADD_BATCH FOR MOE 3: inp, inp.shape, tmp", inp, inp.shape, tmp)
-
-                tmp = 1
-                # len(inp.shape) == 2 in this case
-                mod_inp = inp.t()
-                # print("INSIDE ADD_BATCH FOR MOE 4: inp, inp.shape, tmp", inp, inp.shape, tmp)
-
-                H *= nsamples / (nsamples + tmp)
-                nsamples += tmp
-                mod_inp = math.sqrt(2 / nsamples) * mod_inp.float()
-                H += mod_inp.matmul(mod_inp.t())
-            
-                self.H_list[expert_idx] = H
-                self.nsamples_list[expert_idx] = nsamples
-        else:
+        if not self.is_moe:
             # print("INSIDE ADD_BATCH FOR 2D")
             # print("INSIDE ADD_BATCH 1: inp", inp, type(inp), inp.shape)
             if len(inp.shape) == 2:
@@ -132,6 +104,35 @@ class GPTQ:
             inp = math.sqrt(2 / self.nsamples) * inp.float()
             # self.H += 2 / self.nsamples * inp.matmul(inp.t())
             self.H += inp.matmul(inp.t())
+        else:
+            # print("INSIDE ADD_BATCH FOR MOE: inp, type(inp), inp.shape", inp, type(inp), inp.shape)
+            for expert_idx in range(self.num_experts):    
+                H = self.H_list[expert_idx]
+                nsamples = self.nsamples_list[expert_idx]
+                
+                # if len(inp.shape) == 2:
+                #     inp = inp.unsqueeze(0)
+                # tmp = inp.shape[0]
+                # print("INSIDE ADD_BATCH FOR MOE 2: inp, inp.shape, tmp", inp, inp.shape, tmp)
+
+                # Below is doing reverse of above
+                # if len(inp.shape) == 3:
+                #     inp = inp.reshape((-1, inp.shape[-1]))
+                #     print("INSIDE ADD_BATCH FOR MOE 3: inp, inp.shape, tmp", inp, inp.shape, tmp)
+
+                tmp = 1
+                # len(inp.shape) == 2 in this case
+                mod_inp = inp.t()
+                # print("INSIDE ADD_BATCH FOR MOE 4: inp, inp.shape, tmp", inp, inp.shape, tmp)
+
+                H *= nsamples / (nsamples + tmp)
+                nsamples += tmp
+                mod_inp = math.sqrt(2 / nsamples) * mod_inp.float()
+                H += mod_inp.matmul(mod_inp.t())
+            
+                self.H_list[expert_idx] = H
+                self.nsamples_list[expert_idx] = nsamples
+
 
     def fasterquant(
         self,
@@ -141,30 +142,7 @@ class GPTQ:
         actorder=False,
         static_groups=False,
     ):
-        if self.is_moe:
-            # For MoE model
-            # Loop over each expert param and quantize it separately 
-            t_start = time.time()
-            scale_list = []
-            zero_list = []
-            gidx_list = []
-            loss_list = []
-
-            for i in range(self.num_experts):
-                W = self.W_list[i]  # shape [out_features, in_features]
-                H = self.H_list[i]
-                nsamples = self.nsamples_list[i]
-                
-                ##### TODO: QUANTIZATION FOR MOE LAYER #####
-
-            duration = time.time() - t_start
-            final_scale = torch.cat(scale_list, dim=1) if scale_list else torch.tensor([], device=self.dev)
-            final_zero = torch.cat(zero_list, dim=1) if zero_list else torch.tensor([], device=self.dev)
-            final_gidx = torch.cat(gidx_list, dim=0)  if gidx_list else torch.tensor([], device=self.dev)
-            avg_loss = sum(loss_list) / (len(loss_list) + 1e-9)
-
-            return final_scale, final_zero, final_gidx, duration, avg_loss
-        else:
+        if not self.is_moe:
             W = self.layer.weight.data.clone()
             if isinstance(self.layer, nn.Conv2d):
                 W = W.flatten(1)
@@ -297,6 +275,29 @@ class GPTQ:
             scale = torch.cat(scale, dim=1)
             zero = torch.cat(zero, dim=1)
             return scale, zero, g_idx, duration, avg_loss
+        else:
+        # For MoE model
+            # Loop over each expert param and quantize it separately 
+            t_start = time.time()
+            scale_list = []
+            zero_list = []
+            gidx_list = []
+            loss_list = []
+
+            for i in range(self.num_experts):
+                W = self.W_list[i]  # shape [out_features, in_features]
+                H = self.H_list[i]
+                nsamples = self.nsamples_list[i]
+                
+                ##### TODO: QUANTIZATION FOR MOE LAYER #####
+
+            duration = time.time() - t_start
+            final_scale = torch.cat(scale_list, dim=1) if scale_list else torch.tensor([], device=self.dev)
+            final_zero = torch.cat(zero_list, dim=1) if zero_list else torch.tensor([], device=self.dev)
+            final_gidx = torch.cat(gidx_list, dim=0)  if gidx_list else torch.tensor([], device=self.dev)
+            avg_loss = sum(loss_list) / (len(loss_list) + 1e-9)
+
+            return final_scale, final_zero, final_gidx, duration, avg_loss
 
     def free(self):
         if os.environ.get("DEBUG"):
