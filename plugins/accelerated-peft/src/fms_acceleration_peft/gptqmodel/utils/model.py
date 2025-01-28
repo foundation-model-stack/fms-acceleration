@@ -31,6 +31,7 @@ import threadpoolctl as tctl
 import torch
 import torch.nn as nn
 import transformers
+import transformers.models.granitemoe.modeling_granitemoe as MOE
 
 # Local
 from ..models._const import (
@@ -101,17 +102,19 @@ def nested_move_to(v, device):
 
 
 def find_layers(module, layers=None, name=""):
+    # print("1- INSIDE find_layers module", module)
     if not layers:
-        layers = [transformers.pytorch_utils.Conv1D, nn.Conv2d, nn.Linear]
+        # Can add MOE.GraniteMoeRMSNorm here if want to include Linear Norm layer ["input_layernorm", "post_attention_layernorm"]
+        # MOE.GraniteMoeParallelExperts is torch.nn.Module for layer ["block_sparse_moe.input_linear", "block_sparse_moe.output_linear"]
+        layers = [transformers.pytorch_utils.Conv1D, nn.Conv2d, nn.Linear, MOE.GraniteMoeParallelExperts] 
+
+    # print("2- LAYERS, type(module), name", layers, type(module), name)
+    # if hasattr(module, "weight"):
+    #     print("3- module.weight, type(module.weight), module.weight.shape, module.weight.ndim", module.weight, type(module.weight), module.weight.shape, module.weight.ndim)
     for layer in layers:
         if isinstance(module, layer):
             return {name: module}
-    
-    # ADD FOR module GraniteMoeParallelExperts: https://github.com/huggingface/transformers/blob/b5aaf875090388e2bbdbf2d8641ed7967365f435/src/transformers/models/granitemoe/modeling_granitemoe.py#L258C7-L258C32
-    if hasattr(module, "weight") and isinstance(module.weight, torch.nn.Parameter):
-        if module.weight.ndim == 3:
-            return {name: module}
-    
+
     res = {}
     for name1, child in module.named_children():
         res.update(
