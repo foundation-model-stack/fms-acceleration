@@ -184,10 +184,10 @@ class ModelPatcherRule:
                     self.import_and_maybe_reload is not None,
                 ]
             )
-            != 1
+            > 1
         ):
             raise ValueError(
-                f"Rule '{self.rule_id}' must only have only one of forward, "
+                f"Rule '{self.rule_id}' must only have at most one of forward, "
                 "foward builder, or import_and_maybe_reload, specified."
             )
 
@@ -425,7 +425,7 @@ class ModelPatcher:
             # otherwise triggered
             if rule.forward is not None:
                 forward = rule.forward
-            else:
+            elif rule.forward_builder is not None:
                 fba = {}
                 if rule.forward_builder_args is not None:
                     fba = {
@@ -434,6 +434,9 @@ class ModelPatcher:
                         if rule.forward_builder_args
                     }
                 forward = rule.forward_builder(mod, **fba)
+            else:
+                # trigger-only case
+                forward = None
 
             if isinstance(forward, list):
                 # this will be list of tuples case
@@ -468,7 +471,8 @@ class ModelPatcher:
                 continue
 
             # otherwise
-            mod.forward = MethodType(forward, mod)
+            if forward is not None:
+                mod.forward = MethodType(forward, mod)
             ModelPatcher.history.append(
                 ModelPatcherHistory(
                     instance=mod_id,

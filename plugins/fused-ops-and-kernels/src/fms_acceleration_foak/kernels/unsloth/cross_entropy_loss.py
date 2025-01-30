@@ -16,6 +16,7 @@ import triton
 import triton.language as tl
 import torch
 from .utils import calculate_settings, MAX_FUSED_SIZE
+from typing import Type
 
 
 @triton.jit
@@ -290,3 +291,55 @@ class FastCrossEntropyLoss(torch.nn.CrossEntropyLoss):
         )
         n_items = torch.count_nonzero(target != -100)
         return loss.sum() / n_items
+
+
+# added by flim@sg.ibm.com
+
+# adapted from transformers.loss.loss_utils.ForCausalLMLoss
+def FastForCausalLMLoss(
+    logits, labels, vocab_size: int, num_items_in_batch: int = None, ignore_index: int = -100, **kwargs
+):
+    # Upcast to float if we need to compute the loss to avoid potential precision issues
+    logits = logits.float()
+    labels = labels.to(logits.device)
+    # Shift so that tokens < n predict n
+    shift_logits = logits[..., :-1, :].contiguous()
+    shift_labels = labels[..., 1:].contiguous()
+
+    # Flatten the tokens
+    shift_logits = shift_logits.view(-1, vocab_size)
+    shift_labels = shift_labels.view(-1)
+    # Enable model parallelism
+    shift_labels = shift_labels.to(shift_logits.device)
+
+    reduction = "sum" if num_items_in_batch is not None else "mean"
+    assert ignore_index == -100, "FastForCausalLMLoss currently supports only hardcoded ignore index -100."
+    loss = Fast_CrossEntropyLoss.apply(
+        shift_logits, shift_labels
+    )
+    if reduction == "sum":
+        n_items = num_items_in_batch
+    else:
+        n_items = torch.count_nonzero(shift_labels != -100)
+    return loss.sum() / n_items
+
+
+def replace_custom_loss_when_triggered(
+    module_cls: Type,
+    custom_loss_type: str,
+):
+
+    # this is a special trigger that will perform the replacement
+    def _trigger(mod):
+        if isinstance (mod, module_cls) and hasattr(mod, "loss_function"):
+            # guarded
+            from transformers.loss.loss_utils import LOSS_MAPPING
+            LOSS_MAPPING[custom_loss_type] = FastForCausalLMLoss
+            mod.loss_type = custom_loss_type
+            return True
+
+        return False
+
+    return _trigger
+
+
