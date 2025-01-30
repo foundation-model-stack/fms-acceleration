@@ -154,6 +154,11 @@ class ModelPatcherRule:
     # this is mutually exclusive from forward_builder
     forward: ModelForward = None
 
+    # this is a new-style that generalizes functional replacement to more generic
+    # functions than forwards
+    function: Callable = None
+    function_name: str = None
+
     # returns either
     # - a callable, which will be patched on the triggered module
     # - a list of trigger-forward tuples
@@ -176,10 +181,17 @@ class ModelPatcherRule:
     ] = None
 
     def __post_init__(self):
+
+        if self.function is not None and self.function_name is None:
+            raise ValueError(
+                f"Rule '{self.rule_id}' has function specified but, "
+                "empty function_name."
+            )
+
         if (
             sum(
                 [
-                    self.forward is not None,
+                    (self.forward is not None or self.function is not None),
                     self.forward_builder is not None,
                     self.import_and_maybe_reload is not None,
                 ]
@@ -187,7 +199,7 @@ class ModelPatcherRule:
             != 1
         ):
             raise ValueError(
-                f"Rule '{self.rule_id}' must only have only one of forward, "
+                f"Rule '{self.rule_id}' must only have only one of forward/function, "
                 "foward builder, or import_and_maybe_reload, specified."
             )
 
@@ -384,7 +396,7 @@ class ModelPatcher:
             )
 
     @staticmethod
-    def _patch_forwards(
+    def _patch_forwards_or_functions(
         model: torch.nn.Module,
         patch_kwargs: Dict = None,
         visited: Set = None,
@@ -424,7 +436,12 @@ class ModelPatcher:
 
             # otherwise triggered
             if rule.forward is not None:
-                forward = rule.forward
+                forward_or_function = rule.forward
+                forward_or_function_name = 'forward'
+            elif rule.function is not None:
+                forward_or_function = rule.function
+                forward_or_function_name = rule.function_name
+
             else:
                 fba = {}
                 if rule.forward_builder_args is not None:
@@ -433,9 +450,11 @@ class ModelPatcher:
                         for k, w in patch_kwargs.items()
                         if rule.forward_builder_args
                     }
-                forward = rule.forward_builder(mod, **fba)
+                forward_or_function = rule.forward_builder(mod, **fba)
 
-            if isinstance(forward, list):
+            if isinstance(forward_or_function, list):
+                # TODO: currently forward builder pattern
+                # onlys supports patching of forwards
                 # this will be list of tuples case
 
                 # will descend down but
@@ -443,7 +462,7 @@ class ModelPatcher:
                 # - replace new rules
                 old_rules = ModelPatcher.rules
                 ModelPatcher.rules = {}
-                for i, (trig, forw) in enumerate(forward):
+                for i, (trig, forw) in enumerate(forward_or_function):
                     ModelPatcher.register(
                         ModelPatcherRule(
                             rule_id=f"{rule_id}-{i+1}",
@@ -468,7 +487,19 @@ class ModelPatcher:
                 continue
 
             # otherwise
-            mod.forward = MethodType(forward, mod)
+            try:
+                setattr(
+                    mod, forward_or_function_name,
+                    MethodType(forward_or_function, mod)
+                )
+            except AttributeError:
+                # in this case probably trying to override a property 
+                # (e.g., in the case of loss function). So we force it
+                warnings.warn(
+                    f"Model patching '{forward_or_function_name}' in instance "
+                    f"{mod.__class__} in a forceful manner."
+                )
+                mod.__dict__[forward_or_function_name] = MethodType(forward_or_function, mod)
             ModelPatcher.history.append(
                 ModelPatcherHistory(
                     instance=mod_id,
@@ -491,7 +522,7 @@ class ModelPatcher:
             ModelPatcher._import_and_reload(model)
 
         # this will patch the forwards
-        ModelPatcher._patch_forwards(model, patch_kwargs=kwargs)
+        ModelPatcher._patch_forwards_or_functions(model, patch_kwargs=kwargs)
 
     @staticmethod
     def summary(raw: bool = False):

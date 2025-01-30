@@ -214,3 +214,13 @@ def get_hidden_activation_fn_key(config: PretrainedConfig):
         "Unable to determine activation function key for "
         f"architecture {config.architectures}."
     )
+
+# for loss function, trigger if class also has a method name
+def build_trigger_if_has_function(
+    module_cls: Type, has_function: str
+):
+    def _trigger(mod):
+        return isinstance (mod, module_cls) and hasattr(mod, has_function)
+    
+    return _trigger
+

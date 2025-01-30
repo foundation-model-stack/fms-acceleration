@@ -27,7 +27,7 @@ from transformers import PretrainedConfig
 
 # Local
 from ..fused_ops.liger_ce.fused_linear_cross_entropy_loss import lce_forward
-from ..kernels.unsloth.cross_entropy_loss import FastCrossEntropyLoss
+from ..kernels.unsloth.cross_entropy_loss import FastCrossEntropyLoss, FastForCausalLMLoss
 from ..kernels.unsloth.rms_layernorm import fast_rms_layernorm
 from ..kernels.unsloth.rope_embedding import fast_rope_embedding
 from ..utils import filter_mp_rules
@@ -38,6 +38,7 @@ from .utils import (
     build_lora_fused_ops,
     get_hidden_activation_fn_key,
     trigger_fused_ops,
+    build_trigger_if_has_function,
 )
 
 
@@ -122,15 +123,23 @@ def get_mp_rules(base_type: str, config: PretrainedConfig = None):
                 base_type=base_type,
             ),
         ),
-        # TODO: have a generic version of this rule
-        # - get the module_name and reload on that
+        # ModelPatcherRule(
+        #     rule_id="granite-cross-ent",
+        #     import_and_maybe_reload=(
+        #         "torch.nn.CrossEntropyLoss",
+        #         FastCrossEntropyLoss,
+        #         "transformers.models.granite.modeling_granite",
+        #     ),
+        # ),
         ModelPatcherRule(
-            rule_id="granite-cross-ent",
-            import_and_maybe_reload=(
-                "torch.nn.CrossEntropyLoss",
-                FastCrossEntropyLoss,
-                "transformers.models.granite.modeling_granite",
+            rule_id="granite-loss-fn",
+            trigger=ModelPatcherTrigger(
+                check=build_trigger_if_has_function(
+                    GraniteForCausalLM, has_function="loss_function"
+                )
             ),
+            function=FastForCausalLMLoss,
+            function_name="loss_function"
         ),
         ModelPatcherRule(
             rule_id="granite-fused-lce",

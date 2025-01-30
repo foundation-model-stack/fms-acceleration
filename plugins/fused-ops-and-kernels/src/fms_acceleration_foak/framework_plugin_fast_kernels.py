@@ -73,7 +73,7 @@ def register_foak_model_patch_rules(
 FILTER_MAP = {
     "fused_lora": {"qkvo", "mlp"},
     "fast_loss": {
-        True: "cross-ent",
+        True: {"cross-ent", "loss-fn"},
         "fused_ce_liger": "fused-lce",
     },
     "fast_rms_layernorm": "rms",
