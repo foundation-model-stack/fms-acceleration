@@ -19,12 +19,13 @@ from .base import BaseGPTQModel
 
 class GraniteMoeGPTQ(BaseGPTQModel):
     base_modules = ["model.embed_tokens", "model.norm"]
+    convert3dToModuleList = ["block_sparse_moe.input_linear", "block_sparse_moe.output_linear"]
 
     layers_node = "model.layers"
     layer_type = "GraniteMoeDecoderLayer"
     layer_modules = [
         ["self_attn.k_proj", "self_attn.v_proj", "self_attn.q_proj"],
         ["self_attn.o_proj"],
-        ["block_sparse_moe.input_linear", "block_sparse_moe.output_linear"],
-        ["input_layernorm", "post_attention_layernorm"]
+        [f"block_sparse_moe.input_linear.{i}" for i in range(40)],
+        [f"block_sparse_moe.output_linear.{i}" for i in range(40)],
     ]
