@@ -19,7 +19,10 @@ from .base import BaseGPTQModel
 
 class GraniteMoeGPTQ(BaseGPTQModel):
     base_modules = ["model.embed_tokens", "model.norm"]
-    convert3dToModuleList = ["block_sparse_moe.input_linear", "block_sparse_moe.output_linear"]
+    convert_3d_modulelist = [
+        "block_sparse_moe.input_linear",
+        "block_sparse_moe.output_linear",
+    ]
 
     layers_node = "model.layers"
     layer_type = "GraniteMoeDecoderLayer"

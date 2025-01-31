@@ -28,7 +28,7 @@ SUPPORTED_MODELS = [
     "granite",
     "gemma",
     "dbrx_converted",
-    "granitemoe"
+    "granitemoe",
 ]
 
 EXLLAMA_DEFAULT_MAX_INPUT_LENGTH = 2048

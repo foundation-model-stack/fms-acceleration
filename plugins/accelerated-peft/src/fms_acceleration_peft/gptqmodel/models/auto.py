@@ -44,7 +44,7 @@ MODEL_MAP = {
     "granite": GraniteGPTQ,
     "dbrx": DbrxGPTQ,
     "dbrx_converted": DbrxConvertedGPTQ,
-    "granitemoe": GraniteMoeGPTQ
+    "granitemoe": GraniteMoeGPTQ,
 }
 
 at_least_one_cuda_v6 = any(

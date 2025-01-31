@@ -15,7 +15,7 @@
 ###############################################################################
 # Standard
 from logging import getLogger
-from typing import List, Optional, Union
+from typing import List, Optional, Tuple, Union
 import functools
 import hashlib
 import json
@@ -30,9 +30,7 @@ import accelerate
 import threadpoolctl as tctl
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import transformers
-import transformers.models.granitemoe.modeling_granitemoe as MOE
 
 # Local
 from ..models._const import (
@@ -53,24 +51,6 @@ formatter = logging.Formatter("%(levelname)s - %(message)s")
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
-
-class ThreeDTensorModuleList(nn.ModuleList):
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        # Shape of input: (num_selected_experts * batch_size (expert_size), input_features_size)
-        expert_size = len(self)
-        input_list = inputs.split(expert_size, dim=0)
-        output_list = []
-        
-        # Iterate over the number of selected experts and apply each expert to the corresponding input
-        for i in range(len(self)):  
-            # Shape of input_list[i]: (batch_size, input_features_size); Shape of self[i]: (output_features_size, input_features_size) 
-            # Shape of output: (batch_size, output_features_size); 
-            expert_output = F.linear(input_list[i], self[i])
-            output_list.append(expert_output)
-
-        # Concatenate the outputs along the first dimension
-        results = torch.cat(output_list, dim=0)  # Shape: (num_selected_experts * batch_size, output_features_size)
-        return results
 
 
 def recurse_getattr(obj, attr: str):
@@ -120,40 +100,14 @@ def nested_move_to(v, device):
         return v
 
 
-def check3DTensor(module, name, convert3dToModuleList=["block_sparse_moe.input_linear", "block_sparse_moe.output_linear"]):
-    if convert3dToModuleList and name in convert3dToModuleList:
-        # print("INSIDE check3DTensor module, name, convert3dToModuleList", module, name, convert3dToModuleList)
-        num_experts = module.num_experts
-        input_size = module.input_size
-        output_size = module.output_size
-        module = ThreeDTensorModuleList([
-            nn.Linear(input_size, output_size, bias=False) for _ in range(num_experts)
-        ])
-
-    return module
-
-
 def find_layers(module, layers=None, name=""):
-    # print("1- INSIDE find_layers module", module)
-    module = check3DTensor(module, name)
-    # print("2- AFTER check3DTensor module", module)
     if not layers:
-        layers = [transformers.pytorch_utils.Conv1D, nn.Conv2d, nn.Linear] 
-
-    # print("2- INFO: type(module), name", type(module), name)
-    # if hasattr(module, "weight"):
-    #     print("3- type(module.weight), module.weight.shape, module.weight.ndim", type(module.weight), module.weight.shape, module.weight.ndim)
+        layers = [transformers.pytorch_utils.Conv1D, nn.Conv2d, nn.Linear]
     for layer in layers:
         if isinstance(module, layer):
             return {name: module}
-
     res = {}
-    # if isinstance(module, MOE.GraniteMoeParallelExperts):
-    #     print("Print GraniteMoeParallelExperts Layer children")
-    #     for name1, child in module.named_children():
-    #         print("4- name1, child", name1, child)
     for name1, child in module.named_children():
-        # print("PROCESS- name, name1, child", name, name1, child)
         res.update(
             find_layers(
                 child, layers=layers, name=name + "." + name1 if name != "" else name1
@@ -172,6 +126,25 @@ def get_module_by_name_suffix(model, module_name: str):
     for name, module in model.named_modules():
         if name.endswith(module_name):
             return module
+
+
+def get_all_modules_by_name_suffix(
+    model: nn.Module, target_suffix: str
+) -> List[Tuple[Optional[nn.Module], nn.Module, str]]:
+    """Find all modules in the model whose names end with the given suffix, along with their parent modules."""
+    name_to_module = dict(model.named_modules())
+    results = []
+    for full_name, mod in name_to_module.items():
+        if full_name.endswith(target_suffix):
+            split_name = full_name.split(".")
+            if len(split_name) > 1:
+                parent_name = ".".join(split_name[:-1])
+            else:
+                parent_name = ""
+
+            parent_module = name_to_module.get(parent_name, None)
+            results.append((parent_module, mod, full_name))
+    return results
 
 
 def make_quant(
