@@ -40,8 +40,8 @@ from .utils import (
     KEY_QKV,
     build_lora_fused_ops,
     get_hidden_activation_fn_key,
-    trigger_fused_ops,
     get_transformers_version,
+    trigger_fused_ops,
 )
 
 
@@ -127,22 +127,24 @@ def get_mp_rules(base_type: str, config: PretrainedConfig = None):
             ),
         ),
         *[
-            ModelPatcherRule(
-                rule_id="granite-custom-loss",
-                trigger=ModelPatcherTrigger(
-                    check=replace_custom_loss_when_triggered(
-                        GraniteForCausalLM, custom_loss_type="granite-custom-loss"
-                    )
-                ),
-            )
-            if get_transformers_version() >= "4.46" else
-            ModelPatcherRule(
-                rule_id="granite-cross-ent",
-                import_and_maybe_reload=(
-                    "torch.nn.CrossEntropyLoss",
-                    FastCrossEntropyLoss,
-                    "transformers.models.granite.modeling_granite",
-                ),
+            (
+                ModelPatcherRule(
+                    rule_id="granite-custom-loss",
+                    trigger=ModelPatcherTrigger(
+                        check=replace_custom_loss_when_triggered(
+                            GraniteForCausalLM, custom_loss_type="granite-custom-loss"
+                        )
+                    ),
+                )
+                if get_transformers_version() >= "4.46"
+                else ModelPatcherRule(
+                    rule_id="granite-cross-ent",
+                    import_and_maybe_reload=(
+                        "torch.nn.CrossEntropyLoss",
+                        FastCrossEntropyLoss,
+                        "transformers.models.granite.modeling_granite",
+                    ),
+                )
             )
         ],
         ModelPatcherRule(

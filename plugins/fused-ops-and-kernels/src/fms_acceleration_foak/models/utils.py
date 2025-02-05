@@ -216,6 +216,9 @@ def get_hidden_activation_fn_key(config: PretrainedConfig):
         f"architecture {config.architectures}."
     )
 
+
 def get_transformers_version():
-    _, _transformers_version = _is_package_available("transformers", return_version=True)
+    _, _transformers_version = _is_package_available(
+        "transformers", return_version=True
+    )
     return _transformers_version

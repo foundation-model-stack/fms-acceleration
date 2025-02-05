@@ -171,9 +171,7 @@ class BenchmarkDataset:
     ) -> None:
 
         self.dataset_split = datasets.load_dataset(
-            dataset_name,
-            split=dataset_split,
-            **additional_dataset_kwargs
+            dataset_name, split=dataset_split, **additional_dataset_kwargs
         )
 
         self.kwargs = {
@@ -206,9 +204,8 @@ class BenchmarkDataset:
                 )
             response_template = self.response_template
 
-        if (
-            self.kwargs['tokenize']
-            or (not self.kwargs['tokenize'] and self.kwargs['chat_template'])
+        if self.kwargs["tokenize"] or (
+            not self.kwargs["tokenize"] and self.kwargs["chat_template"]
         ):
             tokenizer = AutoTokenizer.from_pretrained(model_name)
             # for now, if pad_token_id is None, will just do a replacement

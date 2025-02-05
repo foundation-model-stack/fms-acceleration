@@ -46,8 +46,8 @@ from .utils import (
     KEY_QKV,
     build_lora_fused_ops,
     get_hidden_activation_fn_key,
-    trigger_fused_ops,
     get_transformers_version,
+    trigger_fused_ops,
 )
 
 
@@ -119,22 +119,24 @@ def get_mp_rules(base_type: str, config: PretrainedConfig = None):
             ),
         ),
         *[
-            ModelPatcherRule(
-                rule_id="mistral-custom-loss",
-                trigger=ModelPatcherTrigger(
-                    check=replace_custom_loss_when_triggered(
-                        MistralForCausalLM, custom_loss_type="mistral-custom-loss"
-                    )
-                ),
-            )
-            if get_transformers_version() >= "4.46" else
-            ModelPatcherRule(
-                rule_id="mistral-cross-ent",
-                import_and_maybe_reload=(
-                    "torch.nn.CrossEntropyLoss",
-                    FastCrossEntropyLoss,
-                    "transformers.models.mistral.modeling_mistral",
-                ),
+            (
+                ModelPatcherRule(
+                    rule_id="mistral-custom-loss",
+                    trigger=ModelPatcherTrigger(
+                        check=replace_custom_loss_when_triggered(
+                            MistralForCausalLM, custom_loss_type="mistral-custom-loss"
+                        )
+                    ),
+                )
+                if get_transformers_version() >= "4.46"
+                else ModelPatcherRule(
+                    rule_id="mistral-cross-ent",
+                    import_and_maybe_reload=(
+                        "torch.nn.CrossEntropyLoss",
+                        FastCrossEntropyLoss,
+                        "transformers.models.mistral.modeling_mistral",
+                    ),
+                )
             )
         ],
         ModelPatcherRule(
