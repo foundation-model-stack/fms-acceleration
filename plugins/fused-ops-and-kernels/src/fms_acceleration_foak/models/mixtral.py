@@ -25,13 +25,14 @@ from fms_acceleration.model_patcher import (
 from transformers.models.mixtral.modeling_mixtral import (
     MixtralAttention,
     MixtralRMSNorm,
+    MixtralForCausalLM,
 )
 
 # Local
-from ..kernels.unsloth.cross_entropy_loss import FastCrossEntropyLoss
+from ..kernels.unsloth.cross_entropy_loss import FastCrossEntropyLoss, replace_custom_loss_when_triggered
 from ..kernels.unsloth.rms_layernorm import fast_rms_layernorm
 from ..kernels.unsloth.rope_embedding import fast_rope_embedding
-from .utils import KEY_O, KEY_QKV, build_lora_fused_ops, trigger_fused_ops
+from .utils import KEY_O, KEY_QKV, build_lora_fused_ops, trigger_fused_ops, get_transformers_version
 
 
 def get_mp_rules(base_type):
@@ -85,14 +86,25 @@ def get_mp_rules(base_type):
                 logic="APPEND",
             ),
         ),
-        ModelPatcherRule(
-            rule_id="mixtral-cross-ent",
-            import_and_maybe_reload=(
-                "torch.nn.CrossEntropyLoss",
-                FastCrossEntropyLoss,
-                "transformers.models.mixtral.modeling_mixtral",
-            ),
-        ),
+        *[
+            ModelPatcherRule(
+                rule_id="mixtral-custom-loss",
+                trigger=ModelPatcherTrigger(
+                    check=replace_custom_loss_when_triggered(
+                        MixtralForCausalLM, custom_loss_type="mixtral-custom-loss"
+                    )
+                ),
+            )
+            if get_transformers_version() >= "4.46" else
+            ModelPatcherRule(
+                rule_id="mixtral-cross-ent",
+                import_and_maybe_reload=(
+                    "torch.nn.CrossEntropyLoss",
+                    FastCrossEntropyLoss,
+                    "transformers.models.mixtral.modeling_mixtral",
+                ),
+            )
+        ],
         ModelPatcherRule(
             rule_id="mixtral-rope",
             import_and_maybe_reload=(
