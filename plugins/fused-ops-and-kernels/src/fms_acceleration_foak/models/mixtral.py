@@ -29,7 +29,10 @@ from transformers.models.mixtral.modeling_mixtral import (
 )
 
 # Local
-from ..kernels.unsloth.cross_entropy_loss import FastCrossEntropyLoss, replace_custom_loss_when_triggered
+from ..kernels.unsloth.cross_entropy_loss import (
+    FastCrossEntropyLoss,
+    replace_custom_loss_when_triggered,
+)
 from ..kernels.unsloth.rms_layernorm import fast_rms_layernorm
 from ..kernels.unsloth.rope_embedding import fast_rope_embedding
 from .utils import KEY_O, KEY_QKV, build_lora_fused_ops, trigger_fused_ops, get_transformers_version

@@ -33,7 +33,10 @@ from transformers.models.llama.modeling_llama import (
 
 # Local
 from ..fused_ops.liger_ce.fused_linear_cross_entropy_loss import lce_forward
-from ..kernels.unsloth.cross_entropy_loss import FastCrossEntropyLoss, replace_custom_loss_when_triggered
+from ..kernels.unsloth.cross_entropy_loss import (
+    FastCrossEntropyLoss,
+    replace_custom_loss_when_triggered,
+)
 from ..kernels.unsloth.rms_layernorm import fast_rms_layernorm
 from ..kernels.unsloth.rope_embedding import fast_rope_embedding
 from ..utils import filter_mp_rules

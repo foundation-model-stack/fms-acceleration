@@ -27,7 +27,10 @@ from transformers import PretrainedConfig
 
 # Local
 from ..fused_ops.liger_ce.fused_linear_cross_entropy_loss import lce_forward
-from ..kernels.unsloth.cross_entropy_loss import FastCrossEntropyLoss, replace_custom_loss_when_triggered
+from ..kernels.unsloth.cross_entropy_loss import (
+    FastCrossEntropyLoss,
+    replace_custom_loss_when_triggered,
+)
 from ..kernels.unsloth.rms_layernorm import fast_rms_layernorm
 from ..kernels.unsloth.rope_embedding import fast_rope_embedding
 from ..utils import filter_mp_rules
@@ -140,7 +143,7 @@ def get_mp_rules(base_type: str, config: PretrainedConfig = None):
                     FastCrossEntropyLoss,
                     "transformers.models.granite.modeling_granite",
                 ),
-            ) 
+            )
         ],
         ModelPatcherRule(
             rule_id="granite-fused-lce",
