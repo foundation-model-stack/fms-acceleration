@@ -254,12 +254,12 @@ def test_combine_mp_triggers_produces_correct_output(
 
 
 def test_mp_rule_raises_error_when_arguments_incorrectly_configured():
-    "Ensure MP rule is throws appropriate error when wrong argument combinations are passed"
+    "Ensure MP rule throws appropriate error when wrong argument combinations are passed"
     # Test mp rule construction raises with multiple arguments
     with pytest.raises(
         ValueError,
-        match="must only have only one of forward, "
-        "foward builder, or import_and_maybe_reload, specified.",
+        match="must only have at most one of forward, "
+        "forward builder, or import_and_maybe_reload, specified.",
     ):
         ModelPatcherRule(
             rule_id=DUMMY_RULE_ID,

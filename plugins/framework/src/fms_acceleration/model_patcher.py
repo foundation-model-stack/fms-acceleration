@@ -188,7 +188,7 @@ class ModelPatcherRule:
         ):
             raise ValueError(
                 f"Rule '{self.rule_id}' must only have at most one of forward, "
-                "foward builder, or import_and_maybe_reload, specified."
+                "forward builder, or import_and_maybe_reload, specified."
             )
 
         if self.import_and_maybe_reload is not None and self.trigger is not None:
