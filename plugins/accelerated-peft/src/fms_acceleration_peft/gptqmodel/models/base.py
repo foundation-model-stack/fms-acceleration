@@ -38,9 +38,9 @@ from transformers.modeling_utils import (
     no_init_weights,
 )
 from transformers.pytorch_utils import id_tensor_storage
+from transformers.utils import WEIGHTS_NAME
 from transformers.utils.generic import ContextManagers
 from transformers.utils.hub import convert_file_size_to_int
-from transformers.utils import WEIGHTS_NAME
 import accelerate
 import torch
 import torch.nn as nn
