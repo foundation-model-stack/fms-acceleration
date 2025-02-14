@@ -719,11 +719,6 @@ def get_moe_layer_modules(layer_modules: List, num_experts: int) -> List:
 
 from types import MethodType
 
-class ModuleListNew(torch.nn.ModuleList):
-
-    def __getitem__(self, i):
-        return super().__getitem__(i).weight
-# 
 def replace_3d_parameters_with_module_list(
     model: torch.nn.Module,
 ):
@@ -747,7 +742,7 @@ def replace_3d_parameters_with_module_list(
                     linear.weight.data = param.data[i]
                     module_list.append(linear)
 
-                module_list = ModuleListNew(module_list)
+                module_list = torch.nn.ModuleList(module_list)
 
                 # replace
                 delattr(module, param_name)
