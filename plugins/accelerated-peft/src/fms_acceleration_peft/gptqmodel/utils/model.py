@@ -715,3 +715,40 @@ def get_moe_layer_modules(layer_modules: List, num_experts: int) -> List:
                 new_inside_layer_modules[-1].append(n)
 
     return new_inside_layer_modules
+
+
+from types import MethodType
+
+class ModuleListNew(torch.nn.ModuleList):
+
+    def __getitem__(self, i):
+        return super().__getitem__(i).weight
+# 
+def replace_3d_parameters_with_module_list(
+    model: torch.nn.Module,
+):
+
+    for name, module in model.named_modules():
+        for param_name, param in module.named_parameters(recurse=False):
+            if len(param.shape) == 3:
+                device = param.device
+                dtype = param.dtype
+                num, in_features, out_features = param.shape
+
+                module_list = []
+                for i in range(num):
+                    linear = torch.nn.Linear(
+                        in_features=in_features,
+                        out_features=out_features,
+                        device=device,
+                        dtype=dtype,
+                        bias=None, # FIXME: how to support bias?
+                    )
+                    linear.weight.data = param.data[i]
+                    module_list.append(linear)
+
+                module_list = ModuleListNew(module_list)
+
+                # replace
+                delattr(module, param_name)
+                setattr(module, param_name, module_list)

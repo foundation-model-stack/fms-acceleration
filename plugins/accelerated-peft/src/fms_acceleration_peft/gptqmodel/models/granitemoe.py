@@ -13,24 +13,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ###############################################################################
-# Third Party
-from torch import device
+# Local
+from .base import BaseGPTQModel
 
-CPU = device("cpu")
-CUDA_0 = device("cuda:0")
 
-SUPPORTED_MODELS = [
-    "gpt_neox",
-    "gpt_bigcode",
-    "llama",
-    "mistral",
-    "mixtral",
-    "granite",
-    "granitemoe",
-    "gemma",
-    "dbrx_converted",
-]
+class GraniteMoeGPTQ(BaseGPTQModel):
+    base_modules = ["model.embed_tokens", "model.norm"]
+    # convert_3d_modulelist = [
+    #     "block_sparse_moe.input_linear",
+    #     "block_sparse_moe.output_linear",
+    # ]
 
-EXLLAMA_DEFAULT_MAX_INPUT_LENGTH = 2048
+    layers_node = "model.layers"
+    layer_type = "GraniteMoeDecoderLayer"
 
-EXPERT_INDEX_PLACEHOLDER = "{expert_index}"
+    # NOTE: we should look at dynamic_expert_index so we dont have
+    # to write out experts
+    layer_modules = [
+        ["self_attn.k_proj", "self_attn.v_proj", "self_attn.q_proj"],
+        ["self_attn.o_proj"],
+        [f"block_sparse_moe.input_linear.weight.{i}" for i in range(40)],
+        [f"block_sparse_moe.output_linear.weight.{i}" for i in range(40)],
+    ]
