@@ -27,7 +27,10 @@ from transformers import PretrainedConfig
 
 # Local
 from ..fused_ops.liger_ce.fused_linear_cross_entropy_loss import lce_forward
-from ..kernels.unsloth.cross_entropy_loss import FastCrossEntropyLoss
+from ..kernels.unsloth.cross_entropy_loss import (
+    FastCrossEntropyLoss,
+    replace_custom_loss_when_triggered,
+)
 from ..kernels.unsloth.rms_layernorm import fast_rms_layernorm
 from ..kernels.unsloth.rope_embedding import fast_rope_embedding
 from ..utils import filter_mp_rules
@@ -37,6 +40,7 @@ from .utils import (
     KEY_QKV,
     build_lora_fused_ops,
     get_hidden_activation_fn_key,
+    get_transformers_version,
     trigger_fused_ops,
 )
 
@@ -122,16 +126,27 @@ def get_mp_rules(base_type: str, config: PretrainedConfig = None):
                 base_type=base_type,
             ),
         ),
-        # TODO: have a generic version of this rule
-        # - get the module_name and reload on that
-        ModelPatcherRule(
-            rule_id="granite-cross-ent",
-            import_and_maybe_reload=(
-                "torch.nn.CrossEntropyLoss",
-                FastCrossEntropyLoss,
-                "transformers.models.granite.modeling_granite",
-            ),
-        ),
+        *[
+            (
+                ModelPatcherRule(
+                    rule_id="granite-custom-loss",
+                    trigger=ModelPatcherTrigger(
+                        check=replace_custom_loss_when_triggered(
+                            GraniteForCausalLM, custom_loss_type="granite-custom-loss"
+                        )
+                    ),
+                )
+                if get_transformers_version() >= "4.46"
+                else ModelPatcherRule(
+                    rule_id="granite-cross-ent",
+                    import_and_maybe_reload=(
+                        "torch.nn.CrossEntropyLoss",
+                        FastCrossEntropyLoss,
+                        "transformers.models.granite.modeling_granite",
+                    ),
+                )
+            )
+        ],
         ModelPatcherRule(
             rule_id="granite-fused-lce",
             trigger=ModelPatcherTrigger(check=GraniteForCausalLM),
