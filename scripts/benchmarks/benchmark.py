@@ -319,11 +319,11 @@ class ConfigUtils:
                     ]
                 )
             elif grad_accum is None and pdtbs is not None:
-                gas = effective_batch_size // num_gpus // pdtbs
+                grad_accum_steps = effective_batch_size // num_gpus // pdtbs
                 argument_list.extend(
                     [
                         "--gradient_accumulation_steps",
-                        str(1 if gas == 0 else gas),
+                        str(1 if grad_accum_steps == 0 else grad_accum_steps),
                     ]
                 )
             else:
