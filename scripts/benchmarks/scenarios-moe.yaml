@@ -82,6 +82,24 @@ scenarios:
             model_name_or_path: 
                 - 'ibm-research/moe-7b-1b-active-shared-experts'
 
+    -   name: accelerated-moe-full-granite-moe-shared-small
+        framework_config: 
+            - # without acceleration
+            - moe-scattermoe-granite-ep4
+            - moe-scattermoe-granite-ep4-padding-free
+            - moe-scattermoe-granite-ep4-padding-free-foak
+        arguments:
+            learning_rate: 5e-5
+            torch_dtype: bfloat16
+            gradient_accumulation_steps: null
+            per_device_train_batch_size: 8
+            logging_steps: 1
+            packing: False
+            adam_epsilon: 1e-8
+            model_name_or_path: 
+                - 'ibm-research/moe-7b-1b-active-shared-experts'
+
+
     -   name: accelerated-moe-full-mixtral
         framework_config: 
             - # without acceleration
