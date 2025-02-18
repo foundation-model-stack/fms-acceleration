@@ -40,7 +40,7 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
     # if we decide to extract the kernels, then we do not need to anymore,
     # https://github.com/foundation-model-stack/fms-acceleration/issues/105
 
-    restricted_model_archs = ["GraniteMoeForCausalLM", "MixtralForCausalLM"]
+    restricted_model_archs = ["GraniteMoeForCausalLM", "MixtralForCausalLM", "GraniteMoeSharedForCausalLM"]
 
     def __init__(self, configurations: Dict[str, Dict]):
         super().__init__(configurations)
