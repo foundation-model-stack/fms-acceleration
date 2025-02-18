@@ -108,7 +108,8 @@ def get_mp_rules(base_type: str):
         ModelPatcherRule(
             rule_id="granitemoeshared-rope",
             import_and_maybe_reload=(
-                "transformers.models.granitemoeshared.modeling_granitemoeshared.apply_rotary_pos_emb",
+                "transformers.models.granitemoeshared.\
+                    modeling_granitemoeshared.apply_rotary_pos_emb",
                 fast_rope_embedding,
                 None,
             ),
