@@ -15,13 +15,33 @@
 ###############################################################################
 # Local
 from .base import BaseGPTQModel
+import torch
+
+def new_forward(self, inputs, expert_size):
+    """
+    Forward pass of the GraniteMoeParallelExperts module.
+    Args:
+        inputs (Tensor):
+            Input tensor.
+        expert_size:
+            Expert size information.
+    Returns:
+        Tensor: Output tensor.
+    """
+    input_list = inputs.split(expert_size, dim=0)
+    output_list = []
+    for i in range(self.num_experts):
+        # the key is we need to use call the module
+        output_list.append(self.weight[i](input_list[i]))
+    results = torch.cat(output_list, dim=0)
+    return results
 
 
 class GraniteMoeGPTQ(BaseGPTQModel):
     base_modules = ["model.embed_tokens", "model.norm"]
-    convert_3d_modulelist = [
-        "block_sparse_moe.input_linear",
-        "block_sparse_moe.output_linear",
+    convert3dparameters = True
+    update_forwards = [
+       ("GraniteMoeParallelExperts", new_forward) 
     ]
 
     layers_node = "model.layers"

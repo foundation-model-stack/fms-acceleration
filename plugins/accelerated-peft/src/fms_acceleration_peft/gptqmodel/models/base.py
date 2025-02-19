@@ -15,7 +15,8 @@
 ###############################################################################
 # Standard
 from os.path import isfile, join
-from typing import Dict, List, Optional, Union
+from types import MethodType
+from typing import Callable, Dict, List, Optional, Tuple, Union
 import copy
 import json
 import logging
@@ -44,7 +45,6 @@ from transformers.utils.hub import convert_file_size_to_int
 import accelerate
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import transformers
 
 # Local
@@ -65,7 +65,6 @@ from ..utils.model import (
     convert_gptq_v1_to_v2_format,
     convert_gptq_v2_to_v1_format,
     find_layers,
-    get_all_modules_by_name_suffix,
     get_checkpoints,
     get_device,
     get_module_by_name_prefix,
@@ -79,6 +78,7 @@ from ..utils.model import (
     simple_dispatch_model,
     verify_model_hash,
     verify_sharded_model_hashes,
+    replace_3d_parameters_with_module_list,
 )
 from ._const import CPU, CUDA_0, SUPPORTED_MODELS
 
@@ -96,8 +96,11 @@ class BaseGPTQModel(nn.Module):
     # does not include the node which holds all the repeating layers
     base_modules: List[str] = None
 
-    # 3D Module to be converted to ModuleList
-    convert_3d_modulelist: List[str] = None
+    # If 3D Parameters to be converted
+    convert3dparameters: bool = False
+
+    # User provided forward pass to replace the existing forward pass 
+    update_forwards: List[Tuple[str, Callable]] = None
 
     # name of lm_head
     lm_head: str = "lm_head"
@@ -133,6 +136,13 @@ class BaseGPTQModel(nn.Module):
         super().__init__()
 
         self.model = model
+        if self.convert3dparameters:
+            model = replace_3d_parameters_with_module_list(model)
+            for mod in model.modules():
+                forward = self.update_forwards.get(mod.__class__.__name__)
+                if forward is not None:
+                    mod.forward = MethodType(forward, mod)
+
         self.model_type = self.model.config.model_type
         self._quantized = quantized
         self.quantize_config = quantize_config
@@ -230,22 +240,6 @@ class BaseGPTQModel(nn.Module):
 
         if len(calibration_dataset) == 0:
             raise ValueError("Calibration dataset must not be empty.")
-
-        ##### SWAP 3D MODULES TO MODULELIST #####
-        if self.convert_3d_modulelist:
-            for name in self.convert_3d_modulelist:
-                matches = get_all_modules_by_name_suffix(self.model, name)
-                for parent, module, full_name in matches:
-
-                    # Modify the matched module
-                    if parent is not None:
-                        new_module = self.swap_3d_tensors(module)
-
-                        # Replace the old module with the new one
-                        # Derive the child attribute name from the tail of full_name
-                        child_name = full_name.split(".")[-1]
-
-                        setattr(parent, child_name, new_module)
 
         min_calibration_dataset_size = 256
         min_calibration_dataset_input_ids_avg_length = 256
@@ -1334,49 +1328,6 @@ class BaseGPTQModel(nn.Module):
             return super().__getattr__(item)
         except Exception:
             return getattr(self.model, item)
-
-    def swap_3d_tensors(self, module: nn.Module) -> nn.ModuleList:
-        """Swap 3D Parameters to ModuleList of 3D Parameters."""
-
-        num_experts = module.num_experts
-        input_size = module.input_size
-        output_size = module.output_size
-        module = MoE3DModuleList(
-            [nn.Linear(input_size, output_size, bias=False) for _ in range(num_experts)]
-        )
-        return module
-
-
-class MoE3DModuleList(nn.ModuleList):
-    def forward(self, inputs: torch.Tensor, expert_size: int) -> torch.Tensor:
-        """
-        Forward pass of the MoE3DModuleList module.
-        Args:
-            inputs (Tensor):
-                Input tensor.
-            expert_size:
-                Expert size information.
-        Returns:
-            Tensor: Output tensor.
-        """
-        input_list = inputs.split(expert_size, dim=0)
-        output_list = []
-
-        # Iterate over the number of selected experts and apply each expert to the corresponding input
-        for i in range(len(expert_size)):
-            # Extract weight and bias from the Linear module
-            weight = self[i].weight.to(device=inputs.device, dtype=inputs.dtype)
-            bias = (
-                self[i].bias.to(device=inputs.device, dtype=inputs.dtype)
-                if self[i].bias is not None
-                else None
-            )
-            expert_output = F.linear(input_list[i], weight, bias)
-            output_list.append(expert_output)
-
-        # Concatenate the outputs along the first dimension
-        results = torch.cat(output_list, dim=0)
-        return results
 
 
 __all__ = ["BaseGPTQModel"]

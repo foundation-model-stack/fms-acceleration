@@ -15,7 +15,7 @@
 ###############################################################################
 # Standard
 from logging import getLogger
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Union
 import functools
 import hashlib
 import json
@@ -126,25 +126,6 @@ def get_module_by_name_suffix(model, module_name: str):
     for name, module in model.named_modules():
         if name.endswith(module_name):
             return module
-
-
-def get_all_modules_by_name_suffix(
-    model: nn.Module, target_suffix: str
-) -> List[Tuple[Optional[nn.Module], nn.Module, str]]:
-    """Find all modules in the model whose names end with the given suffix, along with their parent modules."""
-    name_to_module = dict(model.named_modules())
-    results = []
-    for full_name, mod in name_to_module.items():
-        if full_name.endswith(target_suffix):
-            split_name = full_name.split(".")
-            if len(split_name) > 1:
-                parent_name = ".".join(split_name[:-1])
-            else:
-                parent_name = ""
-
-            parent_module = name_to_module.get(parent_name, None)
-            results.append((parent_module, mod, full_name))
-    return results
 
 
 def make_quant(
@@ -734,3 +715,33 @@ def get_moe_layer_modules(layer_modules: List, num_experts: int) -> List:
                 new_inside_layer_modules[-1].append(n)
 
     return new_inside_layer_modules
+
+
+def replace_3d_parameters_with_module_list(
+    model: torch.nn.Module,
+):
+
+    for name, module in model.named_modules():
+        for param_name, param in module.named_parameters(recurse=False):
+            if len(param.shape) == 3:
+                device = param.device
+                dtype = param.dtype
+                num, in_features, out_features = param.shape
+
+                module_list = []
+                for i in range(num):
+                    linear = torch.nn.Linear(
+                        in_features=in_features,
+                        out_features=out_features,
+                        device=device,
+                        dtype=dtype,
+                        bias=None, # FIXME: how to support bias?
+                    )
+                    linear.weight.data = param.data[i]
+                    module_list.append(linear)
+
+                module_list = torch.nn.ModuleList(module_list)
+
+                # replace
+                delattr(module, param_name)
+                setattr(module, param_name, module_list)
