@@ -13,9 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 ###############################################################################
+# Third Party
+import torch
+
 # Local
 from .base import BaseGPTQModel
-import torch
+
 
 def new_forward(self, inputs, expert_size):
     """
@@ -40,15 +43,13 @@ def new_forward(self, inputs, expert_size):
 class GraniteMoeGPTQ(BaseGPTQModel):
     base_modules = ["model.embed_tokens", "model.norm"]
     convert3dparameters = True
-    update_forwards = [
-       ("GraniteMoeParallelExperts", new_forward) 
-    ]
+    update_forwards = {"GraniteMoeParallelExperts": new_forward}
 
     layers_node = "model.layers"
     layer_type = "GraniteMoeDecoderLayer"
     layer_modules = [
         ["self_attn.k_proj", "self_attn.v_proj", "self_attn.q_proj"],
         ["self_attn.o_proj"],
-        [f"block_sparse_moe.input_linear.{i}" for i in range(40)],
-        [f"block_sparse_moe.output_linear.{i}" for i in range(40)],
+        [f"block_sparse_moe.input_linear.weight.{i}" for i in range(40)],
+        [f"block_sparse_moe.output_linear.weight.{i}" for i in range(40)],
     ]

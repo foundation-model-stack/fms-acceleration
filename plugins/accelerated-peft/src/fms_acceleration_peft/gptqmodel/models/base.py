@@ -75,10 +75,10 @@ from ..utils.model import (
     move_to,
     nested_move_to,
     pack_model,
+    replace_3d_parameters_with_module_list,
     simple_dispatch_model,
     verify_model_hash,
     verify_sharded_model_hashes,
-    replace_3d_parameters_with_module_list,
 )
 from ._const import CPU, CUDA_0, SUPPORTED_MODELS
 
@@ -99,7 +99,7 @@ class BaseGPTQModel(nn.Module):
     # If 3D Parameters to be converted
     convert3dparameters: bool = False
 
-    # User provided forward pass to replace the existing forward pass 
+    # User provided forward pass to replace the existing forward pass
     update_forwards: List[Tuple[str, Callable]] = None
 
     # name of lm_head
@@ -137,7 +137,7 @@ class BaseGPTQModel(nn.Module):
 
         self.model = model
         if self.convert3dparameters:
-            model = replace_3d_parameters_with_module_list(model)
+            replace_3d_parameters_with_module_list(model)
             for mod in model.modules():
                 forward = self.update_forwards.get(mod.__class__.__name__)
                 if forward is not None:
