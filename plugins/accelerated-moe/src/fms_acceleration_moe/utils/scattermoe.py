@@ -28,7 +28,7 @@ import torch.nn.functional as F
 
 try:
     # Third Party
-    from khd.kernels.scattermoe.triton_implementation.ops import (
+    from .scattermoe_utils.megablocks.kernels.ops import (
         padded_block_indices,
         scattered_experts,
     )
