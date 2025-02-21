@@ -38,3 +38,5 @@ epoch,framework_config,gradient_accumulation_steps,mem_nvidia_mem_reserved,model
 0.25,moe-scattermoe-granite-ep2-padding-free,4,42590,ibm-research/moe-7b-1b-active-shared-experts,4,8,bfloat16,0.879999972,250.48,51.102,0.399,2472.054
 0.25,moe-scattermoe-granite-ep2-padding-free-foak,8,40281,ibm-research/moe-7b-1b-active-shared-experts,2,8,bfloat16,0.878110015,461.6668,27.726,0.217,2682.454
 0.25,moe-scattermoe-granite-ep2-padding-free-foak,4,38934.5,ibm-research/moe-7b-1b-active-shared-experts,4,8,bfloat16,0.880085612,250.2941,51.14,0.4,2473.889
+0.25,moe-scattermoe-granite-ep8,16,56845,mistralai/Mixtral-8x7B-Instruct-v0.1,8,1,bfloat16,0.86557077,779.9315,16.412,0.128,430.807
+0.25,moe-scattermoe-granite-ep8-foak,16,56769.25,mistralai/Mixtral-8x7B-Instruct-v0.1,8,1,bfloat16,0.86551428,734.0756,17.437,0.136,457.719
