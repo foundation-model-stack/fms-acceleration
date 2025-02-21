@@ -26,21 +26,13 @@ from transformers.activations import ACT2FN
 import torch
 import torch.nn.functional as F
 
-try:
-    # Third Party
-    from khd.kernels.scattermoe.triton_implementation.ops import (
-        padded_block_indices,
-        scattered_experts,
-    )
-except ImportError as e:
-    raise ImportError(
-        "kernel-hyperdrive PyPI package not found. Install it: "
-        "pip install -r plugins/accelerated-moe/requirements-khd.txt"
-    ) from e
-
 # Local
 from .scattermoe_constants import SCATTERMOE_SPEC_HAS_GATE
 from .scattermoe_utils import all_to_all_gather_inputs, scatter_with_routing_weights
+from .scattermoe_utils.khd.kernels.ops import (
+    padded_block_indices,
+    scattered_experts,
+)
 
 
 # helper function to fetch the local tensor if its a dtensor
