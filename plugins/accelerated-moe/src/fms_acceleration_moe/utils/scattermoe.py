@@ -26,19 +26,11 @@ from transformers.activations import ACT2FN
 import torch
 import torch.nn.functional as F
 
-try:
-    # Third Party
-    from .scattermoe_utils.megablocks.kernels.ops import (
-        padded_block_indices,
-        scattered_experts,
-    )
-except ImportError as e:
-    raise ImportError(
-        "kernel-hyperdrive PyPI package not found. Install it: "
-        "pip install -r plugins/accelerated-moe/requirements-khd.txt"
-    ) from e
-
 # Local
+from .scattermoe_utils.khd.kernels.ops import (
+    padded_block_indices,
+    scattered_experts,
+)
 from .scattermoe_constants import SCATTERMOE_SPEC_HAS_GATE
 from .scattermoe_utils import all_to_all_gather_inputs, scatter_with_routing_weights
 
