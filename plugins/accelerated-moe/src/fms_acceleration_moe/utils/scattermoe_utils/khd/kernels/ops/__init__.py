@@ -13,17 +13,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# Third Party
 import torch
 
 # Local
 from .compileable_ops import compileable_bincount, group, group_bwd_W, scatter2scatter
 
-
 BLOCK_M = 128
 torch._dynamo.config.capture_scalar_outputs = True
 
 
-def padded_block_indices(sorted_experts_idxs: torch.Tensor, k: int, N_BLOCK_SIZE: int = BLOCK_M):
+def padded_block_indices(
+    sorted_experts_idxs: torch.Tensor, k: int, N_BLOCK_SIZE: int = BLOCK_M
+):
     # there is an overhead of launching a custom op so we only use the custom op when compiling
     if torch.compiler.is_compiling():
         expert_counts = compileable_bincount(sorted_experts_idxs, k)
@@ -37,14 +39,22 @@ def padded_block_indices(sorted_experts_idxs: torch.Tensor, k: int, N_BLOCK_SIZE
     padded_expert_block_start = padded_expert_block_end - padded_block_counts
 
     block_idxs = torch.arange(
-        padded_expert_block_end[-1], dtype=sorted_experts_idxs.dtype, device=sorted_experts_idxs.device
+        padded_expert_block_end[-1],
+        dtype=sorted_experts_idxs.dtype,
+        device=sorted_experts_idxs.device,
     ).unsqueeze(1)
 
-    block_mask = (block_idxs < padded_expert_block_start) | (block_idxs >= padded_expert_block_end)
-    expanded_block_idxs = N_BLOCK_SIZE * (block_idxs - padded_expert_block_start) + expert_boundaries_start
+    block_mask = (block_idxs < padded_expert_block_start) | (
+        block_idxs >= padded_expert_block_end
+    )
+    expanded_block_idxs = (
+        N_BLOCK_SIZE * (block_idxs - padded_expert_block_start)
+        + expert_boundaries_start
+    )
     expanded_block_idxs = expanded_block_idxs.masked_fill(block_mask, 0).sum(-1)
 
     return expanded_block_idxs, expert_boundaries_end
+
 
 class _ScatteredExperts(torch.autograd.Function):
     @staticmethod
@@ -60,11 +70,16 @@ class _ScatteredExperts(torch.autograd.Function):
         gates=None,
         grouped_in=False,
         grouped_out=False,
-        expert_lora_A=None, 
+        expert_lora_A=None,
         expert_lora_B=None,
-        lora_alp: float = 0.
+        lora_alp: float = 0.0,
     ):
-        output = torch.empty(sorted_expert_idxs.size(0), expert_weights.size(-1), device=x.device, dtype=x.dtype)
+        output = torch.empty(
+            sorted_expert_idxs.size(0),
+            expert_weights.size(-1),
+            device=x.device,
+            dtype=x.dtype,
+        )
 
         scatter2scatter(
             X=x,
@@ -76,7 +91,9 @@ class _ScatteredExperts(torch.autograd.Function):
             FAN_OUT=k,
             x_grouped=grouped_in,
             y_grouped=grouped_out,
-            A=expert_lora_A, B=expert_lora_B, lora_alp=lora_alp,
+            A=expert_lora_A,
+            B=expert_lora_B,
+            lora_alp=lora_alp,
         )
 
         _extra_tensors_to_save = ()
@@ -129,7 +146,7 @@ class _ScatteredExperts(torch.autograd.Function):
         grouped_out = ctx.grouped_out
 
         use_lora = False
-        if hasattr(ctx, 'lora_r'):
+        if hasattr(ctx, "lora_r"):
             lora_r = ctx.lora_r
             lora_alp = ctx.lora_alp
             expert_lora_A, expert_lora_B = _extra_saved_tensors
@@ -152,8 +169,9 @@ class _ScatteredExperts(torch.autograd.Function):
             grouped_grad_out = grad_out
         else:
             grouped_grad_out = torch.zeros(
-                (grad_out.shape[0] * gate_fan, grad_out.shape[1]), 
-                dtype=grad_out.dtype, device=grad_out.device
+                (grad_out.shape[0] * gate_fan, grad_out.shape[1]),
+                dtype=grad_out.dtype,
+                device=grad_out.device,
             )
             group(
                 A=grad_out,
@@ -166,10 +184,15 @@ class _ScatteredExperts(torch.autograd.Function):
         if grouped_in:
             grouped_x = x
             d_expanded_input = torch.empty(
-                sorted_expert_idxs.size(0), expert_weights.size(1), device=x.device, dtype=x.dtype
+                sorted_expert_idxs.size(0),
+                expert_weights.size(1),
+                device=x.device,
+                dtype=x.dtype,
             )
         else:
-            grouped_x = torch.empty(sorted_scattered_idxs.size(0), x.size(1), dtype=x.dtype, device=x.device)
+            grouped_x = torch.empty(
+                sorted_scattered_idxs.size(0), x.size(1), dtype=x.dtype, device=x.device
+            )
             group(
                 A=x,
                 sorted_expert_idxs=sorted_scattered_idxs,
@@ -198,13 +221,17 @@ class _ScatteredExperts(torch.autograd.Function):
         _extra_scatter_kwargs = {}
         _extra_grads_to_return = (None, None)
         if use_lora:
-            d_weights_A = d_weights @ expert_lora_B.permute(0, 2, 1)  * (lora_alp / lora_r)
-            d_weights_B =  expert_lora_A.permute(0, 2, 1)  @ d_weights * (lora_alp / lora_r)
-            d_weights = None # zero it
+            d_weights_A = (
+                d_weights @ expert_lora_B.permute(0, 2, 1) * (lora_alp / lora_r)
+            )
+            d_weights_B = (
+                expert_lora_A.permute(0, 2, 1) @ d_weights * (lora_alp / lora_r)
+            )
+            d_weights = None  # zero it
 
             _extra_scatter_kwargs = {
-                "A": expert_lora_B.permute(0, 2, 1), # B^T
-                "B": expert_lora_A.permute(0, 2, 1), # A^T
+                "A": expert_lora_B.permute(0, 2, 1),  # B^T
+                "B": expert_lora_A.permute(0, 2, 1),  # A^T
                 "lora_alp": lora_alp,
             }
             _extra_grads_to_return = (d_weights_A, d_weights_B)
@@ -225,7 +252,9 @@ class _ScatteredExperts(torch.autograd.Function):
         if k == 1:
             d_input = d_expanded_input
         else:
-            d_input = d_expanded_input.view(x.size(0), k, d_expanded_input.size(-1)).sum(-2)
+            d_input = d_expanded_input.view(
+                x.size(0), k, d_expanded_input.size(-1)
+            ).sum(-2)
 
         # print("backward end.")
         return (
@@ -244,8 +273,10 @@ class _ScatteredExperts(torch.autograd.Function):
             None,
             None,
             # adapter stuff
-            *_extra_grads_to_return, None
+            *_extra_grads_to_return,
+            None,
         )
+
 
 def scattered_experts(
     inputs,
@@ -258,9 +289,9 @@ def scattered_experts(
     gates=None,
     grouped_in=False,
     grouped_out=False,
-    expert_lora_A=None, 
+    expert_lora_A=None,
     expert_lora_B=None,
-    lora_alp: float = 0.
+    lora_alp: float = 0.0,
 ):
     return _ScatteredExperts.apply(
         inputs,
@@ -275,5 +306,5 @@ def scattered_experts(
         grouped_out,
         expert_lora_A,
         expert_lora_B,
-        lora_alp
+        lora_alp,
     )

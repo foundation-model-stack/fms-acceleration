@@ -1,9 +1,11 @@
+# Standard
 from typing import Any, Callable, Iterable
 
+# Third Party
 import torch
 
-
 try:
+    # Third Party
     from torch.library import custom_op
 
     _IS_CUSTOM_OP_IN_PYTORCH = True
@@ -32,7 +34,13 @@ def torch_custom_op(
     schema: str | None = None,
 ) -> Callable | _IdentityOp:
     if _IS_CUSTOM_OP_IN_PYTORCH:
-        op = custom_op(name, fn, mutates_args=mutates_args, device_types=device_types, schema=schema)
+        op = custom_op(
+            name,
+            fn,
+            mutates_args=mutates_args,
+            device_types=device_types,
+            schema=schema,
+        )
     else:
         op = _IdentityOp if fn is None else _IdentityOp(fn)
 

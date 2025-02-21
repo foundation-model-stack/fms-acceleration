@@ -27,12 +27,12 @@ import torch
 import torch.nn.functional as F
 
 # Local
+from .scattermoe_constants import SCATTERMOE_SPEC_HAS_GATE
+from .scattermoe_utils import all_to_all_gather_inputs, scatter_with_routing_weights
 from .scattermoe_utils.khd.kernels.ops import (
     padded_block_indices,
     scattered_experts,
 )
-from .scattermoe_constants import SCATTERMOE_SPEC_HAS_GATE
-from .scattermoe_utils import all_to_all_gather_inputs, scatter_with_routing_weights
 
 
 # helper function to fetch the local tensor if its a dtensor

@@ -14,5 +14,9 @@
 # limitations under the License.
 
 # Local
-from .kernels import group_triton_kernel, groupXtY_triton_kernel, scatter2scatter_triton_kernel
-from .kernels import scatter2scatter_lora_triton_kernel
+from .kernels import (
+    group_triton_kernel,
+    groupXtY_triton_kernel,
+    scatter2scatter_lora_triton_kernel,
+    scatter2scatter_triton_kernel,
+)
