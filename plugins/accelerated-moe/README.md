@@ -77,12 +77,7 @@ bash scripts/run_benchmarks.sh \
 
 ### Triton Kernel Dependencies
 
-Currently we do not copy the `scattermoe` kernels into this respository, to this is an additional manual install:
-
-```
-# this will install the kernel-hyperdrive fork with the scattermoe triton kernels
-pip install -r requirements-khd.txt
-```
+Triton Kernels are copied into [scattermoe_utils](./src/fms_acceleration_moe/utils/scattermoe_utils/megablocks/kernels) and were copied from [kernel hyperdrive](https://github.com/fabianlim/kernel-hyperdrive) which is a fork of [cute kernels](https://github.com/mayank31398/cute-kernels)
 
 ### Known Issues
 
