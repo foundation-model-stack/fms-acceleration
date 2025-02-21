@@ -48,7 +48,6 @@ Run the below in the top-level directory of this repo:
 
 ```
 tox -e run-benches \
-    -x testenv:run-benches.deps+="-r plugins/accelerated-moe/requirements-khd.txt" \
     -x testenv:run-benches.setenv+="MEMORY_LOGGING=nvidia" \
     -- \
     "1 2 4" 128 benchmark_outputs scenarios-moe.yaml accelerated-moe-scatter
