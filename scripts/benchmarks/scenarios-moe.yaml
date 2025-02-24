@@ -58,6 +58,8 @@ scenarios:
             adam_epsilon: 1e-8
             model_name_or_path: 
                 - 'ibm-granite/granite-3.0-3b-a800m-instruct'
+                - 'ibm-research/moe-7b-1b-active-shared-experts'
+
 
     -   name: accelerated-moe-full-mixtral
         framework_config: 
