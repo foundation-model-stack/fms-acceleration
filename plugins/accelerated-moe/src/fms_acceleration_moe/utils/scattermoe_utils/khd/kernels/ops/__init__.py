@@ -1,5 +1,5 @@
 # Copyright The FMS HF Tuning Authors
-# Copyright 2024 Databricks
+# Copyright 2024 Cute Kernels
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
