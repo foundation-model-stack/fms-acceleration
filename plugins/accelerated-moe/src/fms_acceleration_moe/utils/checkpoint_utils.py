@@ -457,6 +457,61 @@ def save_sharded_safetensors(
 # --------------------------- SCRIPT -------------------------
 
 
+def recover_safetensors_from_dcp(
+    checkpoint_dir, pretrained_model_name_or_path, output_dir
+):
+    if checkpoint_dir.startswith(FSDP_MODEL_NAME):
+        loader = get_state_dict_from_dcp_checkpoint
+    else:
+        fsdp_checkpoint_dirs = [
+            x
+            for x in os.listdir(checkpoint_dir)
+            if os.path.isdir(os.path.join(checkpoint_dir, x))
+            and x.startswith(FSDP_MODEL_NAME)
+        ]
+        if len(fsdp_checkpoint_dirs) == 1:
+            checkpoint_dir = os.path.join(checkpoint_dir, fsdp_checkpoint_dirs[0])
+            loader = get_state_dict_from_dcp_checkpoint
+        elif len(fsdp_checkpoint_dirs) > 1:
+            raise ValueError(
+                f"Found > 1 dirs in dcp checkpoint dir {checkpoint_dir} "
+                f"that starts with {FSDP_MODEL_NAME}. Please spectify the exact dir."
+            )
+        else:
+            # then take it as a safetensors checkpoint
+            # - do not support .bin checkpoints
+            loader = get_state_dict_from_safe_checkpoint
+
+    # - pretrained model name
+    _name_or_path = pretrained_model_name_or_path
+
+    # assume output directory exists, we do not create it
+    # - copy the config file if exists
+    config_file = os.path.join(checkpoint_dir, CONFIG_NAME)
+    target_config_file = os.path.join(output_dir, CONFIG_NAME)
+    if os.path.exists(config_file):
+        shutil.copyfile(config_file, target_config_file)
+
+        # try to populate pretrained_model_name_or_path from the config path
+        # if it was None
+        if not _name_or_path:
+            with open(target_config_file, "r", encoding="utf-8") as file:
+                _name_or_path = json.load(file).get("_name_or_path")
+
+    # get the state_dict
+    state_dict = loader(checkpoint_dir)
+
+    # recover the original state dict
+    state_dict = recover_original_state_dict_from_checkpoint(state_dict, _name_or_path)
+
+    # save it as a safetensors file
+    save_sharded_safetensors(
+        {k: v.contiguous() for k, v in state_dict.items()},
+        output_dir,
+        metadata={"format": "pt"},
+    )
+
+
 # have it serve as a conversion script
 if __name__ == "__main__":
     # Standard
@@ -492,58 +547,6 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-
-    # search for an FSDP checkpoint. If it is an FSDP checkpoint, it must
-    # start with FSDP_MODEL_NAME
-    if args.checkpoint_dir.startswith(FSDP_MODEL_NAME):
-        checkpoint_dir = args.checkpoint_dir
-        loader = get_state_dict_from_dcp_checkpoint
-    else:
-        checkpoint_dir = [
-            x
-            for x in os.listdir(args.checkpoint_dir)
-            if os.path.isdir(os.path.join(args.checkpoint_dir, x))
-            and x.startswith(FSDP_MODEL_NAME)
-        ]
-        if len(checkpoint_dir) == 1:
-            checkpoint_dir = os.path.join(args.checkpoint_dir, checkpoint_dir[0])
-            loader = get_state_dict_from_dcp_checkpoint
-        elif len(checkpoint_dir) > 1:
-            raise ValueError(
-                f"Found > 1 dirs in dcp checkpoint dir {args.checkpoint_dir} "
-                f"that starts with {FSDP_MODEL_NAME}. Please spectify the exact dir."
-            )
-        else:
-            # then take it as a safetensors checkpoint
-            # - do not support .bin checkpoints
-            checkpoint_dir = args.checkpoint_dir
-            loader = get_state_dict_from_safe_checkpoint
-
-    # - pretrained model name
-    _name_or_path = args.pretrained_model_name_or_path
-
-    # assume output directory exists, we do not create it
-    # - copy the config file if exists
-    config_file = os.path.join(checkpoint_dir, CONFIG_NAME)
-    target_config_file = os.path.join(args.output_dir, CONFIG_NAME)
-    if os.path.exists(config_file):
-        shutil.copyfile(config_file, target_config_file)
-
-        # try to populate pretrained_model_name_or_path from the config path
-        # if it was None
-        if not _name_or_path:
-            with open(target_config_file, "r", encoding="utf-8") as file:
-                _name_or_path = json.load(file).get("_name_or_path")
-
-    # get the state_dict
-    state_dict = loader(checkpoint_dir)
-
-    # recover the original state dict
-    state_dict = recover_original_state_dict_from_checkpoint(state_dict, _name_or_path)
-
-    # save it as a safetensors file
-    save_sharded_safetensors(
-        {k: v.contiguous() for k, v in state_dict.items()},
-        args.output_dir,
-        metadata={"format": "pt"},
+    recover_safetensors_from_dcp(
+        args.checkpoint_dir, args.pretrained_model_name_or_path, args.output_dir
     )

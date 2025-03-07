@@ -13,7 +13,10 @@
 # limitations under the License.
 
 # Local
-from .checkpoint_utils import patch_huggingface_save_and_load_for_dtensors
+from .checkpoint_utils import (
+    patch_huggingface_save_and_load_for_dtensors,
+    recover_safetensors_from_dcp,
+)
 from .scattermoe_prepare import prepare_scattermoe
 
 # this is a special patch function to disable foreach for
