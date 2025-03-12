@@ -91,23 +91,24 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
             and getattr(accelerator.state, "fsdp_plugin", None) is not None
         ):
 
-            # - use an internal function call to get the no split
-            # module names, which are typically layers
-            _layers = model._get_no_split_modules("")
-            accelerator.state.fsdp_plugin.ignored_modules = [
-                getattr(layer, name)
-                for name in self._moe_component_module_names
-                for layer in model.modules()
-                if layer.__class__.__name__ in _layers
-            ]
+            if self._ep_degree != 0:
+                # - use an internal function call to get the no split
+                # module names, which are typically layers
+                _layers = model._get_no_split_modules("")
+                accelerator.state.fsdp_plugin.ignored_modules = [
+                    getattr(layer, name)
+                    for name in self._moe_component_module_names
+                    for layer in model.modules()
+                    if layer.__class__.__name__ in _layers
+                ]
 
-            # call this to patch the HF save and load functions to be able
-            # to save DTensors propery
-            patch_huggingface_save_and_load_for_dtensors()
+                # call this to patch the HF save and load functions to be able
+                # to save DTensors propery
+                patch_huggingface_save_and_load_for_dtensors()
 
-            # call this to patch torch optim to not use
-            # foreach for dtensors
-            patch_torch_optim_foreach_to_not_apply_to_dtensors()
+                # call this to patch torch optim to not use
+                # foreach for dtensors
+                patch_torch_optim_foreach_to_not_apply_to_dtensors()
 
         return callbacks
 

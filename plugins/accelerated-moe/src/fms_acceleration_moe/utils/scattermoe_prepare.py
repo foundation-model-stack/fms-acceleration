@@ -116,6 +116,11 @@ def prepare_scattermoe(
     # pylint: disable=import-outside-toplevel
     from .scattermoe import ScatterMoE
 
+    no_ep_no_replication = False
+    if ep_degree == 0:
+        no_ep_no_replication = True
+        ep_degree = 1
+
     assert world_size % ep_degree == 0, (
         f"world size ({world_size}) " f"not divisible by ep_size ({ep_degree})."
     )
@@ -142,6 +147,8 @@ def prepare_scattermoe(
     expert_name = expert_name.split("|")
 
     rep_size = world_size // ep_degree
+    if no_ep_no_replication:
+        rep_size = 1
     if ep_degree == 1 and rep_size == 1:
         # in this case no need for sharding
         device_mesh = None
