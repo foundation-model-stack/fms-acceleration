@@ -78,9 +78,9 @@ def load_weight_map(loc, file_safetensor, file_safetensor_index):
             weight_map = {}
             with safe_open(safetensor_path, framework="pt") as f:
                 weight_map = {key: file_safetensor for key in f.keys()}
-    except:
+    except (FileNotFoundError, json.JSONDecodeError, KeyError, IOError) as e:
         raise ValueError(
-            f"Failed to load weight map from {index_path} or {safetensor_path}"
+            f"Failed to load weight map from {file_safetensor} or {file_safetensor_index}: {e}"
         )
 
     return weight_map
