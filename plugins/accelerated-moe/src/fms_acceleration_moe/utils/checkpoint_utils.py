@@ -238,24 +238,34 @@ def get_state_dict_from_dcp_checkpoint(
     return [KEY_MODEL]
 
 
-# function to get state dict from regular checkoint
-# - note this assumes sharded safetensors, we do not support
-#  the non-sharded case for now
+# function to get state dict from regular checkpoint
 def get_state_dict_from_safe_checkpoint(
-    safe_checkpoint_dir: str,
+        safe_checkpoint_dir: str
 ):
-    # Load the index
     safe_index_file = os.path.join(safe_checkpoint_dir, SAFE_WEIGHTS_INDEX_NAME)
-    with open(safe_index_file, "r", encoding="utf-8") as f:
-        index = json.load(f)
-
-    sd = {}
-    shard_files = list(set(index["weight_map"].values()))
-    for shard_file in shard_files:
-        for key, v in load_file(os.path.join(safe_checkpoint_dir, shard_file)).items():
-            sd[key] = v
-
-    return sd
+    if os.path.exists(safe_index_file):
+        # Load the index for sharded checkpoints
+        with open(safe_index_file, "r", encoding="utf-8") as f:
+            index = json.load(f)
+        sd = {}
+        shard_files = list(set(index["weight_map"].values()))
+        for shard_file in shard_files:
+            for key, v in load_file(os.path.join(safe_checkpoint_dir, shard_file)).items():
+                sd[key] = v
+                
+        return sd
+    else:
+        # No index file found, so assume the checkpoint is not sharded.
+        checkpoint_file = os.path.join(safe_checkpoint_dir, "model.safetensors")
+        if os.path.exists(checkpoint_file):
+            return load_file(checkpoint_file)
+        else:
+            files = [f for f in os.listdir(safe_checkpoint_dir) if f.endswith("model.safetensors")]
+            if len(files) == 1:
+                checkpoint_file = os.path.join(safe_checkpoint_dir, files[0])
+                return load_file(checkpoint_file)
+            else:
+                raise FileNotFoundError("No valid safetensors checkpoint found in directory.")
 
 
 # function to get the ScatterMoE state dict from its DCP checkpoint
