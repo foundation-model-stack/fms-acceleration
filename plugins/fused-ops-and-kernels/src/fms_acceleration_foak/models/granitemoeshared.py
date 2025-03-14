@@ -22,11 +22,6 @@ from fms_acceleration.model_patcher import (
     combine_functions,
     combine_triggers,
 )
-from transformers.models.mixtral.modeling_mixtral import (
-    MixtralAttention,
-    MixtralForCausalLM,
-    MixtralRMSNorm,
-)
 
 # Local
 from ..kernels.unsloth.cross_entropy_loss import (
@@ -44,36 +39,49 @@ from .utils import (
 )
 
 
-def get_mp_rules(base_type):
+def get_mp_rules(base_type: str):
     """
     Function to access all patch rules in this module.
     If it is a forward_builder rule with `base_type` in
     its forward builder argument, wrap the forward_builder
     function as a partial function with the base_type argument
     """
+    try:
+        # Third Party
+        from transformers.models.granitemoeshared.modeling_granitemoeshared import (  # pylint: disable=import-outside-toplevel
+            GraniteMoeSharedAttention,
+            GraniteMoeSharedForCausalLM,
+            GraniteMoeSharedRMSNorm,
+        )
+    except ImportError:
+        return []
 
-    # - do regex on RMSNorm class name
-    # - check on the tensors required for fast_rms_layernorm
     return [
+        # TODO: have a generic version of this rule
+        # - do regex on RMSNorm class name
+        # - check on the tensors required for fast_rms_layernorm
         ModelPatcherRule(
-            rule_id="mixtral-rms",
-            trigger=ModelPatcherTrigger(check=MixtralRMSNorm),
+            rule_id="granitemoeshared-rms",
+            trigger=ModelPatcherTrigger(check=GraniteMoeSharedRMSNorm),
             forward=fast_rms_layernorm,
         ),
+        # TODO: have a generic version of this rule
+        # - do regex on Attention class name
+        # - have a set of qkv / o module names and check on that
         ModelPatcherRule(
-            rule_id="mixtral-qkvo",
+            rule_id="granitemoeshared-qkvo",
             trigger=combine_triggers(
                 ModelPatcherTrigger(
                     check=partial(
                         trigger_fused_ops,
-                        attn_cls=MixtralAttention,
+                        attn_cls=GraniteMoeSharedAttention,
                         submodule_names=["q_proj", "k_proj", "v_proj"],
                     )
                 ),
                 ModelPatcherTrigger(
                     check=partial(
                         trigger_fused_ops,
-                        attn_cls=MixtralAttention,
+                        attn_cls=GraniteMoeSharedAttention,
                         submodule_names=["o_proj"],
                     )
                 ),
@@ -98,28 +106,34 @@ def get_mp_rules(base_type):
         *[
             (
                 ModelPatcherRule(
-                    rule_id="mixtral-custom-loss",
+                    rule_id="granitemoeshared-custom-loss",
                     trigger=ModelPatcherTrigger(
                         check=replace_custom_loss_when_triggered(
-                            MixtralForCausalLM, custom_loss_type="mixtral-custom-loss"
+                            GraniteMoeSharedForCausalLM,
+                            custom_loss_type="granite-custom-loss",
                         )
                     ),
                 )
                 if get_transformers_version() >= "4.46"
                 else ModelPatcherRule(
-                    rule_id="mixtral-cross-ent",
+                    rule_id="granitemoeshared-cross-ent",
                     import_and_maybe_reload=(
                         "torch.nn.CrossEntropyLoss",
                         FastCrossEntropyLoss,
-                        "transformers.models.mixtral.modeling_mixtral",
+                        "transformers.models.granitemoeshared.modeling_granitemoeshared",
                     ),
                 )
             )
         ],
+        # TODO: have a generic version of this rule
+        # - get the module name
+        # - check if "apply_rotary_pos_emb" exists
+        # - patch
         ModelPatcherRule(
-            rule_id="mixtral-rope",
+            rule_id="granitemoeshared-rope",
             import_and_maybe_reload=(
-                "transformers.models.mixtral.modeling_mixtral.apply_rotary_pos_emb",
+                "transformers.models.granitemoeshared.\
+                    modeling_granitemoeshared.apply_rotary_pos_emb",
                 fast_rope_embedding,
                 None,
             ),

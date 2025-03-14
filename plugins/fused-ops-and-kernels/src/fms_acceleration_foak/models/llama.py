@@ -33,7 +33,10 @@ from transformers.models.llama.modeling_llama import (
 
 # Local
 from ..fused_ops.liger_ce.fused_linear_cross_entropy_loss import lce_forward
-from ..kernels.unsloth.cross_entropy_loss import FastCrossEntropyLoss
+from ..kernels.unsloth.cross_entropy_loss import (
+    FastCrossEntropyLoss,
+    replace_custom_loss_when_triggered,
+)
 from ..kernels.unsloth.rms_layernorm import fast_rms_layernorm
 from ..kernels.unsloth.rope_embedding import fast_rope_embedding
 from ..utils import filter_mp_rules
@@ -43,6 +46,7 @@ from .utils import (
     KEY_QKV,
     build_lora_fused_ops,
     get_hidden_activation_fn_key,
+    get_transformers_version,
     trigger_fused_ops,
 )
 
@@ -122,14 +126,27 @@ def get_mp_rules(base_type: str, config: PretrainedConfig = None):
             trigger=ModelPatcherTrigger(check=LlamaForCausalLM),
             forward=lce_forward,
         ),
-        ModelPatcherRule(
-            rule_id="llama-cross-ent",
-            import_and_maybe_reload=(
-                "torch.nn.CrossEntropyLoss",
-                FastCrossEntropyLoss,
-                "transformers.models.llama.modeling_llama",
-            ),
-        ),
+        *[
+            (
+                ModelPatcherRule(
+                    rule_id="llama-custom-loss",
+                    trigger=ModelPatcherTrigger(
+                        check=replace_custom_loss_when_triggered(
+                            LlamaForCausalLM, custom_loss_type="llama-custom-loss"
+                        )
+                    ),
+                )
+                if get_transformers_version() >= "4.46"
+                else ModelPatcherRule(
+                    rule_id="llama-cross-ent",
+                    import_and_maybe_reload=(
+                        "torch.nn.CrossEntropyLoss",
+                        FastCrossEntropyLoss,
+                        "transformers.models.llama.modeling_llama",
+                    ),
+                )
+            )
+        ],
         # TODO: have a generic version of this rule
         # - get the module name
         # - check if "apply_rotary_pos_emb" exists

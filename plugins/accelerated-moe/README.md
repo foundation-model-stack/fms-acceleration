@@ -48,15 +48,14 @@ Run the below in the top-level directory of this repo:
 
 ```
 tox -e run-benches \
-    -x testenv:run-benches.deps+="-r plugins/accelerated-moe/requirements-khd.txt" \
     -x testenv:run-benches.setenv+="MEMORY_LOGGING=nvidia" \
     -- \
-    "1 2 4" 128 benchmark_outputs scenarios-moe.yaml accelerated-moe-scatter
+    "1 2 4" 128 benchmark_outputs scenarios-moe.yaml accelerated-moe-full
 ```
 or run the larger `Mixtral-8x7B` bench:
 ```
 tox ... \
-    8 128 benchmark_outputs scenarios-moe.yaml accelerated-moe-scatter-mixtral
+    8 128 benchmark_outputs scenarios-moe.yaml accelerated-moe-full-mixtral
 ```
 
 NOTE: if `FileNotFoundError` is observed on the *triton cache*, similar to issues like these:
@@ -77,12 +76,7 @@ bash scripts/run_benchmarks.sh \
 
 ### Triton Kernel Dependencies
 
-Currently we do not copy the `scattermoe` kernels into this respository, to this is an additional manual install:
-
-```
-# this will install the kernel-hyperdrive fork with the scattermoe triton kernels
-pip install -r requirements-khd.txt
-```
+Triton Kernels are copied into [scattermoe_utils](./src/fms_acceleration_moe/utils/scattermoe_utils/megablocks/kernels) and were copied from [kernel hyperdrive](https://github.com/fabianlim/kernel-hyperdrive) which is a fork of [cute kernels](https://github.com/mayank31398/cute-kernels)
 
 ### Known Issues
 

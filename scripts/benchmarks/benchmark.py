@@ -171,9 +171,7 @@ class BenchmarkDataset:
     ) -> None:
 
         self.dataset_split = datasets.load_dataset(
-            dataset_name,
-            split=dataset_split,
-            **additional_dataset_kwargs
+            dataset_name, split=dataset_split, **additional_dataset_kwargs
         )
 
         self.kwargs = {
@@ -206,9 +204,8 @@ class BenchmarkDataset:
                 )
             response_template = self.response_template
 
-        if (
-            self.kwargs['tokenize']
-            or (not self.kwargs['tokenize'] and self.kwargs['chat_template'])
+        if self.kwargs["tokenize"] or (
+            not self.kwargs["tokenize"] and self.kwargs["chat_template"]
         ):
             tokenizer = AutoTokenizer.from_pretrained(model_name)
             # for now, if pad_token_id is None, will just do a replacement
@@ -322,10 +319,11 @@ class ConfigUtils:
                     ]
                 )
             elif grad_accum is None and pdtbs is not None:
+                grad_accum_steps = effective_batch_size // num_gpus // pdtbs
                 argument_list.extend(
                     [
                         "--gradient_accumulation_steps",
-                        str(effective_batch_size // num_gpus // pdtbs),
+                        str(1 if grad_accum_steps == 0 else grad_accum_steps),
                     ]
                 )
             else:

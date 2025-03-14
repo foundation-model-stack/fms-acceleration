@@ -32,15 +32,11 @@ from .utils import (
 # pylint: disable=too-many-instance-attributes
 class ScatterMoEAccelerationPlugin(AccelerationPlugin):
 
-    # NOTE: we cannot do
-    # - require_packages = {"khd"}
-    # this is because the khd fork is not properly packaged as a PyPI project, and so
-    # - "importlib.util.find_spec('khd')" returns, but
-    # - "importlib.metadata.version('kernel-hyperdrive')" does not return
-    # if we decide to extract the kernels, then we do not need to anymore,
-    # https://github.com/foundation-model-stack/fms-acceleration/issues/105
-
-    restricted_model_archs = ["GraniteMoeForCausalLM", "MixtralForCausalLM"]
+    restricted_model_archs = [
+        "GraniteMoeForCausalLM",
+        "MixtralForCausalLM",
+        "GraniteMoeSharedForCausalLM",
+    ]
 
     def __init__(self, configurations: Dict[str, Dict]):
         super().__init__(configurations)
@@ -65,7 +61,8 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
         rank, world_size = 0, 1
         if torch.distributed.is_initialized():
             world_size = torch.distributed.get_world_size()
-            rank = torch.distributed.get_rank()
+            # we do not need to use the fallback as this is wrapped in an `is_initialized` block
+            rank = torch.distributed.get_node_local_rank()
 
         if not hasattr(model.config, "name_or_path") or not model.config.name_or_path:
             raise ValueError(
