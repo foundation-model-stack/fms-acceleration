@@ -63,8 +63,8 @@ KEY_OPTIMIZER = "optimizer"
 
 
 # Load weight map either with index file or manually in single-shard state
-def load_weight_map(loc, file_safetensor):
-    index_path = os.path.join(loc, "model.safetensors.index.json")
+def load_weight_map(loc, file_safetensor, file_safetensor_index):
+    index_path = os.path.join(loc, file_safetensor_index)
     safetensor_path = os.path.join(loc, file_safetensor)
 
     try:
@@ -325,7 +325,7 @@ def recover_original_state_dict_from_checkpoint(
     # now do the remap
     loc = get_resolved_checkpoint_location(pretrained_model_name_or_path)
 
-    weight_map = load_weight_map(loc, "model.safetensors")
+    weight_map = load_weight_map(loc, "model.safetensors", FILE_SAFETENSOR_INDEX)
 
     # config
     config = PretrainedConfig.from_pretrained(pretrained_model_name_or_path)

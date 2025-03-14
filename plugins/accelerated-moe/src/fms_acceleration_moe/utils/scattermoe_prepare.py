@@ -219,7 +219,7 @@ def prepare_scattermoe(
     try:
         loc = get_resolved_checkpoint_location(checkpoint_name_or_path)
 
-        weight_map = load_weight_map(loc, "model.safetensors")
+        weight_map = load_weight_map(loc, "model.safetensors", FILE_SAFETENSOR_INDEX)
 
         # e.g., prefix: 'model.layers.0',
         #       module_name: 'block_sparse_moe'
