@@ -15,13 +15,10 @@
 # Standard
 from collections import OrderedDict
 from contextlib import nullcontext
-import json
-import os
 
 # Third Party
 from accelerate import init_empty_weights
 from peft import LoraConfig
-from safetensors.torch import safe_open
 from torch.distributed._tensor import DTensor, Replicate, Shard, distribute_tensor
 
 # pylint: disable=import-error

@@ -81,7 +81,7 @@ def load_weight_map(loc, file_safetensor, file_safetensor_index):
     except (FileNotFoundError, json.JSONDecodeError, KeyError, IOError) as e:
         raise ValueError(
             f"Failed to load weight map from {file_safetensor} or {file_safetensor_index}: {e}"
-        )
+        ) from e
 
     return weight_map
 
@@ -278,30 +278,23 @@ def get_state_dict_from_safe_checkpoint(safe_checkpoint_dir: str):
                 sd[key] = v
 
         return sd
-    else:
-        # No index file found, so assume the checkpoint is not sharded.
-        checkpoint_file = os.path.join(safe_checkpoint_dir, "model.safetensors")
-        if os.path.exists(checkpoint_file):
-            for key, v in load_file(checkpoint_file).items():
-                sd[key] = v
+    # No index file found, so assume the checkpoint is not sharded.
+    checkpoint_file = os.path.join(safe_checkpoint_dir, "model.safetensors")
+    if os.path.exists(checkpoint_file):
+        for key, v in load_file(checkpoint_file).items():
+            sd[key] = v
 
-            return sd
-        else:
-            files = [
-                f
-                for f in os.listdir(safe_checkpoint_dir)
-                if f.endswith("model.safetensors")
-            ]
-            if len(files) == 1:
-                checkpoint_file = os.path.join(safe_checkpoint_dir, files[0])
-                for key, v in load_file(checkpoint_file).items():
-                    sd[key] = v
+        return sd
+    files = [
+        f for f in os.listdir(safe_checkpoint_dir) if f.endswith("model.safetensors")
+    ]
+    if len(files) == 1:
+        checkpoint_file = os.path.join(safe_checkpoint_dir, files[0])
+        for key, v in load_file(checkpoint_file).items():
+            sd[key] = v
 
-                return sd
-            else:
-                raise FileNotFoundError(
-                    "No valid safetensors checkpoint found in directory."
-                )
+        return sd
+    raise FileNotFoundError("No valid safetensors checkpoint found in directory.")
 
 
 # function to get the ScatterMoE state dict from its DCP checkpoint
