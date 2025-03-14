@@ -21,6 +21,7 @@ import os
 # Third Party
 from accelerate import init_empty_weights
 from peft import LoraConfig
+from safetensors.torch import safe_open
 from torch.distributed._tensor import DTensor, Replicate, Shard, distribute_tensor
 
 # pylint: disable=import-error
@@ -30,7 +31,7 @@ from transformers.modeling_utils import is_fsdp_enabled, is_local_dist_rank_0
 import torch
 
 # Local
-from .checkpoint_utils import get_resolved_checkpoint_location
+from .checkpoint_utils import get_resolved_checkpoint_location, load_weight_map
 from .scattermoe_constants import (
     FILE_SAFETENSOR_INDEX,
     KEY_EXPERT_PARALLEL,
@@ -217,8 +218,8 @@ def prepare_scattermoe(
     # - most MOE models should be used using this checkpoint format
     try:
         loc = get_resolved_checkpoint_location(checkpoint_name_or_path)
-        with open(os.path.join(loc, FILE_SAFETENSOR_INDEX), encoding="utf-8") as f:
-            index = json.load(f)
+
+        weight_map = load_weight_map(loc, "model.safetensors")
 
         # e.g., prefix: 'model.layers.0',
         #       module_name: 'block_sparse_moe'
@@ -226,7 +227,7 @@ def prepare_scattermoe(
             found.items(), disable=(rank > 0), desc="Converting ScatterMoE layers"
         ):
             checkpoint_metadata = get_checkpoint_meta_from_sharded_safetensor(
-                index["weight_map"],
+                weight_map,
                 prefix,
                 module_name,
                 router_name,

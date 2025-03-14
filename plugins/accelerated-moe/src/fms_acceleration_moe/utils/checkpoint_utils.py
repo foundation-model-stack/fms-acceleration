@@ -24,7 +24,7 @@ import shutil
 from accelerate.logging import get_logger
 from accelerate.utils.constants import FSDP_MODEL_NAME, OPTIMIZER_NAME
 from huggingface_hub import split_torch_state_dict_into_shards
-from safetensors.torch import load_file, save_file
+from safetensors.torch import load_file, safe_open, save_file
 from torch.distributed.checkpoint.default_planner import (
     DefaultLoadPlanner,
     DefaultSavePlanner,
@@ -60,6 +60,30 @@ KEY_OPTIMIZER = "optimizer"
 # NOTE: we will observe warnings such as
 # /torch/distributed/checkpoint/state_dict.py:520:
 # FutureWarning: Please use DTensor instead and we are deprecating ShardedTensor.
+
+
+# Load weight map either with index file or manually in single-shard state
+def load_weight_map(loc, file_safetensor):
+    index_path = os.path.join(loc, "model.safetensors.index.json")
+    safetensor_path = os.path.join(loc, file_safetensor)
+
+    try:
+        if os.path.exists(index_path):
+            # Load weight map from index file
+            with open(index_path, encoding="utf-8") as f:
+                index = json.load(f)
+            weight_map = index["weight_map"]
+        else:
+            # If no index file, assume single shard
+            weight_map = {}
+            with safe_open(safetensor_path, framework="pt") as f:
+                weight_map = {key: file_safetensor for key in f.keys()}
+    except:
+        raise ValueError(
+            f"Failed to load weight map from {index_path} or {safetensor_path}"
+        )
+
+    return weight_map
 
 
 # rewrite of func from accelerate.utils.fsdp_utils.py
@@ -239,39 +263,45 @@ def get_state_dict_from_dcp_checkpoint(
 
 
 # function to get state dict from regular checkpoint
-def get_state_dict_from_safe_checkpoint(
-        safe_checkpoint_dir: str
-):
+def get_state_dict_from_safe_checkpoint(safe_checkpoint_dir: str):
     safe_index_file = os.path.join(safe_checkpoint_dir, SAFE_WEIGHTS_INDEX_NAME)
+    sd = {}
     if os.path.exists(safe_index_file):
         # Load the index for sharded checkpoints
         with open(safe_index_file, "r", encoding="utf-8") as f:
             index = json.load(f)
-        sd = {}
         shard_files = list(set(index["weight_map"].values()))
         for shard_file in shard_files:
-            for key, v in load_file(os.path.join(safe_checkpoint_dir, shard_file)).items():
+            for key, v in load_file(
+                os.path.join(safe_checkpoint_dir, shard_file)
+            ).items():
                 sd[key] = v
-                
+
         return sd
     else:
         # No index file found, so assume the checkpoint is not sharded.
         checkpoint_file = os.path.join(safe_checkpoint_dir, "model.safetensors")
         if os.path.exists(checkpoint_file):
             for key, v in load_file(checkpoint_file).items():
-                sd[key] = v 
+                sd[key] = v
 
             return sd
         else:
-            files = [f for f in os.listdir(safe_checkpoint_dir) if f.endswith("model.safetensors")]
+            files = [
+                f
+                for f in os.listdir(safe_checkpoint_dir)
+                if f.endswith("model.safetensors")
+            ]
             if len(files) == 1:
                 checkpoint_file = os.path.join(safe_checkpoint_dir, files[0])
                 for key, v in load_file(checkpoint_file).items():
-                    sd[key] = v 
+                    sd[key] = v
 
                 return sd
             else:
-                raise FileNotFoundError("No valid safetensors checkpoint found in directory.")
+                raise FileNotFoundError(
+                    "No valid safetensors checkpoint found in directory."
+                )
 
 
 # function to get the ScatterMoE state dict from its DCP checkpoint
@@ -294,8 +324,8 @@ def recover_original_state_dict_from_checkpoint(
 
     # now do the remap
     loc = get_resolved_checkpoint_location(pretrained_model_name_or_path)
-    with open(os.path.join(loc, FILE_SAFETENSOR_INDEX), encoding="utf-8") as f:
-        index = json.load(f)
+
+    weight_map = load_weight_map(loc, "model.safetensors")
 
     # config
     config = PretrainedConfig.from_pretrained(pretrained_model_name_or_path)
@@ -362,7 +392,7 @@ def recover_original_state_dict_from_checkpoint(
         #        'model-00001-of-00002.safetensors')]})
 
         checkpoint_metadata = get_checkpoint_meta_from_sharded_safetensor(
-            index["weight_map"],
+            weight_map,
             prefix,
             module_name,
             router_name,
