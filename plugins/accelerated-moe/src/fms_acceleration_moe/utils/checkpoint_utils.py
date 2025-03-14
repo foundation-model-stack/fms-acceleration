@@ -258,12 +258,18 @@ def get_state_dict_from_safe_checkpoint(
         # No index file found, so assume the checkpoint is not sharded.
         checkpoint_file = os.path.join(safe_checkpoint_dir, "model.safetensors")
         if os.path.exists(checkpoint_file):
-            return load_file(checkpoint_file)
+            for key, v in load_file(checkpoint_file).items():
+                sd[key] = v 
+
+            return sd
         else:
             files = [f for f in os.listdir(safe_checkpoint_dir) if f.endswith("model.safetensors")]
             if len(files) == 1:
                 checkpoint_file = os.path.join(safe_checkpoint_dir, files[0])
-                return load_file(checkpoint_file)
+                for key, v in load_file(checkpoint_file).items():
+                    sd[key] = v 
+
+                return sd
             else:
                 raise FileNotFoundError("No valid safetensors checkpoint found in directory.")
 
