@@ -134,6 +134,15 @@ def prepare_scattermoe(
     # current rank of the device
     device = torch.device(f"{device_type}:{rank}")
 
+    # NOTE: fsdp_cpu_ram_efficient_loading is not supported for EP activated cases
+    fsdp_cpu_ram_efficient_loading = False
+
+    if no_ep_no_replication is True:
+        device = torch.device("cpu")
+
+    if os.environ["FSDP_CPU_RAM_EFFICIENT_LOADING"] == "true":
+        fsdp_cpu_ram_efficient_loading = True
+
     # get the scattermoe conversion spec
     (
         moe_cls,
@@ -272,7 +281,10 @@ def prepare_scattermoe(
                 )
 
             if device_mesh is None:
-                _init_scattermoe_context = nullcontext
+                if fsdp_cpu_ram_efficient_loading and rank > 0:
+                    _init_scattermoe_context = init_empty_weights
+                else:
+                    _init_scattermoe_context = nullcontext
             else:
                 # in this case we need to distribute parameters, so just initialize
                 # the scattermoe module swap with empty weights,
@@ -325,8 +337,13 @@ def prepare_scattermoe(
             if device_mesh is None:
                 # - if not on meta, just load the state dict
                 # - and then put on the device
-                moe.load_state_dict(sd)
-                moe = moe.to(device)
+                if fsdp_cpu_ram_efficient_loading:
+                    if rank == 0:
+                        moe.load_state_dict(sd)
+                        moe = moe.to(device)
+                else:
+                    moe.load_state_dict(sd)
+                    moe = moe.to(device)
             else:
                 # - otherwise, we need to distribtue and will
                 #   replace the parameters
