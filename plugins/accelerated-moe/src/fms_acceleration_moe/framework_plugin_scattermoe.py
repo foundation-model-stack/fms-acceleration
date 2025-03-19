@@ -91,6 +91,7 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
             and getattr(accelerator.state, "fsdp_plugin", None) is not None
         ):
 
+            # When EP is not enabled we want to shard the experts using FSDP
             if self._ep_degree != 0:
                 # - use an internal function call to get the no split
                 # module names, which are typically layers

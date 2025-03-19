@@ -140,7 +140,7 @@ def prepare_scattermoe(
     # NOTE: fsdp_cpu_ram_efficient_loading is not supported for EP activated cases
     fsdp_cpu_ram_efficient_loading = is_fsdp_enabled()
 
-    if ep_disabled is True:
+    if ep_disabled:
         # Larger models result in OOM especially when loading
         # all experts to the same GPU device (when EP disabled).
         # For cases like FSDP + EP disabled, its memory efficient to
