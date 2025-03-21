@@ -20,6 +20,7 @@ import warnings
 from fms_acceleration import AccelerationPlugin
 from peft import LoraConfig
 from transformers import DataCollatorForSeq2Seq, TrainingArguments
+from transformers.trainer_utils import RemoveColumnsCollator
 from trl import DataCollatorForCompletionOnlyLM  # pylint: disable=import-error
 import torch
 
@@ -71,7 +72,12 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
             # `DataCollatorForSeq2Seq` collate_fn,
             # otherwise the collation can be unreliable"
             return isinstance(
-                collate_fn, (DataCollatorForSeq2Seq, DataCollatorForCompletionOnlyLM)
+                collate_fn,
+                (
+                    DataCollatorForSeq2Seq,
+                    DataCollatorForCompletionOnlyLM,
+                    RemoveColumnsCollator,
+                ),
             )
 
         # This check is done here to only patch the attention forward
@@ -96,6 +102,14 @@ class PaddingFreeAccelerationPlugin(AccelerationPlugin):
             from .aadp_utils import DataCollatorWithFlattening
 
         def _collator_replacement_builder(collate_fn):
+
+            # in case of remove columns collator the actual collate
+            # function is wrapped inside
+            if isinstance(collate_fn, RemoveColumnsCollator):
+                actual_collate_fn = collate_fn.data_collator
+                replacement = _collator_replacement_builder(actual_collate_fn)
+                collate_fn.data_collator = replacement
+                return collate_fn
 
             # in this case, replace seq2seq with flattening collator
             if isinstance(collate_fn, DataCollatorForSeq2Seq):
