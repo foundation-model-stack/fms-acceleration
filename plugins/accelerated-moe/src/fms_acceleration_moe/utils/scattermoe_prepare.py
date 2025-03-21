@@ -104,6 +104,7 @@ def prepare_scattermoe(
     rank: int = None,
     world_size: int = None,
     ep_degree: int = 1,
+    disable_distributed: bool = False,
     key_rep: str = KEY_REPLICATE,
     key_ep: str = KEY_EXPERT_PARALLEL,
     device_type: str = "cuda",
@@ -116,13 +117,10 @@ def prepare_scattermoe(
     # pylint: disable=import-outside-toplevel
     from .scattermoe import ScatterMoE
 
-    ep_disabled = False
-    if ep_degree == 0:
-        ep_disabled = True
-        # flow of code when EP not enabled is mostly same as
-        # with ep_degree set to 1. Therefore, we explicitly set
-        # ep_degree to 1 however handle it along with ep_disabled var
-        ep_degree = 1
+    if disable_distributed and ep_degree > 1:
+        raise ValueError(
+            "expert sharding can not be deferred to top level sharding protocol (e.g. FSDP) when ep_degree > 1"
+        )
 
     assert world_size % ep_degree == 0, (
         f"world size ({world_size}) " f"not divisible by ep_size ({ep_degree})."
@@ -137,14 +135,7 @@ def prepare_scattermoe(
     # current rank of the device
     device = torch.device(f"{device_type}:{rank}")
 
-    # NOTE: fsdp_cpu_ram_efficient_loading is not supported for EP activated cases
-    fsdp_cpu_ram_efficient_loading = is_fsdp_enabled()
-
-    if ep_disabled:
-        # Larger models result in OOM especially when loading
-        # all experts to the same GPU device (when EP disabled).
-        # For cases like FSDP + EP disabled, its memory efficient to
-        # load the model to CPU and hand it over to the FSDP.
+    if ep_degree == 1 and disable_distributed and is_fsdp_enabled() and rank == 0:
         device = torch.device("cpu")
 
     # get the scattermoe conversion spec
@@ -161,7 +152,7 @@ def prepare_scattermoe(
 
     rep_size = world_size // ep_degree
 
-    if ep_degree == 1 and (rep_size == 1 or ep_disabled):
+    if ep_degree == 1:
         # in this case no need for sharding
         device_mesh = None
     elif rep_size == 1:
@@ -284,10 +275,10 @@ def prepare_scattermoe(
                 )
 
             if device_mesh is None:
-                if fsdp_cpu_ram_efficient_loading and rank > 0:
-                    _init_scattermoe_context = init_empty_weights
-                else:
+                if not is_fsdp_enabled() or is_local_dist_rank_0():
                     _init_scattermoe_context = nullcontext
+                else:
+                    _init_scattermoe_context = init_empty_weights
             else:
                 # in this case we need to distribute parameters, so just initialize
                 # the scattermoe module swap with empty weights,
@@ -340,7 +331,7 @@ def prepare_scattermoe(
             if device_mesh is None:
                 # - if not on meta, just load the state dict
                 # - and then put on the device
-                if rank == 0 or not fsdp_cpu_ram_efficient_loading:
+                if not is_fsdp_enabled() or is_local_dist_rank_0():
                     moe.load_state_dict(sd)
                     moe = moe.to(device)
             else:
