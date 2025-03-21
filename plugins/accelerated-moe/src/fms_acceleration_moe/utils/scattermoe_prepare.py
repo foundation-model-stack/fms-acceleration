@@ -137,9 +137,6 @@ def prepare_scattermoe(
     # current rank of the device
     device = torch.device(f"{device_type}:{rank}")
 
-    # NOTE: fsdp_cpu_ram_efficient_loading is not supported for EP activated cases
-    fsdp_cpu_ram_efficient_loading = is_fsdp_enabled()
-
     if ep_disabled:
         # Larger models result in OOM especially when loading
         # all experts to the same GPU device (when EP disabled).
@@ -284,7 +281,7 @@ def prepare_scattermoe(
                 )
 
             if device_mesh is None:
-                if fsdp_cpu_ram_efficient_loading and rank > 0:
+                if is_fsdp_enabled() and rank > 0:
                     _init_scattermoe_context = init_empty_weights
                 else:
                     _init_scattermoe_context = nullcontext
@@ -340,7 +337,7 @@ def prepare_scattermoe(
             if device_mesh is None:
                 # - if not on meta, just load the state dict
                 # - and then put on the device
-                if rank == 0 or not fsdp_cpu_ram_efficient_loading:
+                if rank == 0 or not is_fsdp_enabled():
                     moe.load_state_dict(sd)
                     moe = moe.to(device)
             else:
