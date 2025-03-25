@@ -79,7 +79,7 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
             world_size=world_size,
             ep_degree=self._ep_degree,
             mixed_precision=False,  # Currently this is hardcoded to OFF
-            lora_config=peft_config
+            lora_config=peft_config,
         )
         return model, modifiable_args
 
