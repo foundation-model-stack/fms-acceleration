@@ -34,6 +34,8 @@ from .scattermoe_constants import (
     KEY_EXPERT_PARALLEL,
     KEY_REPLICATE,
     KEY_SCATTERMOE_ROUTER,
+    KEY_SCATTERMOE_LORA_A_ROUTER,
+    KEY_SCATTERMOE_LORA_B_ROUTER,
     get_scattermoe_conv_spec_from_archs,
 )
 from .scattermoe_state_dict import (
@@ -66,7 +68,7 @@ def load_experts_onto_device(
 
     for weight_name, param in state_dict.items():
 
-        if KEY_SCATTERMOE_ROUTER in weight_name:
+        if KEY_SCATTERMOE_ROUTER in weight_name or KEY_SCATTERMOE_LORA_A_ROUTER in weight_name or KEY_SCATTERMOE_LORA_B_ROUTER in weight_name:
             # if its the router, replicate
             param = distribute_tensor(param, device_mesh, reps + [Replicate()])
         elif param.shape[0] > num_experts_per_device:

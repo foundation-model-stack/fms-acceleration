@@ -344,7 +344,7 @@ def recover_original_state_dict_from_checkpoint(
     ):
         _name = "|".join([PARAM_NAME_ROUTER_SCATTERMOE, *PARAM_NAME_WEIGHT_SCATTERMOE])
         # pylint: disable=anomalous-backslash-in-string
-        _reg = re.compile(f"(.*)\.({_name})\.weight")
+        _reg = re.compile(rf"(.*)\.({_name})\.(?:weight|lora_A\.weight|lora_B\.weight)")
         found = {}
 
         for k in sd_keys:
