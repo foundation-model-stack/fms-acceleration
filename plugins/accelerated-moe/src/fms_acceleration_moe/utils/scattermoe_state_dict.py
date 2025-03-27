@@ -27,6 +27,8 @@ import torch
 from .scattermoe_constants import (
     DIM_EXPERT,
     KEY_SCATTERMOE_ROUTER,
+    KEY_SCATTERMOE_LORA_A_ROUTER,
+    KEY_SCATTERMOE_LORA_B_ROUTER,
     PARAM_NAME_WEIGHT_SCATTERMOE,
 )
 
@@ -295,7 +297,7 @@ def get_state_dict_from_checkpoint_metadata(
         # go by one weight at a time.
         for scatter_key, vs in checkpoint_metadata.items():
 
-            if KEY_SCATTERMOE_ROUTER in scatter_key:
+            if KEY_SCATTERMOE_ROUTER in scatter_key or KEY_SCATTERMOE_LORA_A_ROUTER in scatter_key or KEY_SCATTERMOE_LORA_B_ROUTER in scatter_key:
                 k, fi = vs[0]  # only one item
                 param = files[fi].get_tensor(k)
 
