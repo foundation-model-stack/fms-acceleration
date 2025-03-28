@@ -340,7 +340,7 @@ def recover_original_state_dict_from_checkpoint(
 
     def _infer_prefixes_and_module_names(
         sd_keys: List[str],
-        min_count: int = 3,
+        min_count: int = 1,
     ):
         _name = "|".join([PARAM_NAME_ROUTER_SCATTERMOE, *PARAM_NAME_WEIGHT_SCATTERMOE])
         # pylint: disable=anomalous-backslash-in-string
@@ -398,6 +398,7 @@ def recover_original_state_dict_from_checkpoint(
         #   model param and they need to be cat
         for scatter_key, list_of_params in checkpoint_metadata.items():
             scatter_key_fqdn = ".".join([prefix, module_name, scatter_key])
+            
             scatter_param = sd[scatter_key_fqdn]
 
             # remove from state dict

@@ -123,6 +123,8 @@ def get_checkpoint_meta_from_sharded_safetensor(
             n -= 1
         L[i] = v
 
+    lora = False
+
     # if expert_name = input_linear|output_linear|input_linear
     # - in this case will map
     # - input_linear: [w1, w3], output_linear: {w2}
@@ -149,6 +151,12 @@ def get_checkpoint_meta_from_sharded_safetensor(
     # `w1.weight`: [...]
     _map = defaultdict(list)
     prefix = f"{prefix}.{instance_name}."
+    # Lora case where it prefix looks like base_model.model.model...
+    # instead of model...
+    if not prefix.startswith("model."):
+        prefix=prefix.replace("base_model.model.", "", 1)
+        lora=True
+
     for k, stfile in weight_map.items():
         if not k.startswith(prefix):
             continue
@@ -165,15 +173,22 @@ def get_checkpoint_meta_from_sharded_safetensor(
                 f"'{router_name}' or expert_name '{expert_name}'"
             )
         if m.group(1) == router_name:
-            _map[KEY_SCATTERMOE_ROUTER].append((k, stfile))
+            if lora:
+                k_lora_a = k.replace(".layer.", ".lora_A.")
+                _map[KEY_SCATTERMOE_LORA_A_ROUTER].append((k_lora_a, stfile))
+                k_lora_b = k.replace(".layer.", ".lora_B.")
+                _map[KEY_SCATTERMOE_LORA_B_ROUTER].append((k_lora_b, stfile))
+            else:
+                _map[KEY_SCATTERMOE_ROUTER].append((k, stfile))
         elif m.group(1) in expert_name:
-            index = m.group(2)
-            index = 0 if index is None else int(index)
-            mod = None
-            for mod in expert_map.get(m.group(1), expert_map.get(m.group(3))):
-                _insert(_map[f"{mod}.weight"], index, (k, stfile))
+            if not lora:
+                index = m.group(2)
+                index = 0 if index is None else int(index)
+                mod = None
+                for mod in expert_map.get(m.group(1), expert_map.get(m.group(3))):
+                    _insert(_map[f"{mod}.weight"], index, (k, stfile))
 
-            assert mod is not None, f"cannot map '{rel_k}'"
+                assert mod is not None, f"cannot map '{rel_k}'"
 
     if len(_map) == 0:
         raise ValueError(
