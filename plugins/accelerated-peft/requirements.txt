@@ -16,3 +16,6 @@ bitsandbytes >=0.41,<=0.43.3
 threadpoolctl >= 3.5.0
 
 datasets >= 2.20.0
+
+# QuantLinear is not available for peft version > 0.14.0
+peft<=0.14.0
