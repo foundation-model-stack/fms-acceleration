@@ -104,6 +104,7 @@ def prepare_scattermoe(
     rank: int = None,
     world_size: int = None,
     ep_degree: int = 1,
+    disable_distributed: bool = False,
     key_rep: str = KEY_REPLICATE,
     key_ep: str = KEY_EXPERT_PARALLEL,
     device_type: str = "cuda",
@@ -115,6 +116,12 @@ def prepare_scattermoe(
     # Local
     # pylint: disable=import-outside-toplevel
     from .scattermoe import ScatterMoE
+
+    if disable_distributed and ep_degree > 1:
+        raise ValueError(
+            "expert sharding can not be deferred to top level sharding"
+            "protocol (e.g. FSDP) when ep_degree > 1"
+        )
 
     assert world_size % ep_degree == 0, (
         f"world size ({world_size}) " f"not divisible by ep_size ({ep_degree})."
@@ -129,6 +136,9 @@ def prepare_scattermoe(
     # current rank of the device
     device = torch.device(f"{device_type}:{rank}")
 
+    if ep_degree == 1 and disable_distributed and is_fsdp_enabled() and rank == 0:
+        device = torch.device("cpu")
+
     # get the scattermoe conversion spec
     (
         moe_cls,
@@ -142,7 +152,8 @@ def prepare_scattermoe(
     expert_name = expert_name.split("|")
 
     rep_size = world_size // ep_degree
-    if ep_degree == 1 and rep_size == 1:
+
+    if ep_degree == 1:
         # in this case no need for sharding
         device_mesh = None
     elif rep_size == 1:
@@ -265,7 +276,10 @@ def prepare_scattermoe(
                 )
 
             if device_mesh is None:
-                _init_scattermoe_context = nullcontext
+                if not is_fsdp_enabled() or is_local_dist_rank_0():
+                    _init_scattermoe_context = nullcontext
+                else:
+                    _init_scattermoe_context = init_empty_weights
             else:
                 # in this case we need to distribute parameters, so just initialize
                 # the scattermoe module swap with empty weights,
@@ -318,8 +332,9 @@ def prepare_scattermoe(
             if device_mesh is None:
                 # - if not on meta, just load the state dict
                 # - and then put on the device
-                moe.load_state_dict(sd)
-                moe = moe.to(device)
+                if not is_fsdp_enabled() or is_local_dist_rank_0():
+                    moe.load_state_dict(sd)
+                    moe = moe.to(device)
             else:
                 # - otherwise, we need to distribtue and will
                 #   replace the parameters
