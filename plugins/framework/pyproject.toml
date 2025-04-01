@@ -24,7 +24,7 @@ classifiers=[
 dependencies = [
   "numpy<2.0", # numpy needs to be bounded due to incompatiblity with current torch<2.3
   "torch>2.2",
-  "peft",
+  "peft<=0.14.0", # QuantLinear is not available for peft version > 0.14.0
   "accelerate",
   "pandas",
 ]

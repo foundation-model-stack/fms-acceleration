@@ -119,7 +119,8 @@ def prepare_scattermoe(
 
     if disable_distributed and ep_degree > 1:
         raise ValueError(
-            "expert sharding can not be deferred to top level sharding protocol (e.g. FSDP) when ep_degree > 1"
+            "expert sharding can not be deferred to top level sharding"
+            "protocol (e.g. FSDP) when ep_degree > 1"
         )
 
     assert world_size % ep_degree == 0, (

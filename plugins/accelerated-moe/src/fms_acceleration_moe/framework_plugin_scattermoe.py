@@ -42,20 +42,19 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
         super().__init__(configurations)
 
         # ep_degree determines the expert parallel sharding
-        # If disable_distributed is False, expert sharding is handled
-        # by the plugin else deferred to top-level distribution (e.g. FSDP).
+        # If disable_distributed==False, the moe plugin handles sharding / replication,
+        # otherwise user will need handle this manually (e.g., using FSDP)
         #
-        # default of 1 for ep_degree and False for disable_distributed
-        # mean experts are not sharded and operate in pure replication with
-        # Scatter MoE kernels.
+        # ep_degree=1 (default):
+        # - disable_distributed=False (default) means
+        # experts are replicated while using ScatterMoE kernels.
+        # - disable_distributed=True means no replication (please use
+        #    own training framework)
         #
-        # ep_degree==1 and disable_distributed is True mean use of Scatter MoE
-        # kernels + distribution deferred to top level distribution protocol (e.g. FSDP).
-        #
-        # ep_degree>1 and disabled_distributed is False mean enabling expert parallel
-        # and Scatter MoE Kernels.
-        #
-        # ep_degree>1 and disable_distributed is True errors out.
+        # ep_degree > 1:
+        # - disabled_distributed=False (default) means expert sharding with
+        # Scatter MoE Kernels.
+        # disable_distributed=True cannot be set in this case; errors out.
 
         self._ep_degree = self._check_config_and_maybe_check_values(
             key="training.moe.scattermoe.ep_degree",
