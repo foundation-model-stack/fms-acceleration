@@ -174,21 +174,23 @@ def get_checkpoint_meta_from_sharded_safetensor(
             )
         if m.group(1) == router_name:
             if lora:
-                k_lora_a = k.replace(".layer.", ".lora_A.")
-                _map[KEY_SCATTERMOE_LORA_A_ROUTER].append((k_lora_a, stfile))
-                k_lora_b = k.replace(".layer.", ".lora_B.")
-                _map[KEY_SCATTERMOE_LORA_B_ROUTER].append((k_lora_b, stfile))
+                _map["router.lora_A.default.weight"].append((k, stfile))
+                _map["router.lora_B.default.weight"].append((k, stfile))
             else:
                 _map[KEY_SCATTERMOE_ROUTER].append((k, stfile))
         elif m.group(1) in expert_name:
+            index = m.group(2)
+            index = 0 if index is None else int(index)
+            mod = None
             if not lora:
-                index = m.group(2)
-                index = 0 if index is None else int(index)
-                mod = None
                 for mod in expert_map.get(m.group(1), expert_map.get(m.group(3))):
                     _insert(_map[f"{mod}.weight"], index, (k, stfile))
+            else:
+                for mod in expert_map.get(m.group(1), expert_map.get(m.group(3))):
+                    _insert(_map[f"{mod}.lora_A"], index, (k, stfile))
+                    _insert(_map[f"{mod}.lora_B"], index, (k, stfile))
 
-                assert mod is not None, f"cannot map '{rel_k}'"
+            assert mod is not None, f"cannot map '{rel_k}'"
 
     if len(_map) == 0:
         raise ValueError(
