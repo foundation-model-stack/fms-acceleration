@@ -110,15 +110,30 @@ def save_fsdp_optimizer(
     # get the state dicts for model and optimize
     (model_state_dict, optimizer_state_dict) = get_state_dict(model, optimizer)
 
-    # - save model
-    ckpt_model = os.path.join(output_dir, f"{FSDP_MODEL_NAME}_{MODEL_INDEX}")
-    os.makedirs(ckpt_model, exist_ok=True)
-    logger.info(f"Saving model to {ckpt_model}")
-    dcp.save(
-        state_dict={KEY_MODEL: model_state_dict},
-        storage_writer=dcp.FileSystemWriter(ckpt_model),
-        planner=DefaultSavePlanner(),
-    )
+    # filter out lora state dict
+    lora_state_dict = {
+        k: v for k, v in model_state_dict.items() if "lora_A" in k or "lora_B" in k
+    }
+    
+    # - save mode
+    if lora_state_dict:
+        ckpt_model = os.path.join(output_dir, f"{FSDP_MODEL_NAME}_{MODEL_INDEX}")
+        os.makedirs(ckpt_model, exist_ok=True)
+        logger.info(f"Saving lora model to {ckpt_model}")
+        dcp.save(
+            state_dict={KEY_MODEL: lora_state_dict},
+            storage_writer=dcp.FileSystemWriter(ckpt_model),
+            planner=DefaultSavePlanner(),
+        )
+    else: 
+        ckpt_model = os.path.join(output_dir, f"{FSDP_MODEL_NAME}_{MODEL_INDEX}")
+        os.makedirs(ckpt_model, exist_ok=True)
+        logger.info(f"Saving ft model to {ckpt_model}")
+        dcp.save(
+            state_dict={KEY_MODEL: model_state_dict},
+            storage_writer=dcp.FileSystemWriter(ckpt_model),
+            planner=DefaultSavePlanner(),
+        )
     logger.info(f"Model saved to {ckpt_model}")
 
     # - save optimizer
