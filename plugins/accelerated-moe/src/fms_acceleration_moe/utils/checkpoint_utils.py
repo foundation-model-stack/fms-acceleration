@@ -340,7 +340,7 @@ def recover_original_state_dict_from_checkpoint(
 
     def _infer_prefixes_and_module_names(
         sd_keys: List[str],
-        min_count: int = 1,
+        min_count: int = 3,
     ):
         _name = "|".join([PARAM_NAME_ROUTER_SCATTERMOE, *PARAM_NAME_WEIGHT_SCATTERMOE])
         # pylint: disable=anomalous-backslash-in-string
