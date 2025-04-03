@@ -461,6 +461,20 @@ def recover_original_state_dict_from_checkpoint(
 
             if len(scatter_keys) == 1:
                 sd[model_key] = scatter_params[scatter_keys[0]]
+
+            elif any("lora_A" in k for k in scatter_keys) and any("lora_B" in k for k in scatter_keys):
+                lora_A_key = next((k for k in scatter_keys if "lora_A" in k), None)
+                lora_B_key = next((k for k in scatter_keys if "lora_B" in k), None)
+
+                if lora_A_key and lora_B_key:
+                    lora_A = scatter_params[lora_A_key]
+                    lora_B = scatter_params[lora_B_key]
+
+                    # Multiply matrices
+                    lora_weight = torch.matmul(lora_B, lora_A)
+
+                    sd[model_key] = lora_weight
+
             else:
                 # unfortunately, there this is a in
                 # scattermoe_state_dict._maybe_reshape_scattermoe_expert_weights
