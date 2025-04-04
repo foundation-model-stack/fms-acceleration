@@ -455,6 +455,8 @@ def recover_original_state_dict_from_checkpoint(
             #  it will go by order of scatter keys
             scatter_keys = sorted(scatter_params.keys())
 
+            scatter_keys_fqdn = [".".join([prefix, module_name, scatter_key]) for scatter_key in scatter_keys]
+
             assert (
                 len(scatter_keys) > 0
             ), f"Obtained zero scatter keys for model_key '{model_key}'"
@@ -463,17 +465,10 @@ def recover_original_state_dict_from_checkpoint(
                 sd[model_key] = scatter_params[scatter_keys[0]]
 
             elif any("lora_A" in k for k in scatter_keys) and any("lora_B" in k for k in scatter_keys):
-                lora_A_key = next((k for k in scatter_keys if "lora_A" in k), None)
-                lora_B_key = next((k for k in scatter_keys if "lora_B" in k), None)
-
-                if lora_A_key and lora_B_key:
-                    lora_A = scatter_params[lora_A_key]
-                    lora_B = scatter_params[lora_B_key]
-
-                    # Multiply matrices
-                    lora_weight = torch.matmul(lora_B, lora_A)
-
-                    sd[model_key] = lora_weight
+                # If lora, do not associate to model keys but keep scatter keys
+                for i, lora_key in enumerate(scatter_keys):
+                    lora = scatter_params[lora_key]
+                    sd[scatter_keys_fqdn[i]] = lora
 
             else:
                 # unfortunately, there this is a in
@@ -506,6 +501,9 @@ def save_sharded_safetensors(
         filename_pattern=filename_pattern,
         max_shard_size=max_shard_size,
     )
+
+    # If input state dict includes lora_A and lora_B params, need to save as a lora adapter_model.safetensors file
+
     index = {
         "metadata": state_dict_split.metadata,
         "weight_map": state_dict_split.tensor_to_filename,
