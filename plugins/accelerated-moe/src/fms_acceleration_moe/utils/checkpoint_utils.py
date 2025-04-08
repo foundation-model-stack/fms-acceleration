@@ -466,11 +466,7 @@ def recover_original_state_dict_from_checkpoint(
             ), f"Obtained zero scatter keys for model_key '{model_key}'"
 
             if any("lora_A" in k for k in scatter_keys) and any("lora_B" in k for k in scatter_keys):
-                # If lora, do not associate to model keys but keep scatter keys
-                # TODO: Actually these need to be associated with an
-                # input-linear and output-linear layer much like the FT case
-                # so, do that. Seperate the cases out. Use torch.cat if len
-                # scatter keys is greater than 2
+                # If lora, split input linear and output linear into lora layers
                 def transform_model_key(model_key, lora_key):
                     lora_parts = lora_key.split(".")
                     model_parts = model_key.split(".")
