@@ -33,7 +33,6 @@ from torch.distributed.checkpoint.state_dict import get_state_dict, set_state_di
 from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
 from transformers import PretrainedConfig
 from transformers.utils import CONFIG_NAME, SAFE_WEIGHTS_INDEX_NAME, SAFE_WEIGHTS_NAME
-from transformers.peft_utils import ADAPTER_CONFIG_NAME, ADAPTER_SAFE_WEIGHTS_NAME, ADAPTER_WEIGHTS_NAME
 import torch
 import torch.distributed.checkpoint as dcp
 
@@ -53,6 +52,10 @@ logger = get_logger(__name__)
 MODEL_INDEX = None
 KEY_MODEL = "model"
 KEY_OPTIMIZER = "optimizer"
+
+ADAPTER_CONFIG_NAME = "adapter_config.json"
+ADAPTER_WEIGHTS_NAME = "adapter_model.bin"
+ADAPTER_SAFE_WEIGHTS_NAME = "adapter_model.safetensors"
 
 # Below are rewrite of HF FSDP model saving functions to be able to handle
 # that the parameters are now a mixture of regular and Dtensors.
@@ -462,14 +465,46 @@ def recover_original_state_dict_from_checkpoint(
                 len(scatter_keys) > 0
             ), f"Obtained zero scatter keys for model_key '{model_key}'"
 
-            if len(scatter_keys) == 1:
-                sd[model_key] = scatter_params[scatter_keys[0]]
-
-            elif any("lora_A" in k for k in scatter_keys) and any("lora_B" in k for k in scatter_keys):
+            if any("lora_A" in k for k in scatter_keys) and any("lora_B" in k for k in scatter_keys):
                 # If lora, do not associate to model keys but keep scatter keys
+                # TODO: Actually these need to be associated with an
+                # input-linear and output-linear layer much like the FT case
+                # so, do that. Seperate the cases out. Use torch.cat if len
+                # scatter keys is greater than 2
+                def transform_model_key(model_key, lora_key):
+                    lora_parts = lora_key.split(".")
+                    model_parts = model_key.split(".")
+
+                    try:
+                        lora_index = lora_parts.index("block_sparse_moe")
+                        model_index = model_parts.index("block_sparse_moe")
+                    except ValueError:
+                        raise ValueError("Both keys must contain 'block_sparse_moe'")
+
+                    # Replace the component after 'block_sparse_moe' in lora_key
+                    updated_lora_parts = lora_parts[:]
+                    updated_lora_parts[lora_index + 1] = model_parts[model_index + 1]
+
+                    # Return the updated lora parts as the model key
+                    return ".".join(updated_lora_parts)
                 for i, lora_key in enumerate(scatter_keys):
-                    lora = scatter_params[lora_key]
-                    sd[scatter_keys_fqdn[i]] = lora
+                    new_model_key = transform_model_key(model_key, scatter_keys_fqdn[i])
+                    if len(scatter_keys) == 2:
+                        sd[new_model_key] = scatter_params[lora_key]
+                    else:
+                        if "lora_A" in new_model_key:
+                            filtered_keys = [k for k in scatter_keys if "lora_A" in k]
+                        elif "lora_B" in new_model_key:
+                            filtered_keys = [k for k in scatter_keys if "lora_B" in k]
+                        else:
+                            raise ValueError(f"Unexpected LoRA key type in {new_model_key}")
+
+                        sd[new_model_key] = torch.cat(
+                            [scatter_params[k] for k in filtered_keys], dim=1
+                        )
+
+            elif len(scatter_keys) == 1:
+                sd[model_key] = scatter_params[scatter_keys[0]]
 
             else:
                 # unfortunately, there this is a in
