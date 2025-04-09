@@ -278,28 +278,10 @@ class ScatterMoE(torch.nn.Module):
         # - w1: the up_projection.
         # - w2: the down_projection.
         # - w3 (optional): the gate projection.
-        self.w1 = ScatteredExperts(
-            in_features=self.hidden_size,
-            out_features=self.intermediate_size,
-            num_experts=self.num_experts,
-            fan_out=self.top_k if not self.all_to_all else 1,
-            grouped_out=True,
-            dtype=dtype,
-            device=device,
-            lora_config=lora_config,
-        )
-        self.w2 = ScatteredExperts(
-            in_features=self.intermediate_size,
-            out_features=self.hidden_size,
-            num_experts=self.num_experts,
-            fan_out=1,
-            grouped_in=True,
-            dtype=dtype,
-            device=device,
-            lora_config=lora_config,
-        )
-        if mlp_arch == SCATTERMOE_SPEC_HAS_GATE:
-            self.w3 = ScatteredExperts(
+        # TODO: Custom non-linear layers not supported in vLLM,
+        # must be investigated further before enabling
+        if lora_config is not None:
+            self.w1 = ScatteredExperts(
                 in_features=self.hidden_size,
                 out_features=self.intermediate_size,
                 num_experts=self.num_experts,
@@ -309,6 +291,27 @@ class ScatterMoE(torch.nn.Module):
                 device=device,
                 lora_config=lora_config,
             )
+            self.w2 = ScatteredExperts(
+                in_features=self.intermediate_size,
+                out_features=self.hidden_size,
+                num_experts=self.num_experts,
+                fan_out=1,
+                grouped_in=True,
+                dtype=dtype,
+                device=device,
+                lora_config=lora_config,
+            )
+            if mlp_arch == SCATTERMOE_SPEC_HAS_GATE:
+                self.w3 = ScatteredExperts(
+                    in_features=self.hidden_size,
+                    out_features=self.intermediate_size,
+                    num_experts=self.num_experts,
+                    fan_out=self.top_k if not self.all_to_all else 1,
+                    grouped_out=True,
+                    dtype=dtype,
+                    device=device,
+                    lora_config=lora_config,
+                )
 
     # referenced from dolomite-engine
     def _compute_routing_weights(self, hidden_states: torch.Tensor):
