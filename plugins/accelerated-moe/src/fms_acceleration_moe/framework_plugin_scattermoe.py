@@ -42,10 +42,28 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
         super().__init__(configurations)
 
         # ep_degree determines the expert parallel sharding
-        # - default of 1 means experts are not sharded and operate in pure replication.
+        # If disable_distributed==False, the moe plugin handles sharding / replication,
+        # otherwise user will need handle this manually (e.g., using FSDP)
+        #
+        # ep_degree=1 (default):
+        # - disable_distributed=False (default) means
+        # experts are replicated while using ScatterMoE kernels.
+        # - disable_distributed=True means no replication (please use
+        #    own training framework)
+        #
+        # ep_degree > 1:
+        # - disabled_distributed=False (default) means expert sharding with
+        # Scatter MoE Kernels.
+        # disable_distributed=True cannot be set in this case; errors out.
+
         self._ep_degree = self._check_config_and_maybe_check_values(
             key="training.moe.scattermoe.ep_degree",
             default=1,
+        )
+
+        self._disable_distributed = self._check_config_and_maybe_check_values(
+            key="training.moe.scattermoe.disable_distributed",
+            default=False,
         )
 
     @property
@@ -78,6 +96,7 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
             rank=rank,
             world_size=world_size,
             ep_degree=self._ep_degree,
+            disable_distributed=self._disable_distributed,
             mixed_precision=False,  # Currently this is hardcoded to OFF
             lora_config=peft_config,
         )
@@ -93,23 +112,24 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
             and getattr(accelerator.state, "fsdp_plugin", None) is not None
         ):
 
-            # - use an internal function call to get the no split
-            # module names, which are typically layers
-            _layers = model._get_no_split_modules("")
-            accelerator.state.fsdp_plugin.ignored_modules = [
-                getattr(layer, name)
-                for name in self._moe_component_module_names
-                for layer in model.modules()
-                if layer.__class__.__name__ in _layers
-            ]
+            if not self._disable_distributed:
+                # - use an internal function call to get the no split
+                # module names, which are typically layers
+                _layers = model._get_no_split_modules("")
+                accelerator.state.fsdp_plugin.ignored_modules = [
+                    getattr(layer, name)
+                    for name in self._moe_component_module_names
+                    for layer in model.modules()
+                    if layer.__class__.__name__ in _layers
+                ]
 
-            # call this to patch the HF save and load functions to be able
-            # to save DTensors propery
-            patch_huggingface_save_and_load_for_dtensors()
+                # call this to patch the HF save and load functions to be able
+                # to save DTensors propery
+                patch_huggingface_save_and_load_for_dtensors()
 
-            # call this to patch torch optim to not use
-            # foreach for dtensors
-            patch_torch_optim_foreach_to_not_apply_to_dtensors()
+                # call this to patch torch optim to not use
+                # foreach for dtensors
+                patch_torch_optim_foreach_to_not_apply_to_dtensors()
 
         return callbacks
 
