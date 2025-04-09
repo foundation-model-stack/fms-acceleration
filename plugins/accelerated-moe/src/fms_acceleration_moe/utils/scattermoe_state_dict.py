@@ -85,6 +85,7 @@ def get_checkpoint_meta_from_sharded_safetensor(
     weight_map: Dict,
     prefix: str,  # e.g., 'model.layers.0,
     instance_name: str,  # e.g., block_sparse_moe
+    lora_start: bool, # if lora is detected in prepare_scattermoe.py
     router_name: str = "gate",  # e.g., named "gate" within block_sparse_moe
     expert_name: str = "experts",  # e.g., named "experts" within block_sparse_moe
     expert_map: Dict = None,  # map -> [w1,w2,w3]
@@ -123,8 +124,6 @@ def get_checkpoint_meta_from_sharded_safetensor(
             n -= 1
         L[i] = v
 
-    lora = False
-
     # if expert_name = input_linear|output_linear|input_linear
     # - in this case will map
     # - input_linear: [w1, w3], output_linear: {w2}
@@ -151,8 +150,9 @@ def get_checkpoint_meta_from_sharded_safetensor(
     # `w1.weight`: [...]
     _map = defaultdict(list)
     prefix = f"{prefix}.{instance_name}."
-    # Lora case where it prefix looks like base_model.model.model...
-    # instead of model...
+    # Lora case in checkpoint_utils where it prefix looks like 
+    # `base_model.model.model...` instead of `model...`
+    lora = False
     if not prefix.startswith("model."):
         prefix=prefix.replace("base_model.model.", "", 1)
         lora=True
@@ -179,18 +179,19 @@ def get_checkpoint_meta_from_sharded_safetensor(
             else:
                 _map[KEY_SCATTERMOE_ROUTER].append((k, stfile))
         elif m.group(1) in expert_name:
-            index = m.group(2)
-            index = 0 if index is None else int(index)
-            mod = None
-            if not lora:
-                for mod in expert_map.get(m.group(1), expert_map.get(m.group(3))):
-                    _insert(_map[f"{mod}.weight"], index, (k, stfile))
-            else:
-                for mod in expert_map.get(m.group(1), expert_map.get(m.group(3))):
-                    _insert(_map[f"{mod}.lora_A"], index, (k, stfile))
-                    _insert(_map[f"{mod}.lora_B"], index, (k, stfile))
+            if not lora_start:
+                index = m.group(2)
+                index = 0 if index is None else int(index)
+                mod = None
+                if not lora:
+                    for mod in expert_map.get(m.group(1), expert_map.get(m.group(3))):
+                        _insert(_map[f"{mod}.weight"], index, (k, stfile))
+                else:
+                    for mod in expert_map.get(m.group(1), expert_map.get(m.group(3))):
+                        _insert(_map[f"{mod}.lora_A"], index, (k, stfile))
+                        _insert(_map[f"{mod}.lora_B"], index, (k, stfile))
 
-            assert mod is not None, f"cannot map '{rel_k}'"
+                assert mod is not None, f"cannot map '{rel_k}'"
 
     if len(_map) == 0:
         raise ValueError(
