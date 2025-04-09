@@ -151,10 +151,6 @@ def get_checkpoint_meta_from_sharded_safetensor(
     # `w1.weight`: [...]
     _map = defaultdict(list)
     prefix = f"{prefix}.{instance_name}."
-    # Lora case in checkpoint_utils where it prefix looks like 
-    # `base_model.model.model...` instead of `model...`
-    if not prefix.startswith("model."):
-        prefix=prefix.replace("base_model.model.", "", 1)
 
     for k, stfile in weight_map.items():
         if not k.startswith(prefix):
