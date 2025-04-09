@@ -82,22 +82,21 @@ def load_experts_onto_device(
                 param, device_mesh=device_mesh, placements=reps + [Shard(0)]
             )
 
-        if not lora:
-            # get the module we want to shard
-            name = weight_name.split(".")
-            path, name = ".".join(name[:-1]), name[-1]
-            mod = module.get_submodule(path)
-            requires_grad = getattr(mod, name).requires_grad
+        # get the module we want to shard
+        name = weight_name.split(".")
+        path, name = ".".join(name[:-1]), name[-1]
+        mod = module.get_submodule(path)
+        requires_grad = getattr(mod, name).requires_grad
 
-            param = torch.nn.Parameter(
-                param,
-                requires_grad=requires_grad,
-            )
+        param = torch.nn.Parameter(
+            param,
+            requires_grad=requires_grad,
+        )
 
-            # install gradient scaling hook
-            if KEY_SCATTERMOE_ROUTER not in weight_name:
-                if param.requires_grad:
-                    param.register_hook(_hook) 
+        # install gradient scaling hook
+        if KEY_SCATTERMOE_ROUTER not in weight_name:
+            if param.requires_grad:
+                param.register_hook(_hook) 
 
         # register the sharded parameter onto the megablocks.dmoe
         mod.register_parameter(name, param)
