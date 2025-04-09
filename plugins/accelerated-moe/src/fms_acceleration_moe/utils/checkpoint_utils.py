@@ -386,7 +386,7 @@ def recover_original_state_dict_from_checkpoint(
 
         return results
 
-    for prefix in _infer_prefixes_and_module_names(sd.keys()):
+    for prefix in _infer_prefixes_and_module_names(sd.keys(), lora):
         prefix = prefix.split(".")
         prefix, module_name = ".".join(prefix[:-1]), prefix[-1]
 
