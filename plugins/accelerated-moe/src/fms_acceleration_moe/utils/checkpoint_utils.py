@@ -463,45 +463,25 @@ def recover_original_state_dict_from_checkpoint(
             #  it will go by order of scatter keys
             scatter_keys = sorted(scatter_params.keys())
 
-            scatter_keys_fqdn = [".".join([prefix, module_name, scatter_key]) for scatter_key in scatter_keys]
-
             assert (
                 len(scatter_keys) > 0
             ), f"Obtained zero scatter keys for model_key '{model_key}'"
 
-            if any("lora_A" in k for k in scatter_keys) and any("lora_B" in k for k in scatter_keys):
-                # If lora, split input linear and output linear into lora layers
-                def transform_model_key(model_key, lora_key):
-                    lora_parts = lora_key.split(".")
-                    model_parts = model_key.split(".")
-
-                    try:
-                        lora_index = lora_parts.index("block_sparse_moe")
-                        model_index = model_parts.index("block_sparse_moe")
-                    except ValueError:
-                        raise ValueError("Both keys must contain 'block_sparse_moe'")
-
-                    # Replace the component after 'block_sparse_moe' in lora_key
-                    updated_lora_parts = lora_parts[:]
-                    updated_lora_parts[lora_index + 1] = model_parts[model_index + 1] + ".layer"
-
-                    # Return the updated lora parts as the model key
-                    return ".".join(updated_lora_parts)
+            if lora:
                 for i, lora_key in enumerate(scatter_keys):
-                    new_model_key = transform_model_key(model_key, scatter_keys_fqdn[i])
                     if len(scatter_keys) == 2:
-                        sd[new_model_key] = scatter_params[lora_key]
-                    else:
-                        if "lora_A" in new_model_key:
-                            filtered_keys = [k for k in scatter_keys if "lora_A" in k]
-                        elif "lora_B" in new_model_key:
-                            filtered_keys = [k for k in scatter_keys if "lora_B" in k]
-                        else:
-                            raise ValueError(f"Unexpected LoRA key type in {new_model_key}")
+                        model_key_parts = model_key.split(".")
+                        layer_index = model_key_parts.index("layer")
+                        
+                        # Replace the "layer.weight" part with "layer.lora_A.weight" or "layer.lora_B.weight"
+                        if "lora_A" in lora_key:
+                            model_key_parts[layer_index + 1] = "lora_A.weight"
+                        elif "lora_B" in lora_key:
+                            model_key_parts[layer_index + 1] = "lora_B.weight"
 
-                        sd[new_model_key] = torch.cat(
-                            [scatter_params[k] for k in filtered_keys], dim=1
-                        )
+                        # Rebuild the model_key and assign the corresponding scatter_param
+                        new_model_key = ".".join(model_key_parts)
+                        sd[new_model_key] = scatter_params[lora_key]
 
             elif len(scatter_keys) == 1:
                 sd[model_key] = scatter_params[scatter_keys[0]]
@@ -619,10 +599,15 @@ def recover_safetensors_from_dcp(
     state_dict = loader(checkpoint_dir)
 
     lora = False
-    for name, _ in state_dict.items():
+    new_state_dict = {}  # To store the modified state_dict
+    for name, param in state_dict.items():
         if "lora_A" or "lora_B" in name:
             lora = True
-            break
+        if "base_model.model." in name:
+            name = name.replace("base_model.model.", "", 1)
+        if "default." in name:
+            name = name.replace("default.", "", 1)
+        new_state_dict[name] = param
 
     # recover the original state dict
     state_dict = recover_original_state_dict_from_checkpoint(state_dict, lora, _name_or_path)
