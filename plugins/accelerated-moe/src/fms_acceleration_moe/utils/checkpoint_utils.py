@@ -473,7 +473,7 @@ def recover_original_state_dict_from_checkpoint(
                         model_key_parts = model_key.split(".")
                         layer_index = model_key_parts.index("layer")
 
-                        # Replace the "layer.weight" part with "layer.lora_A.weight" or 
+                        # Replace the "layer.weight" part with "layer.lora_A.weight" or
                         # "layer.lora_B.weight"
                         if "lora_A" in lora_key:
                             model_key_parts[layer_index + 1] = "lora_A.weight"
