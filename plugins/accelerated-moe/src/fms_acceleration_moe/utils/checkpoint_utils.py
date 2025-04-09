@@ -322,6 +322,7 @@ def get_state_dict_from_safe_checkpoint(safe_checkpoint_dir: str):
 #   can restore the checkpoint to be loaded by the original architecture.
 def recover_original_state_dict_from_checkpoint(
     sd: Dict,
+    lora: bool,
     pretrained_model_name_or_path: str = None,
 ):
     """
@@ -359,8 +360,10 @@ def recover_original_state_dict_from_checkpoint(
 
     def _infer_prefixes_and_module_names(
         sd_keys: List[str],
-        min_count: int = 3,
+        lora: bool,
     ):
+        min_count = 2 if lora else 3
+
         _name = "|".join([PARAM_NAME_ROUTER_SCATTERMOE, *PARAM_NAME_WEIGHT_SCATTERMOE])
         # pylint: disable=anomalous-backslash-in-string
         _reg = re.compile(rf"(.*)\.({_name})\.(?:weight|lora_A|lora_B)")
@@ -523,13 +526,9 @@ def save_sharded_safetensors(
     input_state_dict: Dict,
     save_directory: str,
     metadata: Dict,
+    lora: bool,
     max_shard_size: Union[int, str] = "5GB",
 ):
-    lora = False
-    for name, _ in input_state_dict.items():
-        if "lora_A" or "lora_B" in name:
-            lora = True
-            break
 
     if not lora:
         filename_pattern = SAFE_WEIGHTS_NAME.replace(".bin", "{suffix}.bin").replace(
@@ -618,14 +617,21 @@ def recover_safetensors_from_dcp(
     # get the state_dict
     state_dict = loader(checkpoint_dir)
 
+    lora = False
+    for name, _ in state_dict.items():
+        if "lora_A" or "lora_B" in name:
+            lora = True
+            break
+
     # recover the original state dict
-    state_dict = recover_original_state_dict_from_checkpoint(state_dict, _name_or_path)
+    state_dict = recover_original_state_dict_from_checkpoint(state_dict, lora, _name_or_path)
 
     # save it as a safetensors file
     save_sharded_safetensors(
         {k: v.contiguous() for k, v in state_dict.items()},
         output_dir,
         metadata={"format": "pt"},
+        lora=lora,
     )
 
 
