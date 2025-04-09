@@ -173,8 +173,8 @@ def get_checkpoint_meta_from_sharded_safetensor(
             )
         if m.group(1) == router_name:
             if lora_utils:
-                _map["router.layer.lora_A.default.weight"].append((k, stfile))
-                _map["router.layer.lora_B.default.weight"].append((k, stfile))
+                _map["router.lora_A.default.weight"].append((k, stfile))
+                _map["router.lora_B.default.weight"].append((k, stfile))
             else:
                 _map[KEY_SCATTERMOE_ROUTER].append((k, stfile))
         elif m.group(1) in expert_name:
