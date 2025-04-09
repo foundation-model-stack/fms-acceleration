@@ -483,7 +483,7 @@ def recover_original_state_dict_from_checkpoint(
 
                     # Replace the component after 'block_sparse_moe' in lora_key
                     updated_lora_parts = lora_parts[:]
-                    updated_lora_parts[lora_index + 1] = model_parts[model_index + 1]
+                    updated_lora_parts[lora_index + 1] = model_parts[model_index + 1] + ".layer"
 
                     # Return the updated lora parts as the model key
                     return ".".join(updated_lora_parts)
