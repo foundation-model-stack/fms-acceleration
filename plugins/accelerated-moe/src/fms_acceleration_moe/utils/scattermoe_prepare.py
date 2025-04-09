@@ -53,6 +53,7 @@ def load_experts_onto_device(
     state_dict: OrderedDict,
     device_mesh: DeviceMesh,
     num_experts_per_device: int,
+    lora: bool,
 ):
 
     # hook for scaling the gradient
@@ -81,21 +82,22 @@ def load_experts_onto_device(
                 param, device_mesh=device_mesh, placements=reps + [Shard(0)]
             )
 
-        # get the module we want to shard
-        name = weight_name.split(".")
-        path, name = ".".join(name[:-1]), name[-1]
-        mod = module.get_submodule(path)
-        requires_grad = getattr(mod, name).requires_grad
+        if not lora:
+            # get the module we want to shard
+            name = weight_name.split(".")
+            path, name = ".".join(name[:-1]), name[-1]
+            mod = module.get_submodule(path)
+            requires_grad = getattr(mod, name).requires_grad
 
-        param = torch.nn.Parameter(
-            param,
-            requires_grad=requires_grad,
-        )
+            param = torch.nn.Parameter(
+                param,
+                requires_grad=requires_grad,
+            )
 
-        # install gradient scaling hook
-        if KEY_SCATTERMOE_ROUTER not in weight_name and KEY_SCATTERMOE_LORA_A_ROUTER not in weight_name and KEY_SCATTERMOE_LORA_B_ROUTER not in weight_name:
-            if param.requires_grad:
-                param.register_hook(_hook) 
+            # install gradient scaling hook
+            if KEY_SCATTERMOE_ROUTER not in weight_name:
+                if param.requires_grad:
+                    param.register_hook(_hook) 
 
         # register the sharded parameter onto the megablocks.dmoe
         mod.register_parameter(name, param)
@@ -119,6 +121,10 @@ def prepare_scattermoe(
     # Local
     # pylint: disable=import-outside-toplevel
     from .scattermoe import ScatterMoE
+
+    lora = False
+    if lora_config is not None:
+        lora = True
 
     if disable_distributed and ep_degree > 1:
         raise ValueError(
@@ -341,7 +347,7 @@ def prepare_scattermoe(
             else:
                 # - otherwise, we need to distribtue and will
                 #   replace the parameters
-                load_experts_onto_device(moe, sd, device_mesh, num_experts_per_device)
+                load_experts_onto_device(moe, sd, device_mesh, num_experts_per_device, lora)
             # module swap
             setattr(parent, module_name, moe)
 
