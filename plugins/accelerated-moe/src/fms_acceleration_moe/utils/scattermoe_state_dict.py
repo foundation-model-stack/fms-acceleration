@@ -26,9 +26,9 @@ import torch
 # Local
 from .scattermoe_constants import (
     DIM_EXPERT,
-    KEY_SCATTERMOE_ROUTER,
     KEY_SCATTERMOE_LORA_A_ROUTER,
     KEY_SCATTERMOE_LORA_B_ROUTER,
+    KEY_SCATTERMOE_ROUTER,
     PARAM_NAME_WEIGHT_SCATTERMOE,
 )
 
@@ -88,8 +88,8 @@ def get_checkpoint_meta_from_sharded_safetensor(
     router_name: str = "gate",  # e.g., named "gate" within block_sparse_moe
     expert_name: str = "experts",  # e.g., named "experts" within block_sparse_moe
     expert_map: Dict = None,  # map -> [w1,w2,w3]
-    lora_start: bool = False, # if lora is detected in prepare_scattermoe.py
-    lora_utils: bool = False, # if lora is detected in checkpoint_utils.py
+    lora_start: bool = False,  # if lora is detected in prepare_scattermoe.py
+    lora_utils: bool = False,  # if lora is detected in checkpoint_utils.py
 ) -> Dict[str, List[Tuple]]:
     """
     utilty function to infer the mapping of ScatterMoe parameters
@@ -306,7 +306,11 @@ def get_state_dict_from_checkpoint_metadata(
         # go by one weight at a time.
         for scatter_key, vs in checkpoint_metadata.items():
 
-            if KEY_SCATTERMOE_ROUTER in scatter_key or KEY_SCATTERMOE_LORA_A_ROUTER in scatter_key or KEY_SCATTERMOE_LORA_B_ROUTER in scatter_key:
+            if (
+                KEY_SCATTERMOE_ROUTER in scatter_key
+                or KEY_SCATTERMOE_LORA_A_ROUTER in scatter_key
+                or KEY_SCATTERMOE_LORA_B_ROUTER in scatter_key
+            ):
                 k, fi = vs[0]  # only one item
                 param = files[fi].get_tensor(k)
 

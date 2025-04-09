@@ -33,9 +33,9 @@ from .scattermoe_constants import (
     FILE_SAFETENSOR_INDEX,
     KEY_EXPERT_PARALLEL,
     KEY_REPLICATE,
-    KEY_SCATTERMOE_ROUTER,
     KEY_SCATTERMOE_LORA_A_ROUTER,
     KEY_SCATTERMOE_LORA_B_ROUTER,
+    KEY_SCATTERMOE_ROUTER,
     get_scattermoe_conv_spec_from_archs,
 )
 from .scattermoe_state_dict import (
@@ -69,7 +69,11 @@ def load_experts_onto_device(
 
     for weight_name, param in state_dict.items():
 
-        if KEY_SCATTERMOE_ROUTER in weight_name or KEY_SCATTERMOE_LORA_A_ROUTER in weight_name or KEY_SCATTERMOE_LORA_B_ROUTER in weight_name:
+        if (
+            KEY_SCATTERMOE_ROUTER in weight_name
+            or KEY_SCATTERMOE_LORA_A_ROUTER in weight_name
+            or KEY_SCATTERMOE_LORA_B_ROUTER in weight_name
+        ):
             # if its the router, replicate
             param = distribute_tensor(param, device_mesh, reps + [Replicate()])
         elif param.shape[0] > num_experts_per_device:
@@ -96,7 +100,7 @@ def load_experts_onto_device(
         # install gradient scaling hook
         if KEY_SCATTERMOE_ROUTER not in weight_name:
             if param.requires_grad:
-                param.register_hook(_hook) 
+                param.register_hook(_hook)
 
         # register the sharded parameter onto the megablocks.dmoe
         mod.register_parameter(name, param)
@@ -248,7 +252,7 @@ def prepare_scattermoe(
                 module_name,
                 router_name,
                 "|".join(expert_name),
-                lora_start=lora
+                lora_start=lora,
             )
 
             # the parent module
@@ -347,7 +351,9 @@ def prepare_scattermoe(
             else:
                 # - otherwise, we need to distribtue and will
                 #   replace the parameters
-                load_experts_onto_device(moe, sd, device_mesh, num_experts_per_device, lora)
+                load_experts_onto_device(
+                    moe, sd, device_mesh, num_experts_per_device, lora
+                )
             # module swap
             setattr(parent, module_name, moe)
 

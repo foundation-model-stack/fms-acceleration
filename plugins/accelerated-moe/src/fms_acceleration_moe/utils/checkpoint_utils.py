@@ -118,7 +118,7 @@ def save_fsdp_optimizer(
     lora_state_dict = {
         k: v for k, v in model_state_dict.items() if "lora_A" in k or "lora_B" in k
     }
-    
+
     # - save mode
     if lora_state_dict:
         ckpt_model = os.path.join(output_dir, f"{FSDP_MODEL_NAME}_{MODEL_INDEX}")
@@ -129,7 +129,7 @@ def save_fsdp_optimizer(
             storage_writer=dcp.FileSystemWriter(ckpt_model),
             planner=DefaultSavePlanner(),
         )
-    else: 
+    else:
         ckpt_model = os.path.join(output_dir, f"{FSDP_MODEL_NAME}_{MODEL_INDEX}")
         os.makedirs(ckpt_model, exist_ok=True)
         logger.info(f"Saving ft model to {ckpt_model}")
@@ -421,7 +421,7 @@ def recover_original_state_dict_from_checkpoint(
         #   model param and they need to be cat
         for scatter_key, list_of_params in checkpoint_metadata.items():
             scatter_key_fqdn = ".".join([prefix, module_name, scatter_key])
-            
+
             scatter_param = sd[scatter_key_fqdn]
 
             # remove from state dict
@@ -472,8 +472,9 @@ def recover_original_state_dict_from_checkpoint(
                     if len(scatter_keys) == 2:
                         model_key_parts = model_key.split(".")
                         layer_index = model_key_parts.index("layer")
-                        
-                        # Replace the "layer.weight" part with "layer.lora_A.weight" or "layer.lora_B.weight"
+
+                        # Replace the "layer.weight" part with "layer.lora_A.weight" or 
+                        # "layer.lora_B.weight"
                         if "lora_A" in lora_key:
                             model_key_parts[layer_index + 1] = "lora_A.weight"
                         elif "lora_B" in lora_key:
@@ -534,12 +535,16 @@ def save_sharded_safetensors(
 
         filename_to_tensors = state_dict_split.filename_to_tensors.items()
         for shard_file, tensors in filename_to_tensors:
-            shard = {tensor: input_state_dict[tensor].contiguous() for tensor in tensors}
-            save_file(shard, os.path.join(save_directory, shard_file), metadata=metadata)
+            shard = {
+                tensor: input_state_dict[tensor].contiguous() for tensor in tensors
+            }
+            save_file(
+                shard, os.path.join(save_directory, shard_file), metadata=metadata
+            )
     else:
-        filename_pattern = ADAPTER_SAFE_WEIGHTS_NAME.replace(".bin", "{suffix}.bin").replace(
-            ".safetensors", "{suffix}.safetensors"
-        )
+        filename_pattern = ADAPTER_SAFE_WEIGHTS_NAME.replace(
+            ".bin", "{suffix}.bin"
+        ).replace(".safetensors", "{suffix}.safetensors")
         state_dict_split = split_torch_state_dict_into_shards(
             input_state_dict,
             filename_pattern=filename_pattern,
@@ -547,8 +552,12 @@ def save_sharded_safetensors(
         )
         filename_to_tensors = state_dict_split.filename_to_tensors.items()
         for shard_file, tensors in filename_to_tensors:
-            shard = {tensor: input_state_dict[tensor].contiguous() for tensor in tensors}
-            save_file(shard, os.path.join(save_directory, shard_file), metadata=metadata)
+            shard = {
+                tensor: input_state_dict[tensor].contiguous() for tensor in tensors
+            }
+            save_file(
+                shard, os.path.join(save_directory, shard_file), metadata=metadata
+            )
 
 
 # --------------------------- SCRIPT -------------------------
@@ -601,7 +610,7 @@ def recover_safetensors_from_dcp(
     lora = False
     new_state_dict = {}  # To store the modified state_dict
     for name, param in state_dict.items():
-        if "lora_A" or "lora_B" in name:
+        if "lora_A" in name or "lora_B" in name:
             lora = True
         if "base_model.model." in name:
             name = name.replace("base_model.model.", "", 1)
@@ -610,7 +619,9 @@ def recover_safetensors_from_dcp(
         new_state_dict[name] = param
 
     # recover the original state dict
-    state_dict = recover_original_state_dict_from_checkpoint(new_state_dict, lora, _name_or_path)
+    state_dict = recover_original_state_dict_from_checkpoint(
+        new_state_dict, lora, _name_or_path
+    )
 
     # save it as a safetensors file
     save_sharded_safetensors(
