@@ -246,9 +246,9 @@ def prepare_scattermoe(
                 weight_map,
                 prefix,
                 module_name,
-                lora,
                 router_name,
                 "|".join(expert_name),
+                lora_start=lora
             )
 
             # the parent module

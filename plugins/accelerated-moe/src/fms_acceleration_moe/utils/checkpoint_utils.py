@@ -412,6 +412,7 @@ def recover_original_state_dict_from_checkpoint(
             module_name,
             router_name,
             expert_name,
+            lora_utils=lora,
         )
 
         model2scatter = defaultdict(dict)
