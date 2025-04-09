@@ -280,7 +280,7 @@ class ScatterMoE(torch.nn.Module):
         # - w3 (optional): the gate projection.
         # TODO: Custom non-linear layers not supported in vLLM,
         # must be investigated further before enabling
-        if lora_config is not None:
+        if lora_config is None:
             self.w1 = ScatteredExperts(
                 in_features=self.hidden_size,
                 out_features=self.intermediate_size,
