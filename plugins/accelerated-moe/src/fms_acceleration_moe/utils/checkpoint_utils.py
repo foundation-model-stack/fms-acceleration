@@ -618,7 +618,7 @@ def recover_safetensors_from_dcp(
     state_dict = loader(checkpoint_dir)
 
     lora = False
-    new_state_dict = {}  # To store the modified state_dict
+    new_state_dict = {}
     for name, param in state_dict.items():
         if "lora_A" in name or "lora_B" in name:
             lora = True

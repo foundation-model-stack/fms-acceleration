@@ -88,9 +88,8 @@ def get_checkpoint_meta_from_sharded_safetensor(
     router_name: str = "gate",  # e.g., named "gate" within block_sparse_moe
     expert_name: str = "experts",  # e.g., named "experts" within block_sparse_moe
     expert_map: Dict = None,  # map -> [w1,w2,w3]
-    lora_start: bool = False,  # if lora is detected in prepare_scattermoe.py
     lora_utils: bool = False,  # if lora is detected in checkpoint_utils.py
-    target_modules: dict = None,
+    target_modules: dict = None, # target modules from prepare_scattermoe.py
 ) -> Dict[str, List[Tuple]]:
     """
     utilty function to infer the mapping of ScatterMoe parameters

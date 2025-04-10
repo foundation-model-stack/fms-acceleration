@@ -255,7 +255,6 @@ def prepare_scattermoe(
                 module_name,
                 router_name,
                 "|".join(expert_name),
-                lora_start=lora,
                 target_modules=lora_config.target_modules,
             )
 
