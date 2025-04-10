@@ -128,10 +128,6 @@ def prepare_scattermoe(
     # pylint: disable=import-outside-toplevel
     from .scattermoe import ScatterMoE
 
-    lora = False
-    if lora_config is not None:
-        lora = True
-
     if disable_distributed and ep_degree > 1:
         raise ValueError(
             "expert sharding can not be deferred to top level sharding"
