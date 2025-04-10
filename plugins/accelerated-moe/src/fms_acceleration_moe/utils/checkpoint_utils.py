@@ -487,7 +487,9 @@ def recover_original_state_dict_from_checkpoint(
                         elif "lora_B" in new_model_key:
                             filtered_keys = [k for k in scatter_keys if "lora_B" in k]
                         else:
-                            raise ValueError(f"Unexpected LoRA key type in {new_model_key}")
+                            raise ValueError(
+                                f"Unexpected LoRA key type in {new_model_key}"
+                            )
                         sd[new_model_key] = torch.cat(
                             [scatter_params[k] for k in filtered_keys], dim=1
                         )

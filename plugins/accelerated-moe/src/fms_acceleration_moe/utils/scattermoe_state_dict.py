@@ -90,7 +90,7 @@ def get_checkpoint_meta_from_sharded_safetensor(
     expert_map: Dict = None,  # map -> [w1,w2,w3]
     lora_start: bool = False,  # if lora is detected in prepare_scattermoe.py
     lora_utils: bool = False,  # if lora is detected in checkpoint_utils.py
-    target_modules: dict = {},
+    target_modules: dict = None,
 ) -> Dict[str, List[Tuple]]:
     """
     utilty function to infer the mapping of ScatterMoe parameters
@@ -175,7 +175,9 @@ def get_checkpoint_meta_from_sharded_safetensor(
             else:
                 _map[KEY_SCATTERMOE_ROUTER].append((k, stfile))
         elif m.group(1) in expert_name:
-            if ("input_linear" in target_modules and "output_linear" in target_modules) or lora_utils:
+            if (
+                "input_linear" in target_modules and "output_linear" in target_modules
+            ) or lora_utils:
                 index = m.group(2)
                 index = 0 if index is None else int(index)
                 mod = None

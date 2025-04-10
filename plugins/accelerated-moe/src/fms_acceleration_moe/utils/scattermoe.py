@@ -17,7 +17,6 @@ from typing import Tuple
 
 # Third Party
 from peft import LoraConfig
-from peft.utils import INCLUDE_LINEAR_LAYERS_SHORTHAND
 from torch.distributed._tensor import DTensor
 
 # pylint: disable=import-error
@@ -239,11 +238,15 @@ class ScatterMoE(torch.nn.Module):
             ), "ScatterMoE currently unable to handle bias in the lora adapters"
 
             required_modules = ["router", "layer", "all-linear"]
-            if "input_linear" in lora_config.target_modules or "output_linear" in lora_config.target_modules:
+            if (
+                "input_linear" in lora_config.target_modules
+                or "output_linear" in lora_config.target_modules
+            ):
                 # Assert that the target modules also include at least one from required_modules
-                assert (
-                    any(module in lora_config.target_modules for module in required_modules)
-                ), f"If 'input_linear' or 'output_linear' is included as a target module, 'router' must also be included"
+                assert any(
+                    module in lora_config.target_modules for module in required_modules
+                ), "If 'input_linear' or 'output_linear' is included as a target module,\
+                      'router' must also be included"
 
             assert lora_config.init_lora_weights in {
                 True,

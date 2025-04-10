@@ -99,7 +99,7 @@ def load_experts_onto_device(
         # install gradient scaling hook
         if (
             KEY_SCATTERMOE_ROUTER not in weight_name
-            and KEY_SCATTERMOE_LORA_A_ROUTER not in weight_name 
+            and KEY_SCATTERMOE_LORA_A_ROUTER not in weight_name
             and KEY_SCATTERMOE_LORA_B_ROUTER not in weight_name
         ):
             if param.requires_grad:
@@ -346,8 +346,17 @@ def prepare_scattermoe(
                         elif "lora_B" in name:
                             torch.nn.init.normal_(sd[name])
 
-            possible_target_modules = ["all_linear", "router", "layer", "input_linear", "output_linear"]
-            if any(module in lora_config.target_modules for module in possible_target_modules):
+            possible_target_modules = [
+                "all_linear",
+                "router",
+                "layer",
+                "input_linear",
+                "output_linear",
+            ]
+            if any(
+                module in lora_config.target_modules
+                for module in possible_target_modules
+            ):
                 if device_mesh is None:
                     # - if not on meta, just load the state dict
                     # - and then put on the device
