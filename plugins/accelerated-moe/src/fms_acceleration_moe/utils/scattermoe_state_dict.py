@@ -90,6 +90,7 @@ def get_checkpoint_meta_from_sharded_safetensor(
     expert_map: Dict = None,  # map -> [w1,w2,w3]
     lora_start: bool = False,  # if lora is detected in prepare_scattermoe.py
     lora_utils: bool = False,  # if lora is detected in checkpoint_utils.py
+    target_modules: dict = {},
 ) -> Dict[str, List[Tuple]]:
     """
     utilty function to infer the mapping of ScatterMoe parameters
@@ -174,13 +175,17 @@ def get_checkpoint_meta_from_sharded_safetensor(
             else:
                 _map[KEY_SCATTERMOE_ROUTER].append((k, stfile))
         elif m.group(1) in expert_name:
-            # Custom w1, w2, w3 are not supported for lora
-            if not lora_start and not lora_utils:
+            if ("input_linear" in target_modules and "output_linear" in target_modules) or lora_utils:
                 index = m.group(2)
                 index = 0 if index is None else int(index)
                 mod = None
-                for mod in expert_map.get(m.group(1), expert_map.get(m.group(3))):
-                    _insert(_map[f"{mod}.weight"], index, (k, stfile))
+                if not lora_utils:
+                    for mod in expert_map.get(m.group(1), expert_map.get(m.group(3))):
+                        _insert(_map[f"{mod}.weight"], index, (k, stfile))
+                else:
+                    for mod in expert_map.get(m.group(1), expert_map.get(m.group(3))):
+                        _insert(_map[f"{mod}.lora_A"], index, (k, stfile))
+                        _insert(_map[f"{mod}.lora_B"], index, (k, stfile))
 
                 assert mod is not None, f"cannot map '{rel_k}'"
 

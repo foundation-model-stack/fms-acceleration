@@ -469,20 +469,28 @@ def recover_original_state_dict_from_checkpoint(
 
             if lora:
                 for i, lora_key in enumerate(scatter_keys):
+                    model_key_parts = model_key.split(".")
+                    weight_index = model_key_parts.index("weight")
+                    # Replace the "layer.weight" part with "layer.lora_A.weight" or
+                    # "layer.lora_B.weight"
+                    if "lora_A" in lora_key:
+                        model_key_parts[weight_index] = "lora_A.weight"
+                    elif "lora_B" in lora_key:
+                        model_key_parts[weight_index] = "lora_B.weight"
+                    # Rebuild the model_key and assign the corresponding scatter_param
+                    new_model_key = ".".join(model_key_parts)
                     if len(scatter_keys) == 2:
-                        model_key_parts = model_key.split(".")
-                        layer_index = model_key_parts.index("layer")
-
-                        # Replace the "layer.weight" part with "layer.lora_A.weight" or
-                        # "layer.lora_B.weight"
-                        if "lora_A" in lora_key:
-                            model_key_parts[layer_index + 1] = "lora_A.weight"
-                        elif "lora_B" in lora_key:
-                            model_key_parts[layer_index + 1] = "lora_B.weight"
-
-                        # Rebuild the model_key and assign the corresponding scatter_param
-                        new_model_key = ".".join(model_key_parts)
                         sd[new_model_key] = scatter_params[lora_key]
+                    else:
+                        if "lora_A" in new_model_key:
+                            filtered_keys = [k for k in scatter_keys if "lora_A" in k]
+                        elif "lora_B" in new_model_key:
+                            filtered_keys = [k for k in scatter_keys if "lora_B" in k]
+                        else:
+                            raise ValueError(f"Unexpected LoRA key type in {new_model_key}")
+                        sd[new_model_key] = torch.cat(
+                            [scatter_params[k] for k in filtered_keys], dim=1
+                        )
 
             elif len(scatter_keys) == 1:
                 sd[model_key] = scatter_params[scatter_keys[0]]

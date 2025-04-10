@@ -237,10 +237,13 @@ class ScatterMoE(torch.nn.Module):
             assert (
                 lora_config.bias == "none"
             ), "ScatterMoE currently unable to handle bias in the lora adapters"
-            assert (
-                lora_config.target_modules == INCLUDE_LINEAR_LAYERS_SHORTHAND
-                or INCLUDE_LINEAR_LAYERS_SHORTHAND in lora_config.target_modules
-            ), "ScatterMoe currently only handles lora adapters on all linears."
+
+            required_modules = ["router", "layer", "all-linear"]
+            if "input_linear" in lora_config.target_modules or "output_linear" in lora_config.target_modules:
+                # Assert that the target modules also include at least one from required_modules
+                assert (
+                    any(module in lora_config.target_modules for module in required_modules)
+                ), f"If 'input_linear' or 'output_linear' is included as a target module, 'router' must also be included"
 
             assert lora_config.init_lora_weights in {
                 True,
@@ -278,9 +281,7 @@ class ScatterMoE(torch.nn.Module):
         # - w1: the up_projection.
         # - w2: the down_projection.
         # - w3 (optional): the gate projection.
-        # TODO: Custom non-linear layers not supported in vLLM,
-        # must be investigated further before enabling
-        if lora_config is None:
+        if "input_linear" in lora_config.target_modules:
             self.w1 = ScatteredExperts(
                 in_features=self.hidden_size,
                 out_features=self.intermediate_size,
@@ -291,6 +292,7 @@ class ScatterMoE(torch.nn.Module):
                 device=device,
                 lora_config=lora_config,
             )
+        if "output_linear" in lora_config.target_modules:
             self.w2 = ScatteredExperts(
                 in_features=self.intermediate_size,
                 out_features=self.hidden_size,
@@ -301,6 +303,7 @@ class ScatterMoE(torch.nn.Module):
                 device=device,
                 lora_config=lora_config,
             )
+        if "input_linear" in lora_config.target_modules:
             if mlp_arch == SCATTERMOE_SPEC_HAS_GATE:
                 self.w3 = ScatteredExperts(
                     in_features=self.hidden_size,
