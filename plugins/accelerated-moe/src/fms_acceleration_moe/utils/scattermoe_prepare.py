@@ -33,6 +33,8 @@ from .scattermoe_constants import (
     FILE_SAFETENSOR_INDEX,
     KEY_EXPERT_PARALLEL,
     KEY_REPLICATE,
+    KEY_SCATTERMOE_LORA_A_ROUTER,
+    KEY_SCATTERMOE_LORA_B_ROUTER,
     KEY_SCATTERMOE_ROUTER,
     get_scattermoe_conv_spec_from_archs,
 )
@@ -66,7 +68,11 @@ def load_experts_onto_device(
 
     for weight_name, param in state_dict.items():
 
-        if KEY_SCATTERMOE_ROUTER in weight_name:
+        if (
+            KEY_SCATTERMOE_ROUTER in weight_name
+            or KEY_SCATTERMOE_LORA_A_ROUTER in weight_name
+            or KEY_SCATTERMOE_LORA_B_ROUTER in weight_name
+        ):
             # if its the router, replicate
             param = distribute_tensor(param, device_mesh, reps + [Replicate()])
         elif param.shape[0] > num_experts_per_device:
@@ -91,8 +97,13 @@ def load_experts_onto_device(
         )
 
         # install gradient scaling hook
-        if KEY_SCATTERMOE_ROUTER not in weight_name:
-            param.register_hook(_hook)
+        if (
+            KEY_SCATTERMOE_ROUTER not in weight_name
+            and KEY_SCATTERMOE_LORA_A_ROUTER not in weight_name
+            and KEY_SCATTERMOE_LORA_B_ROUTER not in weight_name
+        ):
+            if param.requires_grad:
+                param.register_hook(_hook)
 
         # register the sharded parameter onto the megablocks.dmoe
         mod.register_parameter(name, param)
@@ -229,6 +240,10 @@ def prepare_scattermoe(
 
         weight_map = load_weight_map(loc, "model.safetensors", FILE_SAFETENSOR_INDEX)
 
+        target_modules = None
+        if lora_config and hasattr(lora_config, "target_modules"):
+            target_modules = lora_config.target_modules
+
         # e.g., prefix: 'model.layers.0',
         #       module_name: 'block_sparse_moe'
         for prefix, (module_name, _, has_bias) in tqdm(
@@ -240,6 +255,7 @@ def prepare_scattermoe(
                 module_name,
                 router_name,
                 "|".join(expert_name),
+                target_modules=target_modules,
             )
 
             # the parent module
@@ -329,21 +345,37 @@ def prepare_scattermoe(
                         elif "lora_B" in name:
                             torch.nn.init.normal_(sd[name])
 
-            if device_mesh is None:
-                # - if not on meta, just load the state dict
-                # - and then put on the device
-                if not is_fsdp_enabled() or is_local_dist_rank_0():
-                    moe.load_state_dict(sd)
-                    moe = moe.to(device)
-            else:
-                # - otherwise, we need to distribtue and will
-                #   replace the parameters
-                load_experts_onto_device(moe, sd, device_mesh, num_experts_per_device)
-            # module swap
-            setattr(parent, module_name, moe)
+            possible_target_modules = [
+                "all-linear",
+                "router",
+                "layer",
+                "input_linear",
+                "output_linear",
+            ]
+            if (
+                any(
+                    module in (target_modules or [])
+                    for module in possible_target_modules
+                )
+                or not lora_config
+            ):
+                if device_mesh is None:
+                    # - if not on meta, just load the state dict
+                    # - and then put on the device
+                    if not is_fsdp_enabled() or is_local_dist_rank_0():
+                        moe.load_state_dict(sd)
+                        moe = moe.to(device)
+                else:
+                    # - otherwise, we need to distribtue and will
+                    #   replace the parameters
+                    load_experts_onto_device(
+                        moe, sd, device_mesh, num_experts_per_device
+                    )
+                # module swap
+                setattr(parent, module_name, moe)
 
-            # - keep track of the name for returning
-            moe_module_names.add(module_name)
+                # - keep track of the name for returning
+                moe_module_names.add(module_name)
 
     except ValueError as e:
         raise ValueError(

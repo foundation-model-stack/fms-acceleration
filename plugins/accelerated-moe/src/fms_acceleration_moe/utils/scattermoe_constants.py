@@ -24,7 +24,9 @@ KEY_REPLICATE = "replicate"
 KEY_EXPERT_PARALLEL = "expert_parallel"
 DIM_EXPERT = 0
 
-KEY_SCATTERMOE_ROUTER = PARAM_NAME_ROUTER_SCATTERMOE + ".weight"
+KEY_SCATTERMOE_ROUTER = "router.weight"
+KEY_SCATTERMOE_LORA_A_ROUTER = "router.lora_A.weight"
+KEY_SCATTERMOE_LORA_B_ROUTER = "router.lora_B.weight"
 
 # Currently out ScatterMoE drop supports an up/down proj, and
 # and optional gate_proj.

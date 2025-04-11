@@ -26,6 +26,8 @@ import torch
 # Local
 from .scattermoe_constants import (
     DIM_EXPERT,
+    KEY_SCATTERMOE_LORA_A_ROUTER,
+    KEY_SCATTERMOE_LORA_B_ROUTER,
     KEY_SCATTERMOE_ROUTER,
     PARAM_NAME_WEIGHT_SCATTERMOE,
 )
@@ -86,6 +88,9 @@ def get_checkpoint_meta_from_sharded_safetensor(
     router_name: str = "gate",  # e.g., named "gate" within block_sparse_moe
     expert_name: str = "experts",  # e.g., named "experts" within block_sparse_moe
     expert_map: Dict = None,  # map -> [w1,w2,w3]
+    ip_op_layers: bool = False,  # if input/output layers are detected in utils
+    router_layer: bool = False,  # if router layer is detected in utils
+    target_modules: Dict = None,  # target modules from prepare_scattermoe.py
 ) -> Dict[str, List[Tuple]]:
     """
     utilty function to infer the mapping of ScatterMoe parameters
@@ -106,6 +111,14 @@ def get_checkpoint_meta_from_sharded_safetensor(
                 e.g., input_linear|output_linear|input_linear
         expert_map (dict): This is used with pattern ii) described above in expert_name.
             If not specified, will be the identity map, e.g., w1 -> w1
+        ip_op_layers (bool): Boolean to determine if input/output layers are detected
+            in checkpoint utils.
+        router_layer (bool): Boolean to determine if router layer is detected
+            in checkpoint utils.
+        target_modules (dict): Target modules from scattermoe_prepare.py lora_config.
+            Used to check for input and output layers while preparing scattermoe.
+
+    Returns: Map of used ScatterMoE weights to their files
     """
 
     # insert in order
@@ -147,6 +160,9 @@ def get_checkpoint_meta_from_sharded_safetensor(
     # `w1.weight`: [...]
     _map = defaultdict(list)
     prefix = f"{prefix}.{instance_name}."
+
+    target_modules = target_modules or {}
+
     for k, stfile in weight_map.items():
         if not k.startswith(prefix):
             continue
@@ -163,15 +179,33 @@ def get_checkpoint_meta_from_sharded_safetensor(
                 f"'{router_name}' or expert_name '{expert_name}'"
             )
         if m.group(1) == router_name:
-            _map[KEY_SCATTERMOE_ROUTER].append((k, stfile))
+            if router_layer:
+                _map[KEY_SCATTERMOE_LORA_A_ROUTER].append((k, stfile))
+                _map[KEY_SCATTERMOE_LORA_B_ROUTER].append((k, stfile))
+            else:
+                _map[KEY_SCATTERMOE_ROUTER].append((k, stfile))
         elif m.group(1) in expert_name:
-            index = m.group(2)
-            index = 0 if index is None else int(index)
-            mod = None
-            for mod in expert_map.get(m.group(1), expert_map.get(m.group(3))):
-                _insert(_map[f"{mod}.weight"], index, (k, stfile))
-
-            assert mod is not None, f"cannot map '{rel_k}'"
+            if (
+                "input_linear" in target_modules and "output_linear" in target_modules
+            ) or ip_op_layers:
+                index = m.group(2)
+                index = 0 if index is None else int(index)
+                mod = None
+                if not ip_op_layers:
+                    for mod in expert_map.get(m.group(1), expert_map.get(m.group(3))):
+                        _insert(_map[f"{mod}.weight"], index, (k, stfile))
+                else:
+                    for mod in expert_map.get(m.group(1), expert_map.get(m.group(3))):
+                        _insert(_map[f"{mod}.lora_A"], index, (k, stfile))
+                        _insert(_map[f"{mod}.lora_B"], index, (k, stfile))
+                assert mod is not None, f"cannot map '{rel_k}'"
+            elif not ip_op_layers and not router_layer and not target_modules:
+                index = m.group(2)
+                index = 0 if index is None else int(index)
+                mod = None
+                for mod in expert_map.get(m.group(1), expert_map.get(m.group(3))):
+                    _insert(_map[f"{mod}.weight"], index, (k, stfile))
+                assert mod is not None, f"cannot map '{rel_k}'"
 
     if len(_map) == 0:
         raise ValueError(
@@ -295,7 +329,11 @@ def get_state_dict_from_checkpoint_metadata(
         # go by one weight at a time.
         for scatter_key, vs in checkpoint_metadata.items():
 
-            if KEY_SCATTERMOE_ROUTER in scatter_key:
+            if (
+                KEY_SCATTERMOE_ROUTER in scatter_key
+                or KEY_SCATTERMOE_LORA_A_ROUTER in scatter_key
+                or KEY_SCATTERMOE_LORA_B_ROUTER in scatter_key
+            ):
                 k, fi = vs[0]  # only one item
                 param = files[fi].get_tensor(k)
 

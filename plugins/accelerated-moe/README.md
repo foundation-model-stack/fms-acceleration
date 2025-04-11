@@ -8,7 +8,7 @@ This library contains plugins to accelerate finetuning with the following optimi
 
 Plugin | Description | Depends | Loading | Augmentation | Callbacks
 --|--|--|--|--|--
-[scattermoe](./src/fms_acceleration_moe/framework_plugin_scattermoe.py) | MoE Expert Parallel with Triton Kernels from scattermoe (& megablocks) | ScatterMoE / extracted kernels from megablocks | ✅ | |  ✅
+[scattermoe](./src/fms_acceleration_moe/framework_plugin_scattermoe.py) | MoE Expert Parallel with Triton Kernels from scattermoe (& megablocks) | ScatterMoE / extracted kernels from megablocks | | ✅ |  ✅
 
 
 ## Adding New Models
@@ -32,6 +32,8 @@ python -m fms_acceleration_moe.utils.checkpoint_utils \
     hf/checkpoint-10 output_dir \
     mistralai/Mixtral-8x7B-Instruct-v0.1
 ```
+
+If running with fms-hf-tuning, this script runs automatically if the `fast_moe` parameter is set.
 
 ## Code Extracted from Megablocks
 
@@ -81,9 +83,8 @@ Triton Kernels are copied into [scattermoe_utils](./src/fms_acceleration_moe/uti
 ### Known Issues
 
 These are currently some known issues not yet resolved:
-- should eventually remove the dependency on an external `kernel-hyperdrive` repository.
-- now support only loading *sharded* `safetensor` non-GGUF MoE checkpoints. This is a reasonable assumption since MoE checkpoints are typically above the size limit that prevents it being saved into a single checkpoint filed.
 - when used together with FSDP, the FSDP's `clip_grad_norm` will not properly compute for `ScatterMoE`, see [issue here](https://github.com/foundation-model-stack/fms-acceleration/issues/109).
+- when used to lora train a model, if training experts on adapter model, the model will fail to run inference in vLLM/vanilla HF because of restrictions to parameter types. If running inference do not select `input_linear` and `output_linear` as target modules when lora training.
 
 
 
