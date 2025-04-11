@@ -343,6 +343,19 @@ def recover_original_state_dict_from_checkpoint(
     # config
     config = PretrainedConfig.from_pretrained(pretrained_model_name_or_path)
 
+    # if lora, check for input/output layers
+    ip_op_layers = False
+    router_layer = False
+    if lora:
+        for name, _ in sd.items():
+            if "w1" in name:
+                ip_op_layers = True
+                break
+        for name, _ in sd.items():
+            if "router" in name:
+                router_layer = True
+                break
+
     (
         _,
         router_name,
@@ -412,7 +425,8 @@ def recover_original_state_dict_from_checkpoint(
             module_name,
             router_name,
             expert_name,
-            lora_utils=lora,
+            ip_op_layers=ip_op_layers,
+            router_layer=router_layer,
         )
 
         model2scatter = defaultdict(dict)
