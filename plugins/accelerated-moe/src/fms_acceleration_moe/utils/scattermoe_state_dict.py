@@ -152,6 +152,8 @@ def get_checkpoint_meta_from_sharded_safetensor(
     _map = defaultdict(list)
     prefix = f"{prefix}.{instance_name}."
 
+    target_modules = target_modules or {}
+
     for k, stfile in weight_map.items():
         if not k.startswith(prefix):
             continue
