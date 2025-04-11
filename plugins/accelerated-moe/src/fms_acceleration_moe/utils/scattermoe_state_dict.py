@@ -111,8 +111,14 @@ def get_checkpoint_meta_from_sharded_safetensor(
                 e.g., input_linear|output_linear|input_linear
         expert_map (dict): This is used with pattern ii) described above in expert_name.
             If not specified, will be the identity map, e.g., w1 -> w1
-        lora_start (bool): Boolean to determine if lora is detected in scattermoe_prepare.py
-        lora_utils (bool):
+        ip_op_layers (bool): Boolean to determine if input/output layers are detected
+            in checkpoint utils.
+        router_layer (bool): Boolean to determine if router layer is detected
+            in checkpoint utils.
+        target_modules (dict): Target modules from scattermoe_prepare.py lora_config.
+            Used to check for input and output layers while preparing scattermoe.
+
+    Returns: Map of used ScatterMoE weights to their files
     """
 
     # insert in order
@@ -192,6 +198,13 @@ def get_checkpoint_meta_from_sharded_safetensor(
                     for mod in expert_map.get(m.group(1), expert_map.get(m.group(3))):
                         _insert(_map[f"{mod}.lora_A"], index, (k, stfile))
                         _insert(_map[f"{mod}.lora_B"], index, (k, stfile))
+                assert mod is not None, f"cannot map '{rel_k}'"
+            elif not ip_op_layers and not router_layer and not target_modules:
+                index = m.group(2)
+                index = 0 if index is None else int(index)
+                mod = None
+                for mod in expert_map.get(m.group(1), expert_map.get(m.group(3))):
+                    _insert(_map[f"{mod}.weight"], index, (k, stfile))
                 assert mod is not None, f"cannot map '{rel_k}'"
 
     if len(_map) == 0:

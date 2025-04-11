@@ -240,6 +240,10 @@ def prepare_scattermoe(
 
         weight_map = load_weight_map(loc, "model.safetensors", FILE_SAFETENSOR_INDEX)
 
+        target_modules = None
+        if lora_config and hasattr(lora_config, "target_modules"):
+            target_modules = lora_config.target_modules
+
         # e.g., prefix: 'model.layers.0',
         #       module_name: 'block_sparse_moe'
         for prefix, (module_name, _, has_bias) in tqdm(
@@ -251,7 +255,7 @@ def prepare_scattermoe(
                 module_name,
                 router_name,
                 "|".join(expert_name),
-                target_modules=lora_config.target_modules,
+                target_modules=target_modules,
             )
 
             # the parent module
@@ -342,15 +346,18 @@ def prepare_scattermoe(
                             torch.nn.init.normal_(sd[name])
 
             possible_target_modules = [
-                "all_linear",
+                "all-linear",
                 "router",
                 "layer",
                 "input_linear",
                 "output_linear",
             ]
-            if any(
-                module in lora_config.target_modules
-                for module in possible_target_modules
+            if (
+                any(
+                    module in (target_modules or [])
+                    for module in possible_target_modules
+                )
+                or not lora_config
             ):
                 if device_mesh is None:
                     # - if not on meta, just load the state dict
