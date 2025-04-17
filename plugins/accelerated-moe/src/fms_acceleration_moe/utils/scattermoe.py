@@ -232,15 +232,24 @@ class ScatterMoE(torch.nn.Module):
             not has_bias
         ), "ScatterMoE currently unable to handle bias in both gates and experts."
 
+        target_modules = None
+
         if lora_config is not None:
             # since this is self implemented, we really only support basic lora funcs
             assert (
                 lora_config.bias == "none"
             ), "ScatterMoE currently unable to handle bias in the lora adapters"
-            assert (
-                lora_config.target_modules == INCLUDE_LINEAR_LAYERS_SHORTHAND
-                or INCLUDE_LINEAR_LAYERS_SHORTHAND in lora_config.target_modules
-            ), "ScatterMoe currently only handles lora adapters on all linears."
+            
+            if lora_config and hasattr(lora_config, "target_modules"):
+                target_modules = lora_config.target_modules
+
+            required_modules = ["router", "layer", "all-linear"]
+            if "input_linear" in target_modules or "output_linear" in target_modules:
+                # Assert that the target modules also include at least one from required_modules
+                assert any(
+                    module in target_modules for module in required_modules
+                ), "If 'input_linear' or 'output_linear' is included as a target module,\
+                    'router' must also be included"
 
             assert lora_config.init_lora_weights in {
                 True,
@@ -278,28 +287,8 @@ class ScatterMoE(torch.nn.Module):
         # - w1: the up_projection.
         # - w2: the down_projection.
         # - w3 (optional): the gate projection.
-        self.w1 = ScatteredExperts(
-            in_features=self.hidden_size,
-            out_features=self.intermediate_size,
-            num_experts=self.num_experts,
-            fan_out=self.top_k if not self.all_to_all else 1,
-            grouped_out=True,
-            dtype=dtype,
-            device=device,
-            lora_config=lora_config,
-        )
-        self.w2 = ScatteredExperts(
-            in_features=self.intermediate_size,
-            out_features=self.hidden_size,
-            num_experts=self.num_experts,
-            fan_out=1,
-            grouped_in=True,
-            dtype=dtype,
-            device=device,
-            lora_config=lora_config,
-        )
-        if mlp_arch == SCATTERMOE_SPEC_HAS_GATE:
-            self.w3 = ScatteredExperts(
+        if not lora_config or ("input_linear" in target_modules):
+            self.w1 = ScatteredExperts(
                 in_features=self.hidden_size,
                 out_features=self.intermediate_size,
                 num_experts=self.num_experts,
@@ -309,6 +298,29 @@ class ScatterMoE(torch.nn.Module):
                 device=device,
                 lora_config=lora_config,
             )
+        if not lora_config or ("output_linear" in target_modules):
+            self.w2 = ScatteredExperts(
+                in_features=self.intermediate_size,
+                out_features=self.hidden_size,
+                num_experts=self.num_experts,
+                fan_out=1,
+                grouped_in=True,
+                dtype=dtype,
+                device=device,
+                lora_config=lora_config,
+            )
+        if not lora_config or ("input_linear" in target_modules):
+            if mlp_arch == SCATTERMOE_SPEC_HAS_GATE:
+                self.w3 = ScatteredExperts(
+                    in_features=self.hidden_size,
+                    out_features=self.intermediate_size,
+                    num_experts=self.num_experts,
+                    fan_out=self.top_k if not self.all_to_all else 1,
+                    grouped_out=True,
+                    dtype=dtype,
+                    device=device,
+                    lora_config=lora_config,
+                )
 
     # referenced from dolomite-engine
     def _compute_routing_weights(self, hidden_states: torch.Tensor):
@@ -457,36 +469,39 @@ class ScatterMoE(torch.nn.Module):
             )
 
         # compute the up projection
-        out = self.w1(
-            hidden_states,
-            sorted_expert_idxs,
-            sorted_scattered_idxs,
-            padded_block_idxs,
-            expert_offsets,
-        )
-        out = self.activation(out)
-
-        # - if the arch has a seperate gate projection
-        if self.w3:
-            out *= self.w3(
+        if hasattr(self, "w1"):
+            out = self.w1(
                 hidden_states,
                 sorted_expert_idxs,
                 sorted_scattered_idxs,
                 padded_block_idxs,
                 expert_offsets,
             )
+            out = self.activation(out)
+
+        # - if the arch has a seperate gate projection
+        if hasattr(self, "w3"):
+            if self.w3:
+                out *= self.w3(
+                    hidden_states,
+                    sorted_expert_idxs,
+                    sorted_scattered_idxs,
+                    padded_block_idxs,
+                    expert_offsets,
+                )
 
         # compute the down projection
         # - if no all-to-all processing, then depend on
         # scattermoe kernel to perform the final scattering
-        hidden_states = self.w2(
-            out,
-            sorted_expert_idxs,
-            sorted_scattered_idxs,
-            padded_block_idxs,
-            expert_offsets,
-            gates=(None if self.all_to_all else routing_weights),
-        )
+        if hasattr(self, "w2"):
+            hidden_states = self.w2(
+                out,
+                sorted_expert_idxs,
+                sorted_scattered_idxs,
+                padded_block_idxs,
+                expert_offsets,
+                gates=(None if self.all_to_all else routing_weights),
+            )
 
         # maybe scatter
         hidden_states = self._maybe_scatter(

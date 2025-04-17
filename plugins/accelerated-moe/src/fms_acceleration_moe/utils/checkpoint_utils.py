@@ -540,6 +540,19 @@ def recover_safetensors_from_dcp(
     # get the state_dict
     state_dict = loader(checkpoint_dir)
 
+    new_state_dict = {}
+    for name, param in state_dict.items():
+        if "base_model.model." in name:
+            name = name.replace("base_model.model.", "", 1)
+        if "default." in name:
+            name = name.replace("default.", "", 1)
+        new_state_dict[name] = param
+
+    # recover the original state dict
+    state_dict = recover_original_state_dict_from_checkpoint(
+        new_state_dict, _name_or_path
+    )
+
     # recover the original state dict
     state_dict = recover_original_state_dict_from_checkpoint(state_dict, _name_or_path)
 
