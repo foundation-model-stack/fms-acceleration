@@ -231,8 +231,6 @@ class ScatterMoE(torch.nn.Module):
             not has_bias
         ), "ScatterMoE currently unable to handle bias in both gates and experts."
 
-        target_modules = None
-
         if lora_config is not None:
             # since this is self implemented, we really only support basic lora funcs
             assert (
