@@ -53,6 +53,8 @@ MODEL_INDEX = None
 KEY_MODEL = "model"
 KEY_OPTIMIZER = "optimizer"
 
+ADAPTER_SAFE_WEIGHTS_NAME = "adapter_model.safetensors"
+
 # Below are rewrite of HF FSDP model saving functions to be able to handle
 # that the parameters are now a mixture of regular and Dtensors.
 # - these functions are found in accelerate.utils.fsdp_utils.py
@@ -481,30 +483,54 @@ def save_sharded_safetensors(
     save_directory: str,
     metadata: Dict,
     max_shard_size: Union[int, str] = "5GB",
+    lora: bool = False,
 ):
-    filename_pattern = SAFE_WEIGHTS_NAME.replace(".bin", "{suffix}.bin").replace(
-        ".safetensors", "{suffix}.safetensors"
-    )
-    state_dict_split = split_torch_state_dict_into_shards(
-        input_state_dict,
-        filename_pattern=filename_pattern,
-        max_shard_size=max_shard_size,
-    )
-    index = {
-        "metadata": state_dict_split.metadata,
-        "weight_map": state_dict_split.tensor_to_filename,
-    }
-    # Save the index
-    with open(
-        os.path.join(save_directory, SAFE_WEIGHTS_INDEX_NAME), "w", encoding="utf-8"
-    ) as f:
-        content = json.dumps(index, indent=2, sort_keys=True) + "\n"
-        f.write(content)
+    if not lora:
+        filename_pattern = SAFE_WEIGHTS_NAME.replace(".bin", "{suffix}.bin").replace(
+            ".safetensors", "{suffix}.safetensors"
+        )
+        state_dict_split = split_torch_state_dict_into_shards(
+            input_state_dict,
+            filename_pattern=filename_pattern,
+            max_shard_size=max_shard_size,
+        )
 
-    filename_to_tensors = state_dict_split.filename_to_tensors.items()
-    for shard_file, tensors in filename_to_tensors:
-        shard = {tensor: input_state_dict[tensor].contiguous() for tensor in tensors}
-        save_file(shard, os.path.join(save_directory, shard_file), metadata=metadata)
+        index = {
+            "metadata": state_dict_split.metadata,
+            "weight_map": state_dict_split.tensor_to_filename,
+        }
+        # Save the index
+        with open(
+            os.path.join(save_directory, SAFE_WEIGHTS_INDEX_NAME), "w", encoding="utf-8"
+        ) as f:
+            content = json.dumps(index, indent=2, sort_keys=True) + "\n"
+            f.write(content)
+
+        filename_to_tensors = state_dict_split.filename_to_tensors.items()
+        for shard_file, tensors in filename_to_tensors:
+            shard = {
+                tensor: input_state_dict[tensor].contiguous() for tensor in tensors
+            }
+            save_file(
+                shard, os.path.join(save_directory, shard_file), metadata=metadata
+            )
+    else:
+        filename_pattern = ADAPTER_SAFE_WEIGHTS_NAME.replace(
+            ".bin", "{suffix}.bin"
+        ).replace(".safetensors", "{suffix}.safetensors")
+        state_dict_split = split_torch_state_dict_into_shards(
+            input_state_dict,
+            filename_pattern=filename_pattern,
+            max_shard_size=max_shard_size,
+        )
+        filename_to_tensors = state_dict_split.filename_to_tensors.items()
+        for shard_file, tensors in filename_to_tensors:
+            shard = {
+                tensor: input_state_dict[tensor].contiguous() for tensor in tensors
+            }
+            save_file(
+                shard, os.path.join(save_directory, shard_file), metadata=metadata
+            )
 
 
 # --------------------------- SCRIPT -------------------------
@@ -555,17 +581,15 @@ def recover_safetensors_from_dcp(
     state_dict = loader(checkpoint_dir)
 
     new_state_dict = {}
+    lora = False
     for name, param in state_dict.items():
+        if "lora_A" in name or "lora_B" in name:
+            lora = True
         if "base_model.model." in name:
             name = name.replace("base_model.model.", "", 1)
         if "default." in name:
             name = name.replace("default.", "", 1)
         new_state_dict[name] = param
-
-    # recover the original state dict
-    state_dict = recover_original_state_dict_from_checkpoint(
-        new_state_dict, _name_or_path
-    )
 
     # recover the original state dict
     state_dict = recover_original_state_dict_from_checkpoint(state_dict, _name_or_path)
@@ -575,6 +599,7 @@ def recover_safetensors_from_dcp(
         {k: v.contiguous() for k, v in state_dict.items()},
         output_dir,
         metadata={"format": "pt"},
+        lora=lora,
     )
 
 
