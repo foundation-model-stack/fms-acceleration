@@ -17,7 +17,6 @@ from typing import Tuple
 
 # Third Party
 from peft import LoraConfig
-from peft.utils import INCLUDE_LINEAR_LAYERS_SHORTHAND
 from torch.distributed._tensor import DTensor
 
 # pylint: disable=import-error
@@ -239,7 +238,7 @@ class ScatterMoE(torch.nn.Module):
             assert (
                 lora_config.bias == "none"
             ), "ScatterMoE currently unable to handle bias in the lora adapters"
-            
+
             if lora_config and hasattr(lora_config, "target_modules"):
                 target_modules = lora_config.target_modules
 
