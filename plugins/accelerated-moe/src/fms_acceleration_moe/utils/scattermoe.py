@@ -284,7 +284,7 @@ class ScatterMoE(torch.nn.Module):
                 device=device,
                 lora_config=lora_config,
             )
-        if not lora_config
+        if not lora_config:
             self.w2 = ScatteredExperts(
                 in_features=self.intermediate_size,
                 out_features=self.hidden_size,

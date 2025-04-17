@@ -592,7 +592,9 @@ def recover_safetensors_from_dcp(
         new_state_dict[name] = param
 
     # recover the original state dict
-    state_dict = recover_original_state_dict_from_checkpoint(new_state_dict, _name_or_path)
+    state_dict = recover_original_state_dict_from_checkpoint(
+        new_state_dict, _name_or_path
+    )
 
     # save it as a safetensors file
     save_sharded_safetensors(
