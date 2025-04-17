@@ -239,17 +239,6 @@ class ScatterMoE(torch.nn.Module):
                 lora_config.bias == "none"
             ), "ScatterMoE currently unable to handle bias in the lora adapters"
 
-            if lora_config and hasattr(lora_config, "target_modules"):
-                target_modules = lora_config.target_modules
-
-            required_modules = ["router", "layer", "all-linear"]
-            if "input_linear" in target_modules or "output_linear" in target_modules:
-                # Assert that the target modules also include at least one from required_modules
-                assert any(
-                    module in target_modules for module in required_modules
-                ), "If 'input_linear' or 'output_linear' is included as a target module,\
-                    'router' must also be included"
-
             assert lora_config.init_lora_weights in {
                 True,
                 "gaussian",
@@ -286,7 +275,7 @@ class ScatterMoE(torch.nn.Module):
         # - w1: the up_projection.
         # - w2: the down_projection.
         # - w3 (optional): the gate projection.
-        if not lora_config or ("input_linear" in target_modules):
+        if not lora_config:
             self.w1 = ScatteredExperts(
                 in_features=self.hidden_size,
                 out_features=self.intermediate_size,
@@ -297,7 +286,7 @@ class ScatterMoE(torch.nn.Module):
                 device=device,
                 lora_config=lora_config,
             )
-        if not lora_config or ("output_linear" in target_modules):
+        if not lora_config
             self.w2 = ScatteredExperts(
                 in_features=self.intermediate_size,
                 out_features=self.hidden_size,
@@ -308,7 +297,7 @@ class ScatterMoE(torch.nn.Module):
                 device=device,
                 lora_config=lora_config,
             )
-        if not lora_config or ("input_linear" in target_modules):
+        if not lora_config:
             if mlp_arch == SCATTERMOE_SPEC_HAS_GATE:
                 self.w3 = ScatteredExperts(
                     in_features=self.hidden_size,
