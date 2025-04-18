@@ -301,6 +301,9 @@ class ScatterMoE(torch.nn.Module):
                 dtype=dtype,
                 device=device,
             )
+
+        # Temporary fix: in future will want to require grad when lora tuning
+        # on self.wx.weight.lora_A/lora_B
         if lora_config:
             self.w1.weight.requires_grad = False
             self.w2.weight.requires_grad = False
