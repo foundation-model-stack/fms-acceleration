@@ -302,9 +302,9 @@ class ScatterMoE(torch.nn.Module):
                 device=device,
             )
         if lora_config:
-            self.w1.requires_grad = False
-            self.w2.requires_grad = False
-            self.w3.requires_grad = False
+            self.w1.weight.requires_grad = False
+            self.w2.weight.requires_grad = False
+            self.w3.weight.requires_grad = False
 
     # referenced from dolomite-engine
     def _compute_routing_weights(self, hidden_states: torch.Tensor):
