@@ -580,11 +580,15 @@ def recover_safetensors_from_dcp(
     # get the state_dict
     state_dict = loader(checkpoint_dir)
 
+    # filter out additional names created by lora tuning
+    # create switch based on state dict for future use
     new_state_dict = {}
     lora = False
     for name, param in state_dict.items():
+        # if lora weight, set lora switch to true
         if "lora_A" in name or "lora_B" in name:
             lora = True
+        # if lora naming convention, convert to traditional
         if "base_model.model." in name:
             name = name.replace("base_model.model.", "", 1)
         if "default." in name:
