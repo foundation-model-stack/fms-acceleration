@@ -116,7 +116,8 @@ def save_fsdp_optimizer(
     # TODO: Once expert layers are supported for LoRA tuning
     # remove the "router" filtering
     lora_state_dict = {
-        k: v for k, v in model_state_dict.items()
+        k: v
+        for k, v in model_state_dict.items()
         if ("lora_A" in k or "lora_B" in k) and "router" not in k
     }
 
