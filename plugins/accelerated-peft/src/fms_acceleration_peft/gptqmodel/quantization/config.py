@@ -15,7 +15,7 @@
 ###############################################################################
 # Standard
 from dataclasses import dataclass, field, fields
-from os.path import isdir, join
+from os.path import isdir, join, exists
 from typing import Any, Dict, Optional, Tuple
 import json
 import logging
@@ -265,6 +265,7 @@ class QuantizeConfig:
         format = kwargs.pop("format", None)
 
         transformers_config = False
+        resolved = False
         for quantize_config_filename in QUANT_CONFIG_FILENAME_COMPAT:
             if isdir(save_dir):  # Local
                 resolved_config_file = join(save_dir, quantize_config_filename)
@@ -284,12 +285,16 @@ class QuantizeConfig:
                     _raise_exceptions_for_connection_errors=False,
                     _commit_hash=commit_hash,
                 )
-            if resolved_config_file is not None:
+            if not exists(resolved_config_file):
+                logging.warning(f'{resolved_config_file} is not available or present')
+                continue
+            else:
+                resolved=True
                 if quantize_config_filename == "config.json":
                     transformers_config = True
                 break
 
-        if resolved_config_file is None:
+        if not resolved:
             raise ValueError(
                 "No quantize_config.json, quant_config.json or config.json file was found in the model repository."
             )
