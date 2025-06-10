@@ -30,7 +30,7 @@ from peft import PeftConfig, PeftModel, PeftType, get_peft_model
 from peft.mapping import PEFT_TYPE_TO_CONFIG_MAPPING
 from peft.peft_model import PEFT_TYPE_TO_MODEL_MAPPING
 from peft.tuners.lora import LoraConfig, LoraModel
-from peft.tuners.lora.gptq import QuantLinear as LoraLinearGPTQ
+from peft.tuners.lora.gptq import GPTQLoraLinear
 import torch
 
 # Local
@@ -68,7 +68,7 @@ class GPTQLoraModel(LoraModel):
         # to be installed
         new_module = None
         if isinstance(target, target_cls):
-            new_module = LoraLinearGPTQ(
+            new_module = GPTQLoraLinear(
                 target, adapter_name, lora_config=lora_config, **kwargs
             )
 
