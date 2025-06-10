@@ -23,7 +23,7 @@ classifiers=[
     "Programming Language :: Python :: 3.11",
 ]
 dependencies = [
-"peft>=0.15",
+  "peft>=0.15",
 ]
 
 [tool.hatch.build.targets.wheel]
