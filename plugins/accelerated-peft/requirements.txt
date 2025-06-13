@@ -5,9 +5,9 @@
 accelerate >= 0.29
 
 # bitsandbytes for the BNB plugin
-# exact version is needed 0.45.1 for torch upgrade to 2.6
+# versions above 0.45.1 to support torch 2.6
 
-bitsandbytes == 0.45.1
+bitsandbytes >= 0.45.1
 
 # Used to manage the thread limit in functions for converting old 
 # GPTQ models to new GPTQ model format that support symmetrical=False

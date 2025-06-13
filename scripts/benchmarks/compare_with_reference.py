@@ -10,16 +10,15 @@ import pandas as pd
 
 # default columns to compare
 DEFAULT_PLOT_COLUMNS = [
-    # "mem_torch_mem_alloc_in_bytes",
-    # "mem_peak_torch_mem_alloc_in_bytes",
-    'mem_nvidia_mem_reserved',
+    "mem_torch_mem_alloc_in_bytes",
+    "mem_peak_torch_mem_alloc_in_bytes",
     "train_loss",
     "train_tokens_per_second",
 ]
 # Used as combined identifier of experiment
 DEFAULT_INDICES = [
     "framework_config",
-    # "peft_method",
+    "peft_method",
     "model_name_or_path",
     "num_gpus",
     "per_device_train_batch_size",
@@ -30,7 +29,7 @@ DEFAULT_IGNORED_COLUMNS = [
     "train_runtime",
     "train_steps_per_second",
     "train_samples_per_second",
-    # "mem_nvidia_mem_reserved",
+    "mem_nvidia_mem_reserved",
 ]
 
 DEFAULT_REFERENCE_FILEPATH = "scripts/benchmarks/refs/a100_80gb.csv"

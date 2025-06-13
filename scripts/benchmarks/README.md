@@ -56,6 +56,11 @@ The best way is via `tox` which manages the dependencies, including installing t
     pip install -r setup_requirements.txt
     ```
 
+- install mamba kernels to evaluate mamba based models:
+    ```
+    tox -e run-benches -x testenv:run-benches.setenv+="INSTALL_MAMBA=true" ...
+    ```
+
 - run a *small* representative set of benches:
     ```
     tox -e run-benches
