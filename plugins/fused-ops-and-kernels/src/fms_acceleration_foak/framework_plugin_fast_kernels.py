@@ -45,6 +45,7 @@ def register_foak_model_patch_rules(
         granite,
         granitemoe,
         granitemoeshared,
+        granitemoehybrid,
         llama,
         mistral,
         mixtral,
@@ -56,6 +57,7 @@ def register_foak_model_patch_rules(
         *granite.get_mp_rules(base_type, config),
         *granitemoe.get_mp_rules(base_type),
         *granitemoeshared.get_mp_rules(base_type),
+        *granitemoehybrid.get_mp_rules(base_type),
         *llama.get_mp_rules(base_type, config),
         *mistral.get_mp_rules(base_type, config),
         *mixtral.get_mp_rules(base_type),
@@ -94,6 +96,7 @@ class FastKernelsAccelerationPlugin(AccelerationPlugin):
         "LlamaForCausalLM",
         "MistralForCausalLM",
         "GraniteMoeSharedForCausalLM",
+        "GraniteMoeHybridForCausalLM",
     ]
 
     def __init__(self, configurations: Dict[str, Dict]):

@@ -36,6 +36,7 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
         "GraniteMoeForCausalLM",
         "MixtralForCausalLM",
         "GraniteMoeSharedForCausalLM",
+        "GraniteMoeHybridForCausalLM",
     ]
 
     def __init__(self, configurations: Dict[str, Dict]):

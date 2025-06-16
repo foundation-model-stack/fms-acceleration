@@ -83,6 +83,13 @@ SCATTERMOE_CONVERSION_SPEC = {
         SCATTERMOE_SPEC_HAS_GATE,
         False,
     ),
+    "GraniteMoeHybridForCausalLM": (
+        "GraniteMoeHybridMoE",
+        "router",
+        "input_linear|output_linear|input_linear",
+        SCATTERMOE_SPEC_HAS_GATE,
+        False,
+    ),
 }
 
 
