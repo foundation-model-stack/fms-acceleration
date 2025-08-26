@@ -22,6 +22,7 @@ from .gemma import GemmaGPTQ
 from .gpt_bigcode import GPTBigCodeGPTQ
 from .gpt_neox import GPTNeoXGPTQ
 from .granite import GraniteGPTQ
+from .granitemoe import GraniteMoeGPTQ
 from .llama import LlamaGPTQ
 from .mistral import MistralGPTQ
 from .mixtral import MixtralGPTQ
