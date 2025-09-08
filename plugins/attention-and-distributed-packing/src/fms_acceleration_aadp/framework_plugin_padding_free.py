@@ -20,7 +20,9 @@ import warnings
 from fms_acceleration import AccelerationPlugin
 from peft import LoraConfig
 from transformers import DataCollatorForSeq2Seq, TrainingArguments
-from trl import DataCollatorForCompletionOnlyLM  # pylint: disable=import-error
+from trl import (  # pylint: disable=import-error, no-name-in-module
+    DataCollatorForCompletionOnlyLM,
+)
 import torch
 
 
