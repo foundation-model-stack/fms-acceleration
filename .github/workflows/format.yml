@@ -31,6 +31,7 @@ jobs:
           - "fused-ops-and-kernels"
           - "attention-and-distributed-packing"
           - "accelerated-moe"
+          - "online-data-mixing"
 
     steps:
       - uses: actions/checkout@v4

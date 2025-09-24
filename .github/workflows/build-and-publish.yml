@@ -16,6 +16,7 @@ jobs:
           - "fused-ops-and-kernels"
           - "attention-and-distributed-packing"
           - "accelerated-moe"
+          - "online-data-mixing"
 
     permissions:
       id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
