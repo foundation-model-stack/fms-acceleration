@@ -8,8 +8,8 @@ jobs:
     strategy:
       matrix:
         python-version:
-          - setup: "3.10"
-            tox: "py310"
+          - setup: "3.11"
+            tox: "py311"
         plugin_name:
           - "framework"
           - "accelerated-peft"

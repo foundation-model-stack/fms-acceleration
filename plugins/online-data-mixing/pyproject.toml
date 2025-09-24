@@ -24,6 +24,8 @@ classifiers=[
     "Programming Language :: Python :: 3.11",
 ]
 
+dependencies = ["datasets"]
+
 [tool.hatch.build.targets.wheel]
 only-include = ["src/fms_acceleration_odm"]
 
