@@ -91,7 +91,7 @@ for step, batch in enumerate(
     accelerator.backward(loss)
     optimizer.step()
     optimizer.zero_grad()
-    if step % 1 == 0:
+    if step % 1 == 0 and accelerator.is_main_process():
         print(f"Step {step} | Loss: {loss.item():.4f}")
         state.log_history.append(
             {"loss": loss.item() if not torch.isnan(loss) else 1e100}
