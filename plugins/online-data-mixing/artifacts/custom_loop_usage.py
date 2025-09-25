@@ -1,9 +1,16 @@
-from datasets import load_dataset, concatenate_datasets
-from transformers import AutoTokenizer, AutoModelForCausalLM, DataCollatorForLanguageModeling
-from torch.utils.data import DataLoader
+# Third Party
 from accelerate import Accelerator, DataLoaderConfiguration
-import torch
+from datasets import concatenate_datasets, load_dataset
+from torch.utils.data import DataLoader
 from tqdm import tqdm
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    DataCollatorForLanguageModeling,
+)
+import torch
+
+# First Party
 from fms_acceleration_odm import OnlineMixingDataset
 
 model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
@@ -17,18 +24,26 @@ model = AutoModelForCausalLM.from_pretrained(model_name)
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 tokenizer.pad_token = tokenizer.eos_token
 
+
 # dataset related
 def tokenize_fn(examples):
-    return tokenizer(examples["text"], truncation=True, padding="max_length", max_length=128)
+    return tokenizer(
+        examples["text"], truncation=True, padding="max_length", max_length=128
+    )
+
 
 dataset_dict = {
     "bookcorpus": load_dataset("rojagtap/bookcorpus", split="train[:1%]"),
-    "wikitext": load_dataset("wikitext", "wikitext-2-raw-v1", split="train[:1%]")
+    "wikitext": load_dataset("wikitext", "wikitext-2-raw-v1", split="train[:1%]"),
 }
 
 # tokenization
-dataset_dict["bookcorpus"] = dataset_dict["bookcorpus"].map(tokenize_fn, batched=True, remove_columns=dataset_dict["bookcorpus"].column_names)
-dataset_dict["wikitext"] = dataset_dict["wikitext"].map(tokenize_fn, batched=True, remove_columns=dataset_dict["wikitext"].column_names)
+dataset_dict["bookcorpus"] = dataset_dict["bookcorpus"].map(
+    tokenize_fn, batched=True, remove_columns=dataset_dict["bookcorpus"].column_names
+)
+dataset_dict["wikitext"] = dataset_dict["wikitext"].map(
+    tokenize_fn, batched=True, remove_columns=dataset_dict["wikitext"].column_names
+)
 
 collator_dict = {
     "bookcorpus": DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False),
@@ -36,14 +51,16 @@ collator_dict = {
 }
 
 # odm related
-update_interval=1 # every step
-dataset = OnlineMixingDataset(dataset_dict=dataset_dict, 
-                              collators_dict=collator_dict, 
-                              eval_dataset_dict=None, 
-                              eval_collators_dict=None, 
-                              output_dir=output_dir, 
-                              reward_type="train_loss", 
-                              sampling_interval=1)
+update_interval = 1  # every step
+dataset = OnlineMixingDataset(
+    dataset_dict=dataset_dict,
+    collators_dict=collator_dict,
+    eval_dataset_dict=None,
+    eval_collators_dict=None,
+    output_dir=output_dir,
+    reward_type="train_loss",
+    sampling_interval=1,
+)
 dataloader = DataLoader(dataset, batch_size=2, shuffle=False, collate_fn=None)
 
 # distributed setup
@@ -57,7 +74,9 @@ optimizer = torch.optim.AdamW(model.parameters(), lr=5e-5)
 model.train()
 
 # custom training loop
-for step, batch in enumerate(tqdm(dataloader, disable=not accelerator.is_local_main_process)):
+for step, batch in enumerate(
+    tqdm(dataloader, disable=not accelerator.is_local_main_process)
+):
     outputs = model(**batch)
     loss = outputs.loss
     accelerator.backward(loss)
