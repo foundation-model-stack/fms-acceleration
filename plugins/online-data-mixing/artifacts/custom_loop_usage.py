@@ -37,23 +37,45 @@ def tokenize_fn(examples):
         examples["text"], truncation=True, padding="max_length", max_length=128
     )
 
+from datasets import load_dataset
+from transformers import AutoTokenizer, DataCollatorForLanguageModeling
 
 dataset_dict = {
-    "bookcorpus": load_dataset("rojagtap/bookcorpus", split="train[:1%]"),
-    "wikitext": load_dataset("wikitext", "wikitext-2-raw-v1", split="train[:1%]"),
+    "alpaca": load_dataset("tatsu-lab/alpaca", split="train[:1%]"),
+    "oasst": load_dataset("timdettmers/openassistant-guanaco", split="train[:1%]"),
 }
 
-# tokenization
-dataset_dict["bookcorpus"] = dataset_dict["bookcorpus"].map(
-    tokenize_fn, batched=True, remove_columns=dataset_dict["bookcorpus"].column_names
-)
-dataset_dict["wikitext"] = dataset_dict["wikitext"].map(
-    tokenize_fn, batched=True, remove_columns=dataset_dict["wikitext"].column_names
-)
+def format_example(example):
+    if "instruction" in example:
+        prompt = f"Instruction: {example['instruction']}\nInput: {example.get('input','')}\nOutput: {example['output']}"
+    elif "text" in example:
+        prompt = example["text"]
+    else:
+        raise ValueError("Dataset schema not supported")
+    return {"text": prompt}
+
+for name in dataset_dict:
+    dataset_dict[name] = dataset_dict[name].map(format_example)
+
+
+def tokenize_fn(examples):
+    return tokenizer(
+        examples["text"],
+        truncation=True,
+        padding="max_length",
+        max_length=512,
+    )
+
+for name in dataset_dict:
+    dataset_dict[name] = dataset_dict[name].map(
+        tokenize_fn,
+        batched=True,
+        remove_columns=dataset_dict[name].column_names,
+    )
 
 collator_dict = {
-    "bookcorpus": DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False),
-    "wikitext": DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False),
+    name: DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+    for name in dataset_dict
 }
 
 # odm related
