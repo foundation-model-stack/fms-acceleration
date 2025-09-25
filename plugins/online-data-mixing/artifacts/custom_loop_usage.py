@@ -17,7 +17,7 @@ import torch
 # First Party
 from fms_acceleration_odm import OnlineMixingDataset
 
-model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+model_name = "ibm-granite/granite-3.1-2b-instruct"
 output_dir = "./odm_custom_use"
 max_steps = 200
 batch_size = 12
