@@ -57,7 +57,7 @@ collator_dict = {
 }
 
 # odm related
-update_interval = 1  # every step
+update_interval = 1000  # every step
 dataset = OnlineMixingDataset(
     dataset_dict=dataset_dict,
     collators_dict=collator_dict,
