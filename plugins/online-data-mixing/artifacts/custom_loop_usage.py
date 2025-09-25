@@ -107,7 +107,10 @@ for step, batch in enumerate(
                 f.write(json.dumps({"loss": loss.item(), "step": step_idx}) + "\n")
         state.log_history.append({"loss": loss.item(), "step": step_idx})
     if step_idx % update_interval == 0:
-        dataloader.dataset.update_sampling_weights(model, accelerator, state)
+        with torch.no_grad():
+            model.eval()
+            dataloader.dataset.update_sampling_weights(model, accelerator, state)
+            model.train()
     if step_idx > max_steps:
         break
 
