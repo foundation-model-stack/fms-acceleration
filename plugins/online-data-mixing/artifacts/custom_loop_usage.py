@@ -74,7 +74,10 @@ optimizer = torch.optim.AdamW(model.parameters(), lr=5e-5)
 model.train()
 
 step_idx = 0
-state = {"log_history": []}
+class State:
+    log_history: list = []
+    
+state = State()
 # custom training loop
 for step, batch in enumerate(
     tqdm(dataloader, disable=not accelerator.is_local_main_process)
@@ -87,7 +90,7 @@ for step, batch in enumerate(
     optimizer.zero_grad()
     if step % 1 == 0:
         print(f"Step {step} | Loss: {loss.item():.4f}")
-        state["log_history"].append({"loss": loss.item()})
+        state.log_history.append({"loss": loss.item()})
     if step_idx % update_interval == 0:
         dataloader.dataset.update_sampling_weights(model, accelerator, state)
     max_steps -= 1
