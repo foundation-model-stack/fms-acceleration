@@ -349,13 +349,13 @@ class OnlineMixingDataset(IterableDataset):
             if accelerator:
                 eval_dataset_dict[self.id2cat[c]] = (
                     accelerator.prepare(self.eval_dataset_dict_dl[self.id2cat[c]])
-                    if self.eval_dataset_dict_dl[self.id2cat[c]]
+                    if self.eval_dataset_dict_dl.get(self.id2cat[c], None)
                     else None
                 )
             else:
-                eval_dataset_dict[self.id2cat[c]] = self.eval_dataset_dict_dl[
-                    self.id2cat[c]
-                ]
+                eval_dataset_dict[self.id2cat[c]] = self.eval_dataset_dict_dl.get(
+                    self.id2cat[c], None
+                )
         for c in tqdm(
             range(self.total_categories), total=self.total_categories, desc="Categories"
         ):  # for trian loss you dont need to iterate over eval dataset.
