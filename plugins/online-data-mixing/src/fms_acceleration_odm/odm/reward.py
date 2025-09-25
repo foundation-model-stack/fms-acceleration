@@ -19,6 +19,12 @@ class Reward(StrEnum):
     GRADNORM = auto()
 
 
+# TODO:
+# 1. class implementation to store individual reward states
+# 2. sub arguments for rewards for user to pass
+# 3. use reward state and expected inputs to control
+# flow of information (iteration over eval batch vs not doing so)
+
 TRAIN_LOSS_DATA = {"buffer": []}
 
 EVAL_LOSS_DATA = {"buffer": []}

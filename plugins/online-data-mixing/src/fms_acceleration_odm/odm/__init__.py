@@ -14,5 +14,5 @@
 
 
 # Local
-from .dataloader import OnlineData
+from .dataset import OnlineMixingDataset
 from .reward import Reward, compute_reward

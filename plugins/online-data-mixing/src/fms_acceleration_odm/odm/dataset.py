@@ -19,7 +19,7 @@ logger = getLogger(__name__)
 
 
 # pylint: disable=too-many-instance-attributes
-class OnlineData(IterableDataset):
+class OnlineMixingDataset(IterableDataset):
     def __init__(
         self,
         dataset_dict: DatasetDict,
@@ -62,7 +62,7 @@ class OnlineData(IterableDataset):
             be found in compute_reward function. Defaults to Reward.ENTROPY.
         """
         logger.info(
-            """Values set to OnlineData
+            """Values set to OnlineMixingDataset
                     dataset_dict:       {dataset_dict}
                     collators_dict:     {collators_dict}
                     eval_dataset_dict:  {eval_dataset_dict}
@@ -110,7 +110,6 @@ class OnlineData(IterableDataset):
             self.train_dataset_dict_dl[k] = iter(dataset_dict[k])
         self.eval_batch_size = eval_batch_size
         self.dataset_dict = dataset_dict
-        self.eval_dataset_dict = eval_dataset_dict
         self.category_list = sorted(self.train_dataset_dict_dl.keys())
         self.id2cat = dict(enumerate(self.category_list))
         self.cat2id = {c: i for i, c in enumerate(self.category_list)}
@@ -240,18 +239,22 @@ class OnlineData(IterableDataset):
         for k, _ in self.eval_dataset_dict.items():
             # this can be improved with persistent workers and caching
             # dataloaders and resetting them when needed.
-            self.eval_dataset_dict_dl[k] = iter(
-                DataLoader(
-                    self.eval_dataset_dict[k],
-                    self.eval_batch_size,
-                    shuffle=False,
-                    num_workers=1,
-                    collate_fn=(
-                        self.eval_collators_dict[k]
-                        if self.eval_collators_dict
-                        else None
-                    ),
+            self.eval_dataset_dict_dl[k] = (
+                iter(
+                    DataLoader(
+                        self.eval_dataset_dict[k],
+                        self.eval_batch_size,
+                        shuffle=False,
+                        num_workers=1,
+                        collate_fn=(
+                            self.eval_collators_dict[k]
+                            if self.eval_collators_dict
+                            else None
+                        ),
+                    )
                 )
+                if self.eval_dataset_dict[k]
+                else None
             )
 
     def _update_sampling_ratio(self, weights) -> list:
@@ -344,8 +347,10 @@ class OnlineData(IterableDataset):
         for c in range(self.total_categories):
             # accelerator takes care of preparing the eval dataloaders for distributed inference.
             if accelerator:
-                eval_dataset_dict[self.id2cat[c]] = accelerator.prepare(
-                    self.eval_dataset_dict_dl[self.id2cat[c]]
+                eval_dataset_dict[self.id2cat[c]] = (
+                    accelerator.prepare(self.eval_dataset_dict_dl[self.id2cat[c]])
+                    if self.eval_dataset_dict_dl[self.id2cat[c]]
+                    else None
                 )
             else:
                 eval_dataset_dict[self.id2cat[c]] = self.eval_dataset_dict_dl[
@@ -353,14 +358,11 @@ class OnlineData(IterableDataset):
                 ]
         for c in tqdm(
             range(self.total_categories), total=self.total_categories, desc="Categories"
-        ):
-            for batch in tqdm(
-                eval_dataset_dict[self.id2cat[c]],
-                desc="Reward computation over eval dataset",
-            ):
+        ):  # for trian loss you dont need to iterate over eval dataset.
+            if not eval_dataset_dict[self.id2cat[c]]:
                 rc = compute_reward(
                     model=model,
-                    batch={k: v.to(device) for k, v in batch.items()},
+                    batch=None,
                     vocab_size=32000,
                     reward_type=self.reward_type,
                     current_category=c,
@@ -372,10 +374,30 @@ class OnlineData(IterableDataset):
                 )
                 rewards[c] += rc
                 count[c] += batch["input_ids"].shape[0]
+            else:
+                for batch in tqdm(
+                    eval_dataset_dict[self.id2cat[c]],
+                    desc="Reward computation over eval dataset",
+                ):
+                    rc = compute_reward(
+                        model=model,
+                        batch={k: v.to(device) for k, v in batch.items()},
+                        vocab_size=32000,
+                        reward_type=self.reward_type,
+                        current_category=c,
+                        total_categories=self.total_categories,
+                        last_sampled_category=self.arm_idx,
+                        **self._extract_information_from_state_for_reward(
+                            state, self.id2cat[c]
+                        ),
+                    )
+                    rewards[c] += rc
+                    count[c] += batch["input_ids"].shape[0]
         rewards = torch.tensor(rewards, device=device)
         count = torch.tensor(count, device=device)
-        rewards = accelerator.reduce(rewards, reduction="sum")
-        count = accelerator.reduce(count, reduction="sum")
+        if accelerator:
+            rewards = accelerator.reduce(rewards, reduction="sum")
+            count = accelerator.reduce(count, reduction="sum")
         if accelerator.is_main_process:
             self._update_weights(count, rewards)
         self.log_to_file(

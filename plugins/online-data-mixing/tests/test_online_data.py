@@ -18,7 +18,7 @@ import pytest
 import torch
 
 # First Party
-from fms_acceleration_odm import OnlineData, Reward
+from fms_acceleration_odm import OnlineMixingDataset, Reward
 
 PARAMETERS = [
     (
@@ -59,7 +59,7 @@ def test_online_data_mix_learning(
         "labels": labels,
         "attention_mask": attention_mask,
     }
-    dataset = OnlineData(
+    dataset = OnlineMixingDataset(
         train_data,
         None,
         eval_data,
