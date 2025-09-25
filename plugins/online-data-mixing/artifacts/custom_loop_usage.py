@@ -1,3 +1,7 @@
+# Standard
+import json
+import os
+
 # Third Party
 from accelerate import Accelerator, DataLoaderConfiguration
 from datasets import concatenate_datasets, load_dataset
@@ -9,8 +13,6 @@ from transformers import (
     DataCollatorForLanguageModeling,
 )
 import torch
-import os
-import json
 
 # First Party
 from fms_acceleration_odm import OnlineMixingDataset
@@ -98,14 +100,12 @@ for step, batch in enumerate(
     loss = accelerator.gather(loss).mean()
     if step_idx % 1 == 0:
         if torch.isnan(loss):
-            loss = torch.tensor([10]) # nan -> very high loss
+            loss = torch.tensor([10])  # nan -> very high loss
         if accelerator.is_main_process:
             print(f"Step {step_idx} ||| Loss: {loss.item():.4f}")
             with open(log_file, "a") as f:
                 f.write(json.dumps({"loss": loss.item(), "step": step_idx}) + "\n")
-        state.log_history.append(
-            {"loss": loss.item(), "step": step_idx}
-        )
+        state.log_history.append({"loss": loss.item(), "step": step_idx})
     if step_idx % update_interval == 0:
         dataloader.dataset.update_sampling_weights(model, accelerator, state)
     if step_idx > max_steps:
