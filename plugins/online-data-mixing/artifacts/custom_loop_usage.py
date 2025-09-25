@@ -19,7 +19,7 @@ from fms_acceleration_odm import OnlineMixingDataset
 
 model_name = "ibm-granite/granite-3.1-2b-instruct"
 output_dir = "./odm_custom_use"
-max_steps = 200
+max_steps = 400
 batch_size = 12
 log_file = os.path.join(output_dir, "loss.jsonl")
 
@@ -37,13 +37,16 @@ def tokenize_fn(examples):
         examples["text"], truncation=True, padding="max_length", max_length=128
     )
 
+
+# Third Party
 from datasets import load_dataset
 from transformers import AutoTokenizer, DataCollatorForLanguageModeling
 
 dataset_dict = {
     "alpaca": load_dataset("tatsu-lab/alpaca", split="train[:1%]"),
-    "oasst": load_dataset("timdettmers/openassistant-guanaco", split="train[:1%]"),
+    "oasst": load_dataset("hakurei/open-instruct-v1", split="train[:1%]"),
 }
+
 
 def format_example(example):
     if "instruction" in example:
@@ -54,6 +57,7 @@ def format_example(example):
         raise ValueError("Dataset schema not supported")
     return {"text": prompt}
 
+
 for name in dataset_dict:
     dataset_dict[name] = dataset_dict[name].map(format_example)
 
@@ -63,8 +67,9 @@ def tokenize_fn(examples):
         examples["text"],
         truncation=True,
         padding="max_length",
-        max_length=512,
+        max_length=1024,
     )
+
 
 for name in dataset_dict:
     dataset_dict[name] = dataset_dict[name].map(
@@ -79,7 +84,7 @@ collator_dict = {
 }
 
 # odm related
-update_interval = 1000  # every step
+update_interval = 5  # every step
 dataset = OnlineMixingDataset(
     dataset_dict=dataset_dict,
     collators_dict=collator_dict,
