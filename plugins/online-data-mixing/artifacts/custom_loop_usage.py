@@ -15,7 +15,7 @@ from fms_acceleration_odm import OnlineMixingDataset
 
 model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 output_dir = "./odm_custom_use"
-max_steps = 50
+max_steps = 200
 
 # model
 model = AutoModelForCausalLM.from_pretrained(model_name)
@@ -61,7 +61,7 @@ dataset = OnlineMixingDataset(
     reward_type="train_loss",
     sampling_interval=1,
 )
-dataloader = DataLoader(dataset, batch_size=6, shuffle=False, collate_fn=None)
+dataloader = DataLoader(dataset, batch_size=12, shuffle=False, collate_fn=None)
 
 # distributed setup
 dataloader_config = DataLoaderConfiguration(split_batches=True, dispatch_batches=True)
