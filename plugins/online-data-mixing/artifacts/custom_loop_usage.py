@@ -9,6 +9,8 @@ from transformers import (
     DataCollatorForLanguageModeling,
 )
 import torch
+import os
+import json
 
 # First Party
 from fms_acceleration_odm import OnlineMixingDataset
@@ -16,6 +18,8 @@ from fms_acceleration_odm import OnlineMixingDataset
 model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 output_dir = "./odm_custom_use"
 max_steps = 200
+batch_size = 12
+log_file = os.path.join(output_dir, "loss.jsonl")
 
 # model
 model = AutoModelForCausalLM.from_pretrained(model_name)
@@ -59,9 +63,9 @@ dataset = OnlineMixingDataset(
     eval_collators_dict={},
     output_dir=output_dir,
     reward_type="train_loss",
-    sampling_interval=1,
+    sampling_interval=batch_size,
 )
-dataloader = DataLoader(dataset, batch_size=12, shuffle=False, collate_fn=None)
+dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=None)
 
 # distributed setup
 dataloader_config = DataLoaderConfiguration(split_batches=True, dispatch_batches=True)
@@ -97,8 +101,10 @@ for step, batch in enumerate(
             loss = torch.tensor([10]) # nan -> very high loss
         if accelerator.is_main_process:
             print(f"Step {step_idx} ||| Loss: {loss.item():.4f}")
+            with open(log_file, "a") as f:
+                f.write(json.dumps({"loss": loss.item(), "step": step_idx}) + "\n")
         state.log_history.append(
-            {"loss": loss.item() if not torch.isnan(loss) else 1e100}
+            {"loss": loss.item(), "step": step_idx}
         )
     if step_idx % update_interval == 0:
         dataloader.dataset.update_sampling_weights(model, accelerator, state)
