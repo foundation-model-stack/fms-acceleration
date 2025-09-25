@@ -95,14 +95,14 @@ for step, batch in enumerate(
     if step_idx % 1 == 0:
         if torch.isnan(loss):
             loss = torch.tensor([10]) # nan -> very high loss
-        print(f"Step {step_idx} ||| Loss: {loss.item():.4f}")
+        if accelerator.is_main_process:
+            print(f"Step {step_idx} ||| Loss: {loss.item():.4f}")
         state.log_history.append(
             {"loss": loss.item() if not torch.isnan(loss) else 1e100}
         )
     if step_idx % update_interval == 0:
         dataloader.dataset.update_sampling_weights(model, accelerator, state)
-    max_steps -= 1
-    if max_steps == 0:
+    if step_idx > max_steps:
         break
 
 print("training completed!")
