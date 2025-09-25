@@ -154,7 +154,7 @@ class OnlineMixingDataset(IterableDataset):
             "total_categories": self.total_categories,
             "current_sampling_weights": self.sampling_weights.tolist(),
             "current_sampling_ratio": self.sampling_ratio,
-            "arm_dix": self.arm_idx,
+            "arm_idx": self.arm_idx,
             "category_level_counts_so_far": self.curr_cat_count,
             "rewards": [0] * self.total_categories,
             "count": 0,
@@ -223,7 +223,7 @@ class OnlineMixingDataset(IterableDataset):
 
         self.log_to_file(
             {
-                "arm_dix": self.arm_idx,
+                "arm_idx": self.arm_idx,
                 "samples_produced_so_far": self.produced,
                 "category_level_counts_so_far": self.curr_cat_count,
                 "action": "sample",

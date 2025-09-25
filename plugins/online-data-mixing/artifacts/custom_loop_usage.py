@@ -1,10 +1,14 @@
+# Run commmand
+# CUDA_VISIBLE_DEVICES=0,1 accelerate launch --config_file fms-acceleration/scripts/benchmarks/accelerate.yaml
+# --num_processes=2 --main_process_port=29511 custom_loop_usage.py
+
 # Standard
 import json
 import os
 
 # Third Party
 from accelerate import Accelerator, DataLoaderConfiguration
-from datasets import concatenate_datasets, load_dataset
+from datasets import load_dataset
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import (
@@ -19,9 +23,13 @@ from fms_acceleration_odm import OnlineMixingDataset
 
 model_name = "ibm-granite/granite-3.1-2b-instruct"
 output_dir = "./odm_custom_use"
-max_steps = 400
+max_steps = 125
 batch_size = 12
 log_file = os.path.join(output_dir, "loss.jsonl")
+
+# odm related
+step_idx = 0
+update_interval = 1  # every step
 
 # model
 model = AutoModelForCausalLM.from_pretrained(model_name)
@@ -38,10 +46,6 @@ def tokenize_fn(examples):
     )
 
 
-# Third Party
-from datasets import load_dataset
-from transformers import AutoTokenizer, DataCollatorForLanguageModeling
-
 dataset_dict = {
     "alpaca": load_dataset("tatsu-lab/alpaca", split="train[:1%]"),
     "oasst": load_dataset("hakurei/open-instruct-v1", split="train[:1%]"),
@@ -53,8 +57,6 @@ def format_example(example):
         prompt = f"Instruction: {example['instruction']}\nInput: {example.get('input','')}\nOutput: {example['output']}"
     elif "text" in example:
         prompt = example["text"]
-    else:
-        raise ValueError("Dataset schema not supported")
     return {"text": prompt}
 
 
@@ -83,8 +85,7 @@ collator_dict = {
     for name in dataset_dict
 }
 
-# odm related
-update_interval = 1  # every step
+# dataset preparation
 dataset = OnlineMixingDataset(
     dataset_dict=dataset_dict,
     collators_dict=collator_dict,
@@ -104,17 +105,17 @@ model, dataloader = accelerator.prepare(model, dataloader)
 # training setup
 optimizer = torch.optim.AdamW(model.parameters(), lr=5e-5)
 
-model.train()
 
-step_idx = 0
-
-
+# Trainer state
 class State:
     log_history: list = []
 
 
 state = State()
+
+
 # custom training loop
+model.train()
 for step, batch in enumerate(
     tqdm(dataloader, disable=not accelerator.is_local_main_process)
 ):
@@ -141,7 +142,4 @@ for step, batch in enumerate(
     if step_idx > max_steps:
         break
 
-print("training completed!")
-
-
-# CUDA_VISIBLE_DEVICES=0,1 accelerate launch --config_file /workspace/fms-acceleration/scripts/benchmarks/accelerate.yaml --num_processes=2 --main_process_port=29511 custom_loop_usage.py
+print("Training completed!")
