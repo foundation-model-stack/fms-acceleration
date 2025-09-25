@@ -373,7 +373,7 @@ class OnlineMixingDataset(IterableDataset):
                     ),
                 )
                 rewards[c] += rc
-                count[c] += batch["input_ids"].shape[0]
+                count[c] += 1
             else:
                 for batch in tqdm(
                     eval_dataset_dict[self.id2cat[c]],
