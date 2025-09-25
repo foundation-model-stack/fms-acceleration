@@ -94,7 +94,7 @@ for step, batch in enumerate(
     loss = accelerator.gather(loss).mean()
     if step_idx % 1 == 0:
         if torch.isnan(loss):
-            raise ValueError("loss is nan")
+            loss = torch.tensor([10]) # nan -> very high loss
         print(f"Step {step_idx} ||| Loss: {loss.item():.4f}")
         state.log_history.append(
             {"loss": loss.item() if not torch.isnan(loss) else 1e100}
