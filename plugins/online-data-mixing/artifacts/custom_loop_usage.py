@@ -93,7 +93,7 @@ for step, batch in enumerate(
     optimizer.zero_grad()
     if step % 1 == 0:
         print(f"Step {step} | Loss: {loss.item():.4f}")
-        state.log_history.append({"loss": loss.item()})
+        state.log_history.append({"loss": loss.item() if loss.item() is not float("nan") else 1e+100})
     if step_idx % update_interval == 0:
         dataloader.dataset.update_sampling_weights(model, accelerator, state)
     max_steps -= 1
