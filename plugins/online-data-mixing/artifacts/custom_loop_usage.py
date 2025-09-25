@@ -93,10 +93,8 @@ for step, batch in enumerate(
     optimizer.zero_grad()
     if step % 1 == 0:
         print(f"Step {step} | Loss: {loss.item():.4f}")
-        if loss.item() is float("nan"):
-            print("yes nan")
         state.log_history.append(
-            {"loss": loss.item() if loss.item() is not float("nan") else 1e100}
+            {"loss": loss.item() if not torch.isnan(loss) else 1e100}
         )
     if step_idx % update_interval == 0:
         dataloader.dataset.update_sampling_weights(model, accelerator, state)
