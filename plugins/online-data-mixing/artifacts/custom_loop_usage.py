@@ -73,10 +73,13 @@ optimizer = torch.optim.AdamW(model.parameters(), lr=5e-5)
 
 model.train()
 
+step_idx = 0
+state = {"log_history": []}
 # custom training loop
 for step, batch in enumerate(
     tqdm(dataloader, disable=not accelerator.is_local_main_process)
 ):
+    step_idx += 1
     outputs = model(**batch)
     loss = outputs.loss
     accelerator.backward(loss)
@@ -84,8 +87,14 @@ for step, batch in enumerate(
     optimizer.zero_grad()
     if step % 1 == 0:
         print(f"Step {step} | Loss: {loss.item():.4f}")
+        state["log_history"].append({"loss": loss.item()})
+    if step_idx % update_interval == 0:
+        dataloader.dataset.update_sampling_weights(model, accelerator, state)
     max_steps -= 1
     if max_steps == 0:
         break
 
 print("training completed!")
+
+
+# CUDA_VISIBLE_DEVICES=0,1 accelerate launch --config_file /workspace/fms-acceleration/scripts/benchmarks/accelerate.yaml --num_processes=2 --main_process_port=29511 custom_loop_usage.py
