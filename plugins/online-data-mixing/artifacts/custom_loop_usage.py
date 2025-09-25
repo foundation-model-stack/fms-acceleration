@@ -61,7 +61,7 @@ dataset = OnlineMixingDataset(
     reward_type="train_loss",
     sampling_interval=1,
 )
-dataloader = DataLoader(dataset, batch_size=2, shuffle=False, collate_fn=None)
+dataloader = DataLoader(dataset, batch_size=6, shuffle=False, collate_fn=None)
 
 # distributed setup
 dataloader_config = DataLoaderConfiguration(split_batches=True, dispatch_batches=True)
