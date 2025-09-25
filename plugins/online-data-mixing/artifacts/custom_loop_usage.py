@@ -74,9 +74,12 @@ optimizer = torch.optim.AdamW(model.parameters(), lr=5e-5)
 model.train()
 
 step_idx = 0
+
+
 class State:
     log_history: list = []
-    
+
+
 state = State()
 # custom training loop
 for step, batch in enumerate(
