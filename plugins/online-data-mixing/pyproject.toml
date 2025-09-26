@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "fms-acceleration-odm"
 version = '0.1.0.dev'
-description = "FMS Acceleration Plugin for online data mixing"
+description = "FMS Acceleration plugin for online data mixing"
 authors = [
   {name = "Mehant Kammakomati", email = "mehant.kammakomati2@ibm.com"},
   {name = "Romit Jain", email = "romit@ibm.com"},
@@ -13,14 +13,12 @@ authors = [
 ]
 license = {text = "Apache-2.0"}
 readme = "README.md"
-requires-python = "~=3.9"
+requires-python = "~=3.11"
 keywords = ['fms-hf-tuning', 'acceleration', 'online-data-mixing']
 classifiers=[
     "License :: OSI Approved :: Apache Software License",
     "Development Status :: 4 - Beta",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
 ]
 
