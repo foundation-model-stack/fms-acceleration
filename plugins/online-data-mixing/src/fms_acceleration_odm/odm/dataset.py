@@ -8,7 +8,8 @@ import random
 
 # Third Party
 from datasets import DatasetDict
-from torch.utils.data import DataLoader, StatefulDataLoader, IterableDataset
+from torch.utils.data import DataLoader, IterableDataset
+from torchdata.stateful_dataloader import StatefulDataLoader
 from tqdm import tqdm
 import torch
 
