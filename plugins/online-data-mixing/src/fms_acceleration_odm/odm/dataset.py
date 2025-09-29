@@ -238,16 +238,8 @@ class OnlineMixingDataset(IterableDataset):
         self.__dict__.update(state_dict)
         self.train_dataset_dict_dl = {}
         for k, _ in dataset_dict.items():
-            dataset_sd = StatefulDataLoader(
-                self.dataset_dict[k].dataset,
-                1,
-                shuffle=False,
-                num_workers=1,
-                collate_fn=self.collators_dict[k] if self.collators_dict else None,
-            )
-            dataset_sd.load_state_dict(dataset_dict[k])
-            self.dataset_dict[k] = dataset_sd
-            self.train_dataset_dict_dl[k] = iter(dataset_sd)
+            self.dataset_dict[k].load_state_dict(dataset_dict[k])
+            self.train_dataset_dict_dl[k] = iter(self.dataset_dict[k])
 
     def state_dict(self):
         return {
