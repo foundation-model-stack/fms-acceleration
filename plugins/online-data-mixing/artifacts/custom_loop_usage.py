@@ -154,7 +154,7 @@ for step, batch in enumerate(
 
 # if accelerator.is_main_process:
 #     dataloader.base_dataloader.load_state_dict(sd)
-
+dataloader = iter(dataloader)
 for step, batch in enumerate(dataloader):
     torch.equal(batch["input_ids"], a_batch["input_ids"])
 
