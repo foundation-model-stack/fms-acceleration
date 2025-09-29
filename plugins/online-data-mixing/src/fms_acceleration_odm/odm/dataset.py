@@ -8,7 +8,7 @@ import random
 
 # Third Party
 from datasets import DatasetDict
-from torch.utils.data import DataLoader, IterableDataset
+from torch.utils.data import DataLoader, StatefulDataLoader, IterableDataset
 from tqdm import tqdm
 import torch
 
@@ -100,7 +100,7 @@ class OnlineMixingDataset(IterableDataset):
         self.train_dataset_dict_dl = {}
         # prepare torch dataloaders for each of the dataset.
         for k, _ in dataset_dict.items():
-            dataset_dict[k] = DataLoader(
+            dataset_dict[k] = StatefulDataLoader(
                 dataset_dict[k],
                 1,
                 shuffle=False,
@@ -230,6 +230,43 @@ class OnlineMixingDataset(IterableDataset):
             }
         )
         return sample
+
+    def load_state_dict(self, state_dict):
+        torch.set_rng_state(state_dict["rng"])
+        dataset_dict = state_dict.pop("dataset_dict")
+        self.__dict__.update(state_dict)
+        self.train_dataset_dict_dl = {}
+        for k, _ in dataset_dict.items():
+            dataset_sd = StatefulDataLoader(
+                self.dataset_dict[k],
+                1,
+                shuffle=False,
+                num_workers=1,
+                collate_fn=self.collators_dict[k] if self.collators_dict else None,
+            )
+            dataset_sd.load_state_dict(dataset_dict[k])
+            self.dataset_dict[k] = dataset_sd
+            self.train_dataset_dict_dl[k] = iter(dataset_sd)
+
+    def state_dict(self):
+        return {
+            "rng": torch.get_rng_state(),
+            "gamma": self.gamma,
+            "eta": self.eta,
+            "sampling_interval": self.sampling_interval,
+            "dataset_dict": {k: v.state_dict() for k,v in self.dataset_dict.items()},
+            "eval_batch_size": self.eval_batch_size,
+            "category_list": self.category_list,
+            "id2cat": self.id2cat,
+            "cat2id": self.cat2id,
+            "total_categories": self.total_categories,
+            "sampling_weights": self.sampling_weights,
+            "sampling_ratio": self.sampling_ratio,
+            "curr_cat_count": self.curr_cat_count,
+            "produced": self.produced,
+            "arm_idx": self.arm_idx,
+            "reward_type":  self.reward_type
+            }
 
     def _reset_eval_dataloaders(self):
         """Helper function to reset eval dataloaders since

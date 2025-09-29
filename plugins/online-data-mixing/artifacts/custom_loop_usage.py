@@ -9,7 +9,7 @@ import os
 # Third Party
 from accelerate import Accelerator, DataLoaderConfiguration
 from datasets import load_dataset
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, StatefulDataLoader
 from tqdm import tqdm
 from transformers import (
     AutoModelForCausalLM,
@@ -95,7 +95,8 @@ dataset = OnlineMixingDataset(
     reward_type="train_loss",
     sampling_interval=batch_size,
 )
-dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=None)
+# dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=None)
+dataloader = StatefulDataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=None)
 
 # distributed setup
 dataloader_config = DataLoaderConfiguration(split_batches=True, dispatch_batches=True)
@@ -113,9 +114,10 @@ class State:
 
 state = State()
 
-
+sd = None
 # custom training loop
 model.train()
+a_batch = None
 for step, batch in enumerate(
     tqdm(dataloader, disable=not accelerator.is_local_main_process)
 ):
@@ -125,6 +127,13 @@ for step, batch in enumerate(
     accelerator.backward(loss)
     optimizer.step()
     optimizer.zero_grad()
+    if step_idx == 1:
+        sd = dataloader.state_dict()
+        print(sd)
+    if step_idx == 2:
+        a_batch = batch
+    if step_idx % 5 == 0:
+        break
     loss = accelerator.gather(loss).mean()
     if step_idx % 1 == 0:
         if torch.isnan(loss):
@@ -141,5 +150,10 @@ for step, batch in enumerate(
             model.train()
     if step_idx > max_steps:
         break
+
+dataloader.load_state_dict(sd)
+
+for step, batch in enumerate(dataloader):
+    torch.equal(batch["input_ids"], a_batch["input_ids"])
 
 print("Training completed!")
