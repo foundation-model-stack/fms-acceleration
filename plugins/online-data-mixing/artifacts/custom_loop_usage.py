@@ -152,8 +152,26 @@ for step, batch in enumerate(
     if step_idx > max_steps:
         break
 
-# if accelerator.is_main_process:
-#     dataloader.base_dataloader.load_state_dict(sd)
+# dataset preparation
+dataset = OnlineMixingDataset(
+    dataset_dict=dataset_dict,
+    collators_dict=collator_dict,
+    eval_dataset_dict={},
+    eval_collators_dict={},
+    output_dir=output_dir,
+    reward_type="train_loss",
+    sampling_interval=batch_size,
+)
+# dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=None)
+dataloader = StatefulDataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=None)
+if accelerator.is_main_process:
+    dataloader.load_state_dict(sd)
+
+dataloader_config = DataLoaderConfiguration(split_batches=True, dispatch_batches=True, use_stateful_dataloader=True)
+accelerator = Accelerator(split_batches=True, dataloader_config=dataloader_config)
+model, dataloader = accelerator.prepare(model, dataloader)
+
+
 for batch in dataloader:
     torch.equal(batch["input_ids"], a_batch["input_ids"])
 
