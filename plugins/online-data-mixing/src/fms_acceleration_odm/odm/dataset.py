@@ -239,7 +239,7 @@ class OnlineMixingDataset(IterableDataset):
         self.train_dataset_dict_dl = {}
         for k, _ in dataset_dict.items():
             dataset_sd = StatefulDataLoader(
-                self.dataset_dict[k],
+                self.dataset_dict[k].dataset,
                 1,
                 shuffle=False,
                 num_workers=1,
