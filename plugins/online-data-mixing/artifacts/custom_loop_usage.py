@@ -100,7 +100,7 @@ dataset = OnlineMixingDataset(
 dataloader = StatefulDataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=None)
 
 # distributed setup
-dataloader_config = DataLoaderConfiguration(split_batches=True, dispatch_batches=True)
+dataloader_config = DataLoaderConfiguration(split_batches=True, dispatch_batches=True, use_stateful_dataloader=True)
 accelerator = Accelerator(split_batches=True, dataloader_config=dataloader_config)
 model, dataloader = accelerator.prepare(model, dataloader)
 
