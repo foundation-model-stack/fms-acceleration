@@ -9,7 +9,8 @@ import os
 # Third Party
 from accelerate import Accelerator, DataLoaderConfiguration
 from datasets import load_dataset
-from torch.utils.data import DataLoader, StatefulDataLoader
+from torchdata.stateful_dataloader import StatefulDataLoader
+
 from tqdm import tqdm
 from transformers import (
     AutoModelForCausalLM,
