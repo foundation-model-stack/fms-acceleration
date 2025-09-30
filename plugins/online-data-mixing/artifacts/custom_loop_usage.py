@@ -129,10 +129,10 @@ for step, batch in enumerate(
     optimizer.step()
     optimizer.zero_grad()
     if step_idx == 1:
-        sd = dataloader.state_dict()
-        print(sd)
+        accelerator.save_state("./save_state")
     if step_idx == 2:
         a_batch = batch
+        break
     if step_idx % 5 == 0:
         break
     loss = accelerator.gather(loss).mean()
@@ -164,15 +164,13 @@ dataset = OnlineMixingDataset(
 )
 # dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=None)
 dataloader = StatefulDataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=None)
-if accelerator.is_main_process:
-    dataloader.load_state_dict(sd)
 
 dataloader_config = DataLoaderConfiguration(split_batches=True, dispatch_batches=True, use_stateful_dataloader=True)
 accelerator = Accelerator(split_batches=True, dataloader_config=dataloader_config)
 model, dataloader = accelerator.prepare(model, dataloader)
 
-
-for batch in dataloader:
-    torch.equal(batch["input_ids"], a_batch["input_ids"])
+accelerator.load_state("./save_state")
+batch = next(iter(dataloader))
+assert torch.equal(batch["input_ids"], a_batch["input_ids"])
 
 print("Training completed!")
