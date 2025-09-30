@@ -129,7 +129,7 @@ for step, batch in enumerate(
     optimizer.step()
     optimizer.zero_grad()
     if step_idx == 1:
-        print(f"first batch {batch["input_ids"]}")
+        print(f"first batch {batch['input_ids']}")
         accelerator.save_state("./save_state")
     if step_idx == 2:
         a_batch = batch
@@ -172,8 +172,8 @@ model, dataloader = accelerator.prepare(model, dataloader)
 
 accelerator.load_state("./save_state")
 batch = next(iter(dataloader))
-print(f"second batch resume {batch["input_ids"]}")
-print(f"secon batch {a_batch["input_ids"]}")
+print(f"second batch resume {batch['input_ids']}")
+print(f"secon batch {a_batch['input_ids']}")
 assert torch.equal(batch["input_ids"], a_batch["input_ids"])
 
 print("Training completed!")
