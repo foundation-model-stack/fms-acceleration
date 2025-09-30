@@ -259,7 +259,7 @@ class OnlineMixingDataset(IterableDataset):
             "curr_cat_count": self.curr_cat_count,
             "produced": self.produced,
             "arm_idx": self.arm_idx,
-            "reward_type":  self.reward_type.__str__
+            "reward_type":  self.reward_type.__str__()
             }
 
     def _reset_eval_dataloaders(self):
