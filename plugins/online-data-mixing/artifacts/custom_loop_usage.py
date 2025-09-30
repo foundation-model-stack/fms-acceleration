@@ -171,6 +171,8 @@ model, dataloader = accelerator.prepare(model, dataloader)
 
 accelerator.load_state("./save_state")
 batch = next(iter(dataloader))
+print(batch["input_ids"])
+print(a_batch["input_ids"])
 assert torch.equal(batch["input_ids"], a_batch["input_ids"])
 
 print("Training completed!")
