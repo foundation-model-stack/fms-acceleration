@@ -168,14 +168,13 @@ dataset = OnlineMixingDataset(
 )
 # dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=None)
 dataloader = StatefulDataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=None)
-
 dataloader_config = DataLoaderConfiguration(split_batches=True, dispatch_batches=True, use_stateful_dataloader=True)
 accelerator = Accelerator(split_batches=True, dataloader_config=dataloader_config)
 model, dataloader = accelerator.prepare(model, dataloader)
-
+dataloader = iter(dataloader)
 accelerator.load_state("./save_state")
-batch = next(iter(dataloader))
-batch = next(iter(dataloader))
+batch = next(dataloader)
+batch = next(dataloader)
 if torch.distributed.get_rank() == 0:
     print(f"second batch resume {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}")
     print(f"second batch {a_batch['input_ids']} arm_idx {a_arm_idx}")
