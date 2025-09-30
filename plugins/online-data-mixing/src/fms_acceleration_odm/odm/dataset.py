@@ -236,6 +236,7 @@ class OnlineMixingDataset(IterableDataset):
         return sample
 
     def load_state_dict(self, state_dict):
+        print(state_dict)
         torch.set_rng_state(state_dict["rng"])
         train_dataset_dict_dl_sd = state_dict.pop("train_dataset_dict_dl_sd")
         random.setstate(state_dict.pop("random_state"))
