@@ -130,7 +130,8 @@ for step, batch in enumerate(
     optimizer.step()
     optimizer.zero_grad()
     if step_idx == 1:
-        print(f"first batch {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}")
+        if torch.distributed.get_rank() == 0:
+            print(f"first batch {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}")
         accelerator.save_state("./save_state")
     if step_idx == 3:
         a_batch = batch
@@ -175,8 +176,9 @@ model, dataloader = accelerator.prepare(model, dataloader)
 accelerator.load_state("./save_state")
 batch = next(iter(dataloader))
 batch = next(iter(dataloader))
-print(f"second batch resume {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}")
-print(f"second batch {a_batch['input_ids']} arm_idx {a_arm_idx}")
-assert torch.equal(batch["input_ids"], a_batch["input_ids"])
+if torch.distributed.get_rank() == 0:
+    print(f"second batch resume {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}")
+    print(f"second batch {a_batch['input_ids']} arm_idx {a_arm_idx}")
+    assert torch.equal(batch["input_ids"], a_batch["input_ids"])
 
 print("Training completed!")
