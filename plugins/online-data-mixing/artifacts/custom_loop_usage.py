@@ -133,6 +133,12 @@ for step, batch in enumerate(
         if torch.distributed.get_rank() == 0:
             print(f"first batch {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}")
         accelerator.save_state("./save_state")
+    if step_idx == 2:
+        if torch.distributed.get_rank() == 0:
+            print(f"second batch {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}")
+    if step_idx == 3:
+        if torch.distributed.get_rank() == 0:
+            print(f"third batch {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}")
     if step_idx == 3:
         a_batch = batch
         a_arm_idx = dataloader.dataset.arm_idx
