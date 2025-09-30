@@ -217,8 +217,8 @@ dataloader = StatefulDataLoader(dataset, batch_size=batch_size, shuffle=False, c
 dataloader_config = DataLoaderConfiguration(split_batches=True, dispatch_batches=True, use_stateful_dataloader=True)
 accelerator = Accelerator(split_batches=True, dataloader_config=dataloader_config)
 model, dataloader = accelerator.prepare(model, dataloader)
-dl_itr = iter(dataloader)
 accelerator.load_state("./save_state")
+dl_itr = iter(dataloader)
 batch = next(dl_itr)
 batch = next(dl_itr)
 if torch.distributed.get_rank() == 0:
