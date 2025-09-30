@@ -236,7 +236,7 @@ class OnlineMixingDataset(IterableDataset):
         torch.set_rng_state(state_dict["rng"])
         dataset_dict = state_dict.pop("dataset_dict")
         self.__dict__.update(state_dict)
-        self.reward_type = Reward[state_dict["reward_type"]]
+        self.reward_type = Reward[state_dict["reward_type"].upper()]
         self.train_dataset_dict_dl = {}
         for k, _ in dataset_dict.items():
             self.dataset_dict[k].load_state_dict(dataset_dict[k])
