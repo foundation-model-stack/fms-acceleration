@@ -238,6 +238,7 @@ class OnlineMixingDataset(IterableDataset):
     def load_state_dict(self, state_dict):
         torch.set_rng_state(state_dict["rng"])
         train_dataset_dict_dl_sd = state_dict.pop("train_dataset_dict_dl_sd")
+        random.setstate(state_dict.pop("random_state"))
         self.__dict__.update(state_dict)
         self.reward_type = Reward[state_dict["reward_type"].upper()]
         for k, _ in train_dataset_dict_dl_sd.items():
@@ -260,7 +261,8 @@ class OnlineMixingDataset(IterableDataset):
             "curr_cat_count": self.curr_cat_count,
             "produced": self.produced,
             "arm_idx": self.arm_idx,
-            "reward_type":  self.reward_type.__str__()
+            "reward_type":  self.reward_type.__str__(),
+            "random_state": random.getstate()
             }
 
     def _reset_eval_dataloaders(self):
