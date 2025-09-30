@@ -237,20 +237,12 @@ class OnlineMixingDataset(IterableDataset):
 
     def load_state_dict(self, state_dict):
         torch.set_rng_state(state_dict["rng"])
-        dataset_dict_sd = state_dict.pop("dataset_dict_sd")
+        train_dataset_dict_dl_sd = state_dict.pop("train_dataset_dict_dl_sd")
         self.__dict__.update(state_dict)
         self.reward_type = Reward[state_dict["reward_type"].upper()]
         self.train_dataset_dict_dl = {}
-        for k, _ in dataset_dict_sd.items():
-            self.dataset_dict[k].load_state_dict(dataset_dict_sd[k])
-            self.train_dataset_dict_dl_org[k] = StatefulDataLoader(
-                self.dataset_dict[k],
-                1,
-                shuffle=False,
-                num_workers=0,
-                collate_fn=self.collators_dict[k] if self.collators_dict else None,
-            )
-            self.train_dataset_dict_dl[k] = iter(self.train_dataset_dict_dl_org[k])
+        for k, _ in train_dataset_dict_dl_sd.items():
+            self.train_dataset_dict_dl[k].load_state_dict(train_dataset_dict_dl_sd[k])
 
     def state_dict(self):
         return {
@@ -258,7 +250,7 @@ class OnlineMixingDataset(IterableDataset):
             "gamma": self.gamma,
             "eta": self.eta,
             "sampling_interval": self.sampling_interval,
-            "dataset_dict_sd": {k: v.state_dict() for k,v in self.dataset_dict.items()},
+            "train_dataset_dict_dl_sd": {k: v.state_dict() for k,v in self.train_dataset_dict_dl.items()},
             "eval_batch_size": self.eval_batch_size,
             "category_list": self.category_list,
             "id2cat": self.id2cat,
