@@ -114,6 +114,7 @@ class State:
 
 
 def save_state(output_dir, accelerator):
+    os.makedirs(output_dir, exist_ok=True)
     dataloader_state_dict_name = "dl_state_dict.bin"
     output_dataloader_state_dict_file = os.path.join(output_dir, dataloader_state_dict_name)
     state_dict = accelerator._dataloaders[0].state_dict()
