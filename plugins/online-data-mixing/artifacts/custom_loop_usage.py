@@ -113,6 +113,17 @@ class State:
     log_history: list = []
 
 
+def save_state(output_dir, accelerator):
+    dataloader_state_dict_name = "dl_state_dict.bin"
+    output_dataloader_state_dict_file = os.path.join(output_dir, dataloader_state_dict_name)
+    state_dict = accelerator._dataloaders[0].state_dict()
+    torch.save(state_dict, output_dataloader_state_dict_file)
+
+def load_state(output_dir, accelerator):
+    dataloader_state_dict_name = "dl_state_dict.bin"
+    output_dataloader_state_dict_file = os.path.join(output_dir, dataloader_state_dict_name)
+    accelerator._dataloaders[0].load_state_dict(torch.load(output_dataloader_state_dict_file))
+
 state = State()
 
 sd = None
@@ -138,7 +149,7 @@ for step, batch in enumerate(
     if step_idx == 3:
         if torch.distributed.get_rank() == 0:
             print(f"third batch {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}")
-            accelerator.save_state("./save_state")
+            save_state("./save_state", accelerator)
         update_interval = 1000
     if step_idx == 4:
         if torch.distributed.get_rank() == 0:
@@ -221,7 +232,7 @@ dataloader = StatefulDataLoader(dataset, batch_size=batch_size, shuffle=False, c
 dataloader_config = DataLoaderConfiguration(split_batches=True, dispatch_batches=True, use_stateful_dataloader=True)
 accelerator = Accelerator(split_batches=True, dataloader_config=dataloader_config)
 model, dataloader = accelerator.prepare(model, dataloader)
-accelerator.load_state("./save_state")
+load_state("./save_state", accelerator)
 dl_itr = iter(dataloader)
 batch = next(dl_itr)
 # batch = next(dl_itr)
