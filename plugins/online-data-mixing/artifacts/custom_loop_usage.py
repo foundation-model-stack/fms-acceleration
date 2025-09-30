@@ -94,7 +94,7 @@ dataset = OnlineMixingDataset(
     eval_collators_dict={},
     output_dir=output_dir,
     reward_type="train_loss",
-    sampling_interval=batch_size,
+    sampling_interval=1000,
 )
 # dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=None)
 dataloader = StatefulDataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=None)
@@ -156,6 +156,46 @@ for step, batch in enumerate(
     if step_idx > max_steps:
         break
 
+
+dataset_dict = {
+    "alpaca": load_dataset("tatsu-lab/alpaca", split="train[:1%]"),
+    "oasst": load_dataset("hakurei/open-instruct-v1", split="train[:1%]"),
+}
+
+
+def format_example(example):
+    if "instruction" in example:
+        prompt = f"Instruction: {example['instruction']}\nInput: {example.get('input','')}\nOutput: {example['output']}"
+    elif "text" in example:
+        prompt = example["text"]
+    return {"text": prompt}
+
+
+for name in dataset_dict:
+    dataset_dict[name] = dataset_dict[name].map(format_example)
+
+
+def tokenize_fn(examples):
+    return tokenizer(
+        examples["text"],
+        truncation=True,
+        padding="max_length",
+        max_length=1024,
+    )
+
+
+for name in dataset_dict:
+    dataset_dict[name] = dataset_dict[name].map(
+        tokenize_fn,
+        batched=True,
+        remove_columns=dataset_dict[name].column_names,
+    )
+
+collator_dict = {
+    name: DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+    for name in dataset_dict
+}
+
 # dataset preparation
 dataset = OnlineMixingDataset(
     dataset_dict=dataset_dict,
@@ -164,7 +204,7 @@ dataset = OnlineMixingDataset(
     eval_collators_dict={},
     output_dir=output_dir,
     reward_type="train_loss",
-    sampling_interval=batch_size,
+    sampling_interval=1000,
 )
 # dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=None)
 dataloader = StatefulDataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=None)
