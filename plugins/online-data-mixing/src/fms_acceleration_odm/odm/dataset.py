@@ -99,22 +99,22 @@ class OnlineMixingDataset(IterableDataset):
         self.eval_dataset_dict = eval_dataset_dict
         self.eval_dataset_dict_dl = {}
         # iterators of the dataloaders
+        self.train_dataset_dict_dl_iter = {}
+        # to reset iterators to dataloaders
         self.train_dataset_dict_dl = {}
-        # to reset iterators holding references to the dataloaer
-        self.train_dataset_dict_dl_org = {}
         self.dataset_dict = dataset_dict
         # prepare torch dataloaders for each of the dataset.
         for k, _ in self.dataset_dict.items():
-            self.train_dataset_dict_dl_org[k] = StatefulDataLoader(
+            self.train_dataset_dict_dl[k] = StatefulDataLoader(
                 self.dataset_dict[k],
                 1,
                 shuffle=False,
                 num_workers=0,
                 collate_fn=collators_dict[k] if collators_dict else None,
             )
-            self.train_dataset_dict_dl[k] = iter(self.train_dataset_dict_dl_org[k])
+            self.train_dataset_dict_dl_iter[k] = iter(self.train_dataset_dict_dl[k])
         self.eval_batch_size = eval_batch_size
-        self.category_list = sorted(self.train_dataset_dict_dl.keys())
+        self.category_list = sorted(self.train_dataset_dict_dl_iter.keys())
         self.id2cat = dict(enumerate(self.category_list))
         self.cat2id = {c: i for i, c in enumerate(self.category_list)}
         self.total_categories = len(self.category_list)
@@ -186,17 +186,17 @@ class OnlineMixingDataset(IterableDataset):
             )[0]
         sample = None
         try:
-            sample = next(self.train_dataset_dict_dl[self.id2cat[self.arm_idx]])
+            sample = next(self.train_dataset_dict_dl_iter[self.id2cat[self.arm_idx]])
         except StopIteration:
             logger.info(
                 "{id} dataset exhausted so the iterator is reset.".format(
                     id=self.id2cat[self.arm_idx]
                 )
             )
-            self.train_dataset_dict_dl[self.id2cat[self.arm_idx]] = iter(
-                self.train_dataset_dict_dl_org[self.id2cat[self.arm_idx]]
+            self.train_dataset_dict_dl_iter[self.id2cat[self.arm_idx]] = iter(
+                self.train_dataset_dict_dl[self.id2cat[self.arm_idx]]
             )
-            sample = next(self.train_dataset_dict_dl[self.id2cat[self.arm_idx]])
+            sample = next(self.train_dataset_dict_dl_iter[self.id2cat[self.arm_idx]])
 
         self.curr_cat_count[self.arm_idx] += 1
         self.produced += 1
@@ -236,25 +236,23 @@ class OnlineMixingDataset(IterableDataset):
         return sample
 
     def load_state_dict(self, state_dict):
-        if torch.distributed.get_rank() == 0:
-            print("load_state_dict", state_dict)
+        """Load the dataloader with the provided state dict"""
         torch.set_rng_state(state_dict["rng"])
         train_dataset_dict_dl_sd = state_dict.pop("train_dataset_dict_dl_sd")
         random.setstate(state_dict.pop("random_state"))
         self.__dict__.update(state_dict)
         self.reward_type = Reward[state_dict["reward_type"].upper()]
         for k, _ in train_dataset_dict_dl_sd.items():
-            self.train_dataset_dict_dl[k].load_state_dict(train_dataset_dict_dl_sd[k])
-            if torch.distributed.get_rank() == 0:
-                print("dl sd", self.train_dataset_dict_dl[k].state_dict())
+            self.train_dataset_dict_dl_iter[k].load_state_dict(train_dataset_dict_dl_sd[k])
 
     def state_dict(self):
-        state = {
+        """Populate all the state that has to be stored by the stateful dataloader"""
+        return {
             "rng": torch.get_rng_state(),
             "gamma": self.gamma,
             "eta": self.eta,
             "sampling_interval": self.sampling_interval,
-            "train_dataset_dict_dl_sd": {k: v.state_dict() for k,v in self.train_dataset_dict_dl.items()},
+            "train_dataset_dict_dl_sd": {k: v.state_dict() for k,v in self.train_dataset_dict_dl_iter.items()},
             "eval_batch_size": self.eval_batch_size,
             "category_list": self.category_list,
             "id2cat": self.id2cat,
@@ -268,9 +266,6 @@ class OnlineMixingDataset(IterableDataset):
             "reward_type":  self.reward_type.__str__(),
             "random_state": random.getstate()
             }
-        if torch.distributed.get_rank() == 0:
-            print("state_dict", state)
-        return state
 
     def _reset_eval_dataloaders(self):
         """Helper function to reset eval dataloaders since
