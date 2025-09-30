@@ -254,7 +254,8 @@ class OnlineMixingDataset(IterableDataset):
         self.__dict__.update(state_dict)
         self.reward_type = Reward[state_dict["reward_type"].upper()]
         for k, _ in train_dataset_dict_dl_sd.items():
-            self.train_dataset_dict_dl[k] = iter(self.train_dataset_dict_dl_load[k].load_state_dict(train_dataset_dict_dl_sd[k]))
+            self.train_dataset_dict_dl_load[k].load_state_dict(train_dataset_dict_dl_sd[k])
+            self.train_dataset_dict_dl[k] = iter(self.train_dataset_dict_dl_load[k])
 
     def state_dict(self):
         state = {
