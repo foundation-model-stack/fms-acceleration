@@ -94,7 +94,7 @@ dataset = OnlineMixingDataset(
     eval_collators_dict={},
     output_dir=output_dir,
     reward_type="train_loss",
-    sampling_interval=1000,
+    sampling_interval=batch_size,
 )
 # dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=None)
 dataloader = StatefulDataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=None)
@@ -210,7 +210,7 @@ dataset = OnlineMixingDataset(
     eval_collators_dict={},
     output_dir=output_dir,
     reward_type="train_loss",
-    sampling_interval=1000,
+    sampling_interval=batch_size,
 )
 # dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=None)
 dataloader = StatefulDataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=None)
