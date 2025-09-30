@@ -139,6 +139,7 @@ for step, batch in enumerate(
         if torch.distributed.get_rank() == 0:
             print(f"third batch {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}")
         accelerator.save_state("./save_state")
+        update_interval = 1000
     if step_idx == 4:
         if torch.distributed.get_rank() == 0:
             print(f"fourth batch {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}")
