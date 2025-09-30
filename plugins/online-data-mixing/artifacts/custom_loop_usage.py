@@ -30,7 +30,7 @@ log_file = os.path.join(output_dir, "loss.jsonl")
 
 # odm related
 step_idx = 0
-update_interval = 1  # every step
+update_interval = 1000  # every step
 
 # model
 model = AutoModelForCausalLM.from_pretrained(model_name)
