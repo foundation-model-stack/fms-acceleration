@@ -243,7 +243,9 @@ class OnlineMixingDataset(IterableDataset):
         self.__dict__.update(state_dict)
         self.reward_type = Reward[state_dict["reward_type"].upper()]
         for k, _ in train_dataset_dict_dl_sd.items():
-            self.train_dataset_dict_dl_iter[k].load_state_dict(train_dataset_dict_dl_sd[k])
+            self.train_dataset_dict_dl_iter[k].load_state_dict(
+                train_dataset_dict_dl_sd[k]
+            )
 
     def state_dict(self):
         """Populate all the state that has to be stored by the stateful dataloader"""
@@ -252,7 +254,9 @@ class OnlineMixingDataset(IterableDataset):
             "gamma": self.gamma,
             "eta": self.eta,
             "sampling_interval": self.sampling_interval,
-            "train_dataset_dict_dl_sd": {k: v.state_dict() for k,v in self.train_dataset_dict_dl_iter.items()},
+            "train_dataset_dict_dl_sd": {
+                k: v.state_dict() for k, v in self.train_dataset_dict_dl_iter.items()
+            },
             "eval_batch_size": self.eval_batch_size,
             "category_list": self.category_list,
             "id2cat": self.id2cat,
@@ -263,9 +267,9 @@ class OnlineMixingDataset(IterableDataset):
             "curr_cat_count": self.curr_cat_count,
             "produced": self.produced,
             "arm_idx": self.arm_idx,
-            "reward_type":  self.reward_type.__str__(),
-            "random_state": random.getstate()
-            }
+            "reward_type": self.reward_type.__str__(),
+            "random_state": random.getstate(),
+        }
 
     def _reset_eval_dataloaders(self):
         """Helper function to reset eval dataloaders since

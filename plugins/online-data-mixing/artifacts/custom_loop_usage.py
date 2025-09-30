@@ -10,7 +10,6 @@ import os
 from accelerate import Accelerator, DataLoaderConfiguration
 from datasets import load_dataset
 from torchdata.stateful_dataloader import StatefulDataLoader
-
 from tqdm import tqdm
 from transformers import (
     AutoModelForCausalLM,
@@ -97,10 +96,14 @@ dataset = OnlineMixingDataset(
     sampling_interval=batch_size,
 )
 # dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=None)
-dataloader = StatefulDataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=None, num_workers=0)
+dataloader = StatefulDataLoader(
+    dataset, batch_size=batch_size, shuffle=False, collate_fn=None, num_workers=0
+)
 
 # distributed setup
-dataloader_config = DataLoaderConfiguration(split_batches=True, dispatch_batches=True, use_stateful_dataloader=True)
+dataloader_config = DataLoaderConfiguration(
+    split_batches=True, dispatch_batches=True, use_stateful_dataloader=True
+)
 accelerator = Accelerator(split_batches=True, dataloader_config=dataloader_config)
 model, dataloader = accelerator.prepare(model, dataloader)
 
@@ -116,14 +119,22 @@ class State:
 def save_state(output_dir, accelerator):
     os.makedirs(output_dir, exist_ok=True)
     dataloader_state_dict_name = "dl_state_dict.bin"
-    output_dataloader_state_dict_file = os.path.join(output_dir, dataloader_state_dict_name)
+    output_dataloader_state_dict_file = os.path.join(
+        output_dir, dataloader_state_dict_name
+    )
     state_dict = accelerator._dataloaders[0].state_dict()
     torch.save(state_dict, output_dataloader_state_dict_file)
 
+
 def load_state(output_dir, accelerator):
     dataloader_state_dict_name = "dl_state_dict.bin"
-    output_dataloader_state_dict_file = os.path.join(output_dir, dataloader_state_dict_name)
-    accelerator._dataloaders[0].load_state_dict(torch.load(output_dataloader_state_dict_file))
+    output_dataloader_state_dict_file = os.path.join(
+        output_dir, dataloader_state_dict_name
+    )
+    accelerator._dataloaders[0].load_state_dict(
+        torch.load(output_dataloader_state_dict_file)
+    )
+
 
 state = State()
 
@@ -143,18 +154,26 @@ for step, batch in enumerate(
     optimizer.zero_grad()
     if step_idx == 1:
         if torch.distributed.get_rank() == 0:
-            print(f"first batch {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}")
+            print(
+                f"first batch {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}"
+            )
     if step_idx == 2:
         if torch.distributed.get_rank() == 0:
-            print(f"second batch {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}")
+            print(
+                f"second batch {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}"
+            )
     if step_idx == 3:
         if torch.distributed.get_rank() == 0:
-            print(f"third batch {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}")
+            print(
+                f"third batch {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}"
+            )
             save_state("./save_state", accelerator)
         update_interval = 1000
     if step_idx == 4:
         if torch.distributed.get_rank() == 0:
-            print(f"fourth batch {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}")
+            print(
+                f"fourth batch {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}"
+            )
     if step_idx == 4:
         a_batch = batch
         a_arm_idx = dataloader.dataset.arm_idx
@@ -229,8 +248,12 @@ dataset = OnlineMixingDataset(
     sampling_interval=batch_size,
 )
 # dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=None)
-dataloader = StatefulDataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=None, num_workers=0)
-dataloader_config = DataLoaderConfiguration(split_batches=True, dispatch_batches=True, use_stateful_dataloader=True)
+dataloader = StatefulDataLoader(
+    dataset, batch_size=batch_size, shuffle=False, collate_fn=None, num_workers=0
+)
+dataloader_config = DataLoaderConfiguration(
+    split_batches=True, dispatch_batches=True, use_stateful_dataloader=True
+)
 accelerator = Accelerator(split_batches=True, dataloader_config=dataloader_config)
 model, dataloader = accelerator.prepare(model, dataloader)
 load_state("./save_state", accelerator)
@@ -239,7 +262,9 @@ batch = next(dl_itr)
 # batch = next(dl_itr)
 # batch = next(dl_itr)
 if torch.distributed.get_rank() == 0:
-    print(f"second batch resume {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}")
+    print(
+        f"second batch resume {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}"
+    )
     print(f"second batch {a_batch['input_ids']} arm_idx {a_arm_idx}")
     assert torch.equal(batch["input_ids"], a_batch["input_ids"])
 
