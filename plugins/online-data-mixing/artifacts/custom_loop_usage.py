@@ -132,7 +132,7 @@ for step, batch in enumerate(
     if step_idx == 1:
         print(f"first batch {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}")
         accelerator.save_state("./save_state")
-    if step_idx == 2:
+    if step_idx == 3:
         a_batch = batch
         a_arm_idx = dataloader.dataset.arm_idx
         break
@@ -173,6 +173,7 @@ accelerator = Accelerator(split_batches=True, dataloader_config=dataloader_confi
 model, dataloader = accelerator.prepare(model, dataloader)
 
 accelerator.load_state("./save_state")
+batch = next(iter(dataloader))
 batch = next(iter(dataloader))
 print(f"second batch resume {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}")
 print(f"second batch {a_batch['input_ids']} arm_idx {a_arm_idx}")
