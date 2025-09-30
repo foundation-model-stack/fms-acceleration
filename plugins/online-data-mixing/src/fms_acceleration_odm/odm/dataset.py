@@ -186,6 +186,7 @@ class OnlineMixingDataset(IterableDataset):
             )[0]
         sample = None
         try:
+            print(self.train_dataset_dict_dl)
             sample = next(self.train_dataset_dict_dl[self.id2cat[self.arm_idx]])
         except StopIteration:
             logger.info(
