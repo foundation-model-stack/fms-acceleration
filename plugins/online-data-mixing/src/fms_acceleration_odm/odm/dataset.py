@@ -246,7 +246,7 @@ class OnlineMixingDataset(IterableDataset):
             self.train_dataset_dict_dl[k].load_state_dict(train_dataset_dict_dl_sd[k])
 
     def state_dict(self):
-        return {
+        state = {
             "rng": torch.get_rng_state(),
             "gamma": self.gamma,
             "eta": self.eta,
@@ -265,6 +265,8 @@ class OnlineMixingDataset(IterableDataset):
             "reward_type":  self.reward_type.__str__(),
             "random_state": random.getstate()
             }
+        print(state)
+        return state
 
     def _reset_eval_dataloaders(self):
         """Helper function to reset eval dataloaders since
