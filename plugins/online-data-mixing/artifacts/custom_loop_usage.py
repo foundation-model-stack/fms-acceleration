@@ -139,7 +139,10 @@ for step, batch in enumerate(
     if step_idx == 3:
         if torch.distributed.get_rank() == 0:
             print(f"third batch {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}")
-    if step_idx == 3:
+    if step_idx == 4:
+        if torch.distributed.get_rank() == 0:
+            print(f"fourth batch {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}")
+    if step_idx == 4:
         a_batch = batch
         a_arm_idx = dataloader.dataset.arm_idx
         break
@@ -219,6 +222,7 @@ accelerator = Accelerator(split_batches=True, dataloader_config=dataloader_confi
 model, dataloader = accelerator.prepare(model, dataloader)
 accelerator.load_state("./save_state")
 dl_itr = iter(dataloader)
+batch = next(dl_itr)
 batch = next(dl_itr)
 batch = next(dl_itr)
 if torch.distributed.get_rank() == 0:
