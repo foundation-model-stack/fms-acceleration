@@ -30,7 +30,7 @@ log_file = os.path.join(output_dir, "loss.jsonl")
 
 # odm related
 step_idx = 0
-update_interval = 1000  # every step
+update_interval = 1  # every step
 
 # model
 model = AutoModelForCausalLM.from_pretrained(model_name)
@@ -132,13 +132,13 @@ for step, batch in enumerate(
     if step_idx == 1:
         if torch.distributed.get_rank() == 0:
             print(f"first batch {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}")
-        accelerator.save_state("./save_state")
     if step_idx == 2:
         if torch.distributed.get_rank() == 0:
             print(f"second batch {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}")
     if step_idx == 3:
         if torch.distributed.get_rank() == 0:
             print(f"third batch {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}")
+        accelerator.save_state("./save_state")
     if step_idx == 4:
         if torch.distributed.get_rank() == 0:
             print(f"fourth batch {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}")
@@ -223,8 +223,8 @@ model, dataloader = accelerator.prepare(model, dataloader)
 accelerator.load_state("./save_state")
 dl_itr = iter(dataloader)
 batch = next(dl_itr)
-batch = next(dl_itr)
-batch = next(dl_itr)
+# batch = next(dl_itr)
+# batch = next(dl_itr)
 if torch.distributed.get_rank() == 0:
     print(f"second batch resume {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}")
     print(f"second batch {a_batch['input_ids']} arm_idx {a_arm_idx}")
