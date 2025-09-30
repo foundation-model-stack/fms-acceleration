@@ -119,6 +119,7 @@ sd = None
 # custom training loop
 model.train()
 a_batch = None
+a_arm_idx = None
 for step, batch in enumerate(
     tqdm(dataloader, disable=not accelerator.is_local_main_process)
 ):
@@ -129,10 +130,11 @@ for step, batch in enumerate(
     optimizer.step()
     optimizer.zero_grad()
     if step_idx == 1:
-        print(f"first batch {batch['input_ids']}")
+        print(f"first batch {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}")
         accelerator.save_state("./save_state")
     if step_idx == 2:
         a_batch = batch
+        a_arm_idx = dataloader.dataset.arm_idx
         break
     if step_idx % 5 == 0:
         break
@@ -172,8 +174,8 @@ model, dataloader = accelerator.prepare(model, dataloader)
 
 accelerator.load_state("./save_state")
 batch = next(iter(dataloader))
-print(f"second batch resume {batch['input_ids']}")
-print(f"secon batch {a_batch['input_ids']}")
+print(f"second batch resume {batch['input_ids']} arm_idx {dataloader.dataset.arm_idx}")
+print(f"second batch {a_batch['input_ids']} arm_idx {a_arm_idx}")
 assert torch.equal(batch["input_ids"], a_batch["input_ids"])
 
 print("Training completed!")

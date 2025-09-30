@@ -276,7 +276,7 @@ class OnlineMixingDataset(IterableDataset):
                     DataLoader(
                         self.eval_dataset_dict[k],
                         self.eval_batch_size,
-                        shuffle=False,
+                        shuffle=True,
                         num_workers=0,
                         collate_fn=(
                             self.eval_collators_dict[k]
