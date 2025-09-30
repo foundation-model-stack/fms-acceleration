@@ -105,7 +105,7 @@ class OnlineMixingDataset(IterableDataset):
                 dataset_dict[k],
                 1,
                 shuffle=False,
-                num_workers=1,
+                num_workers=0,
                 collate_fn=collators_dict[k] if collators_dict else None,
             )
             self.train_dataset_dict_dl[k] = iter(dataset_dict[k])
@@ -240,6 +240,7 @@ class OnlineMixingDataset(IterableDataset):
         self.train_dataset_dict_dl = {}
         for k, _ in dataset_dict.items():
             self.dataset_dict[k].load_state_dict(dataset_dict[k])
+            print(self.dataset_dict[k])
             self.train_dataset_dict_dl[k] = iter(self.dataset_dict[k])
 
     def state_dict(self):
@@ -276,7 +277,7 @@ class OnlineMixingDataset(IterableDataset):
                         self.eval_dataset_dict[k],
                         self.eval_batch_size,
                         shuffle=False,
-                        num_workers=1,
+                        num_workers=0,
                         collate_fn=(
                             self.eval_collators_dict[k]
                             if self.eval_collators_dict
