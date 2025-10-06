@@ -201,6 +201,7 @@ def get_train_dataloader(self):
         self.accelerator._dataloaders[0].load_state_dict(
             torch.load(output_dataloader_state_dict_file)
         )
+    return dataloader
 
 def skip_first_batches(dataloader, num_batches=0):
     return dataloader
