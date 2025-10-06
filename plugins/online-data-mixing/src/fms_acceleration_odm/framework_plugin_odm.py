@@ -72,7 +72,6 @@ class OnlineDataMixingAccelerationPlugin(AccelerationPlugin):
     ):
         callbacks = []
         patch_hf_trainer_evaluate()
-        accelerator.split_batches = True
         return callbacks
 
 
