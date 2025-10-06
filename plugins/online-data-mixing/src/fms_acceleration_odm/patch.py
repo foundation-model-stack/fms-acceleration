@@ -107,7 +107,7 @@ def _evaluate(self, trial, ignore_keys_for_eval, skip_scheduler=False):
         self.train_dataset.update_sampling_weights(model, self.accelerator, self.state)
         
         # save the dataloader
-        if self.control.should_save:
+        if self.control.should_save and self.accelerator.is_main_process:
             logger.info("dataloader is saved")
             output_dir = os.path.join(self.args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}")
             os.makedirs(output_dir, exist_ok=True)
