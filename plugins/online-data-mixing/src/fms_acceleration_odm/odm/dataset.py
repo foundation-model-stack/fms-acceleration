@@ -179,7 +179,7 @@ class OnlineMixingDataset(IterableDataset):
         return self
 
     def __next__(self):
-        assert torch.distributed.get_rank() != 1
+        assert torch.distributed.get_rank() == 0
         if self.produced % self.sampling_interval == 0:
             self.arm_idx = random.choices(
                 range(self.total_categories), weights=self.sampling_ratio, k=1
