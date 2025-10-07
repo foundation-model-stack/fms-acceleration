@@ -256,5 +256,6 @@ def skip_first_batches(dataloader, num_batches=0):
 
 class DataLoaderConfiguration(DLConf):
     def __init__(self, **kwargs):
+        print("kwargs", kwargs)
         kwargs["use_stateful_dataloader"] = True
         super().__init__(**kwargs)
