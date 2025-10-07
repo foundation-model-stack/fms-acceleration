@@ -4,6 +4,7 @@ from logging import getLogger
 import os
 
 from accelerate import DataLoaderConfiguration as DLConf
+from dataclasses import dataclass
 
 logger = getLogger(__name__)
 
@@ -254,6 +255,7 @@ def get_train_dataloader(self):
 def skip_first_batches(dataloader, num_batches=0):
     return dataloader
 
+@dataclass
 class DataLoaderConfiguration(DLConf):
     def __init__(self, **kwargs):
         print("kwargs", kwargs)
