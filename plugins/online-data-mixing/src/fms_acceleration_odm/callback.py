@@ -14,8 +14,11 @@ class DataloaderSavingCallback(TrainerCallback):
     def __init__(self, accelerator):
         super().__init__()
         self.accelerator = accelerator
+
     def on_save(self, args, state, control, **kwargs):
+        # Third Party
         from torchdata.stateful_dataloader import StatefulDataLoader
+
         checkpoint_path = os.path.join(
             args.output_dir, f"checkpoint-{state.global_step}"
         )
@@ -24,5 +27,8 @@ class DataloaderSavingCallback(TrainerCallback):
             if isinstance(
                 self.accelerator._dataloaders[i].base_dataloader, StatefulDataLoader
             ):
-                torch.save(self.accelerator._dataloaders[i].state_dict(), os.path.join(checkpoint_path, "odm_dl_state_dict.bin"))
+                torch.save(
+                    self.accelerator._dataloaders[i].state_dict(),
+                    os.path.join(checkpoint_path, "odm_dl_state_dict.bin"),
+                )
                 break
