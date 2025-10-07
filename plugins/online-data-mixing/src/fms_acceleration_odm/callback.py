@@ -24,5 +24,5 @@ class DataloaderSavingCallback(TrainerCallback):
             if isinstance(
                 self.accelerator._dataloaders[i].base_dataloader, StatefulDataLoader
             ):
-                torch.save(self.accelerator._dataloaders[i].base_dataloader, os.path.join(checkpoint_path, "odm_dl_state_dict.bin"))
+                torch.save(self.accelerator._dataloaders[i].state_dict(), os.path.join(checkpoint_path, "odm_dl_state_dict.bin"))
                 break
