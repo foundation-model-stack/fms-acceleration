@@ -111,6 +111,7 @@ def _evaluate(self, trial, ignore_keys_for_eval, skip_scheduler=False):
             logger.info("dataloader is saved")
             output_dir = os.path.join(self.args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}")
             os.makedirs(output_dir, exist_ok=True)
+            print("self.accelerator._dataloaders", self.accelerator._dataloaders)
             torch.save(self.accelerator._dataloaders[0].state_dict(), os.path.join(output_dir, "odm_dl_state_dict.bin"))
     return metrics
 
