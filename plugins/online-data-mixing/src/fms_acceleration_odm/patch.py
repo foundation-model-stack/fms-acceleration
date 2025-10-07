@@ -158,6 +158,7 @@ def _get_dataloader(
                 seed_worker, num_workers=self.args.dataloader_num_workers, rank=self.args.process_index
             )
     if is_training:
+        print("inside is training and stateful dataloader")
         dataloader = self.accelerator.prepare(StatefulDataLoader(dataset, **dataloader_params))
     else:
         dataloader = self.accelerator.prepare(DataLoader(dataset, **dataloader_params))
