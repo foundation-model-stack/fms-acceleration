@@ -61,8 +61,8 @@ class OnlineDataMixingAccelerationPlugin(AccelerationPlugin):
         train_args.eval_steps = 1
         train_args.eval_strategy = "steps"
 
-        # update_interval and resume_from_checkpoint information has to be made 
-        # available in the evaluate HF patch function and this seems to be 
+        # update_interval and resume_from_checkpoint information has to be made
+        # available in the evaluate HF patch function and this seems to be
         # the only reasonable way to do so
         model.ta_update_interval = self._update_interval
         model.resume_from_checkpoint = self._resume_from_checkpoint
