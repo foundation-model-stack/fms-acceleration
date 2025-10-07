@@ -20,7 +20,7 @@ def patch_hf_trainer_evaluate():
     Trainer.get_train_dataloader = get_train_dataloader
     patch_target_module("transformers.trainer.Trainer", Trainer)
     patch_target_module("transformers.trainer.skip_first_batches", skip_first_batches)
-    patch_target_module("accelerate.utils.dataclasses.DataLoaderConfiguration", DataLoaderConfiguration)
+    # patch_target_module("accelerate.utils.dataclasses.DataLoaderConfiguration", DataLoaderConfiguration)
 
 
 def _evaluate(self, trial, ignore_keys_for_eval, skip_scheduler=False):
@@ -189,6 +189,7 @@ def _get_dataloader(
             )
     if is_training:
         print("inside is training and stateful dataloader")
+        self.accelerator.dataloader_config.use_stateful_dataloader = True
         dataloader = self.accelerator.prepare(
             StatefulDataLoader(dataset, **dataloader_params)
         )
