@@ -35,7 +35,7 @@ class OnlineDataMixingAccelerationPlugin(AccelerationPlugin):
             key="training.odm.odm.update_interval",
             default=1,
         )
-        
+
         self._resume_from_checkpoint = self._check_config_and_maybe_check_values(
             key="training.odm.odm.resume_from_checkpoint",
             default=False,
@@ -63,7 +63,7 @@ class OnlineDataMixingAccelerationPlugin(AccelerationPlugin):
         # update_interval information has to be made available in the evaluate HF patch
         # function and this seems to be the only reasonable way to do so
         model.ta_update_interval = self._update_interval
-        
+
         model.resume_from_checkpoint = self._resume_from_checkpoint
         return model, modifiable_args
 

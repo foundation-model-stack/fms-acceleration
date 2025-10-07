@@ -192,7 +192,9 @@ for step, batch in enumerate(
     if step_idx % update_interval == 0:
         with torch.no_grad():
             model.eval()
-            dataloader.dataset.update_sampling_weights(model, accelerator, trainer_state)
+            dataloader.dataset.update_sampling_weights(
+                model, accelerator, trainer_state
+            )
             model.train()
     if step_idx > max_steps:
         break
