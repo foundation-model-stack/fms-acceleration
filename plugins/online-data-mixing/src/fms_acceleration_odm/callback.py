@@ -25,7 +25,8 @@ class DataloaderSavingCallback(TrainerCallback):
         checkpoint_path = os.path.join(
             args.output_dir, f"checkpoint-{state.global_step}"
         )
-        logger.info("dataloader is saved")
+        # It is assumed that one of the datasets would be stateful
+        # if stateful then it would be training dataset
         for i, _ in enumerate(self.accelerator._dataloaders):
             if isinstance(
                 self.accelerator._dataloaders[i].base_dataloader, StatefulDataLoader
