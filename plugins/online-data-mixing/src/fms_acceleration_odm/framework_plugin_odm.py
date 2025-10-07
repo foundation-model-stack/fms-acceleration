@@ -23,6 +23,7 @@ import torch
 
 # Local
 from .patch import patch_hf_trainer_evaluate
+from .callback import DataloaderSavingCallback
 
 
 # pylint: disable=too-many-instance-attributes
@@ -70,7 +71,7 @@ class OnlineDataMixingAccelerationPlugin(AccelerationPlugin):
     def get_callbacks_and_ready_for_train(
         self, model: torch.nn.Module = None, accelerator=None
     ):
-        callbacks = []
+        callbacks = [DataloaderSavingCallback()]
         patch_hf_trainer_evaluate()
         return callbacks
 

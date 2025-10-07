@@ -3,8 +3,6 @@
 from logging import getLogger
 import os
 
-from accelerate import DataLoaderConfiguration as DLConf
-from dataclasses import dataclass
 
 logger = getLogger(__name__)
 
@@ -20,9 +18,9 @@ def patch_hf_trainer_evaluate():
     Trainer.get_train_dataloader = get_train_dataloader
     patch_target_module("transformers.trainer.Trainer", Trainer)
     patch_target_module("transformers.trainer.skip_first_batches", skip_first_batches)
-    # patch_target_module("accelerate.utils.dataclasses.DataLoaderConfiguration", DataLoaderConfiguration)
 
 
+# code taken from transformers, modified and patches original function
 def _evaluate(self, trial, ignore_keys_for_eval, skip_scheduler=False):
     # Standard
     # pylint: disable=import-outside-toplevel
@@ -113,29 +111,9 @@ def _evaluate(self, trial, ignore_keys_for_eval, skip_scheduler=False):
         # prepare dataloader
         self.train_dataset.update_sampling_weights(model, self.accelerator, self.state)
 
-        # save the dataloader
-        if self.control.should_save and self.accelerator.is_main_process:
-            logger.info("dataloader is saved")
-            output_dir = os.path.join(
-                self.args.output_dir,
-                f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}",
-            )
-            os.makedirs(output_dir, exist_ok=True)
-            print("self.accelerator._dataloaders", self.accelerator._dataloaders)
-            for i in range(len(self.accelerator._dataloaders)):
-                print(self.accelerator._dataloaders[i].base_dataloader)
-                if isinstance(
-                    self.accelerator._dataloaders[i].base_dataloader, StatefulDataLoader
-                ):
-                    torch.save(
-                        self.accelerator._dataloaders[i].state_dict(),
-                        os.path.join(output_dir, "odm_dl_state_dict.bin"),
-                    )
-                    break
     return metrics
 
-
-# code taken from transformers and modified
+# code taken from transformers, modified and patches original function
 def _get_dataloader(
     self,
     dataset,
@@ -207,7 +185,7 @@ def _get_dataloader(
 
     return dataloader
 
-
+# code taken from transformers, modified and patches original function
 def get_train_dataloader(self):
     # Third Party
     from torchdata.stateful_dataloader import StatefulDataLoader
@@ -252,25 +230,6 @@ def get_train_dataloader(self):
                 break
     return dataloader
 
-
+# code taken from transformers, modified and patches original function
 def skip_first_batches(dataloader, num_batches=0):
     return dataloader
-
-
-from dataclasses import fields, make_dataclass, field
-
-def replace_default(cls, field_name, new_default):
-    # Copy fields, replacing one default
-    new_fields = []
-    for f in fields(cls):
-        if f.name == field_name:
-            new_fields.append((f.name, f.type, field(default=new_default)))
-        else:
-            # preserve old default if any
-            if f.default is not f.default_factory:
-                new_fields.append((f.name, f.type, field(default=f.default)))
-            else:
-                new_fields.append((f.name, f.type))
-    return make_dataclass(cls.__name__, new_fields)
-
-DataLoaderConfiguration = replace_default(DLConf, "use_stateful_dataloader", True)
