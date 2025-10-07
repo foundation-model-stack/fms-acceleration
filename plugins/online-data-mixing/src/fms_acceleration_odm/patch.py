@@ -177,6 +177,7 @@ def get_train_dataloader(self):
     if self.train_dataset is None:
         raise ValueError("Trainer: training requires a train_dataset.")
 
+    print("updated get train dataloader")
     dataloader = self._get_dataloader(
         dataset=self.train_dataset,
         description="Training",
