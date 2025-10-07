@@ -17,6 +17,8 @@ class DataloaderSavingCallback(TrainerCallback):
 
     def on_save(self, args, state, control, **kwargs):
         # Third Party
+        if not self.accelerator.is_main_process:
+            return
         from torchdata.stateful_dataloader import StatefulDataLoader
 
         checkpoint_path = os.path.join(
