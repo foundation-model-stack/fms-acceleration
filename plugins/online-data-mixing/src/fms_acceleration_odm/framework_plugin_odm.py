@@ -22,8 +22,8 @@ from transformers import TrainingArguments
 import torch
 
 # Local
-from .patch import patch_hf_trainer_evaluate
 from .callback import DataloaderSavingCallback
+from .patch import patch_hf_trainer_evaluate
 
 
 # pylint: disable=too-many-instance-attributes

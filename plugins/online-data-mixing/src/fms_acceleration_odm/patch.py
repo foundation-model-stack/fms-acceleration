@@ -3,7 +3,6 @@
 from logging import getLogger
 import os
 
-
 logger = getLogger(__name__)
 
 
@@ -27,9 +26,6 @@ def _evaluate(self, trial, ignore_keys_for_eval, skip_scheduler=False):
     import time
 
     # Third Party
-    from torchdata.stateful_dataloader import StatefulDataLoader
-    from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
-
     # pylint: disable=import-outside-toplevel
     import torch
 
@@ -113,6 +109,7 @@ def _evaluate(self, trial, ignore_keys_for_eval, skip_scheduler=False):
 
     return metrics
 
+
 # code taken from transformers, modified and patches original function
 def _get_dataloader(
     self,
@@ -125,9 +122,11 @@ def _get_dataloader(
 ):
     """Create a [`~torch.utils.data.DataLoader`] from the given dataset."""
     # Standard
+    # pylint: disable=import-outside-toplevel
     from functools import partial
 
     # Third Party
+    # pylint: disable=import-outside-toplevel
     from torch.utils.data import DataLoader
     from torchdata.stateful_dataloader import StatefulDataLoader
     from transformers import is_datasets_available
@@ -136,6 +135,7 @@ def _get_dataloader(
 
     if is_datasets_available():
         # Third Party
+        # pylint: disable=import-outside-toplevel
         import datasets
 
     data_collator = self.data_collator
@@ -166,13 +166,10 @@ def _get_dataloader(
                 rank=self.args.process_index,
             )
     if is_training:
-        print("inside is training and stateful dataloader")
         self.accelerator.dataloader_config.use_stateful_dataloader = True
         dataloader = self.accelerator.prepare(
             StatefulDataLoader(dataset, **dataloader_params)
         )
-        for i in range(len(self.accelerator._dataloaders)):
-            print("print dataloader", self.accelerator._dataloaders[i].base_dataloader)
     else:
         dataloader = self.accelerator.prepare(DataLoader(dataset, **dataloader_params))
 
@@ -185,9 +182,11 @@ def _get_dataloader(
 
     return dataloader
 
+
 # code taken from transformers, modified and patches original function
 def get_train_dataloader(self):
     # Third Party
+    # pylint: disable=import-outside-toplevel
     from torchdata.stateful_dataloader import StatefulDataLoader
     from transformers.trainer_utils import get_last_checkpoint
     import torch
@@ -195,7 +194,6 @@ def get_train_dataloader(self):
     if self.train_dataset is None:
         raise ValueError("Trainer: training requires a train_dataset.")
 
-    print("updated get train dataloader")
     dataloader = self._get_dataloader(
         dataset=self.train_dataset,
         description="Training",
@@ -219,8 +217,7 @@ def get_train_dataloader(self):
         output_dataloader_state_dict_file = os.path.join(
             resume_from_checkpoint, dataloader_state_dict_name
         )
-        for i in range(len(self.accelerator._dataloaders)):
-            print(self.accelerator._dataloaders[i].base_dataloader)
+        for i, _ in enumerate(self.accelerator._dataloaders):
             if isinstance(
                 self.accelerator._dataloaders[i].base_dataloader, StatefulDataLoader
             ):
@@ -229,6 +226,7 @@ def get_train_dataloader(self):
                 )
                 break
     return dataloader
+
 
 # code taken from transformers, modified and patches original function
 def skip_first_batches(dataloader, num_batches=0):

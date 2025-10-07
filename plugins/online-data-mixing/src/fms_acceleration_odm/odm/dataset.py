@@ -179,10 +179,6 @@ class OnlineMixingDataset(IterableDataset):
         return self
 
     def __next__(self):
-        try:
-            assert torch.distributed.get_rank() == 0
-        except:
-            print("next assert failed")
         if self.produced % self.sampling_interval == 0:
             self.arm_idx = random.choices(
                 range(self.total_categories), weights=self.sampling_ratio, k=1
@@ -243,7 +239,10 @@ class OnlineMixingDataset(IterableDataset):
         torch.set_rng_state(state_dict["rng"])
         train_dataset_dict_dl_sd = state_dict.pop("train_dataset_dict_dl_sd")
         random.setstate(state_dict.pop("random_state"))
-        self.__dict__.update(state_dict)
+        for k, v in state_dict.items():
+            if hasattr(self, k):
+                setattr(self, k, v)
+        logger.info("dataloader is loaded with the following state: ", state_dict)
         self.reward_type = Reward[state_dict["reward_type"].upper()]
         for k, _ in train_dataset_dict_dl_sd.items():
             self.train_dataset_dict_dl_iter[k].load_state_dict(
@@ -270,7 +269,7 @@ class OnlineMixingDataset(IterableDataset):
             "curr_cat_count": self.curr_cat_count,
             "produced": self.produced,
             "arm_idx": self.arm_idx,
-            "reward_type": self.reward_type.__str__(),
+            "reward_type": str(self.reward_type),
             "random_state": random.getstate(),
         }
 
@@ -441,14 +440,14 @@ class OnlineMixingDataset(IterableDataset):
         if accelerator:
             rewards = accelerator.reduce(rewards, reduction="sum")
             count = accelerator.reduce(count, reduction="sum")
-        if accelerator.is_main_process:
+        if accelerator and accelerator.is_main_process:
             self._update_weights(count, rewards)
-        self.log_to_file(
-            {
-                "current_sampling_weights": self.sampling_weights.tolist(),
-                "current_sampling_ratio": self.sampling_ratio,
-                "rewards": rewards.tolist(),
-                "count": count.tolist(),
-                "action": "update",
-            }
-        )
+            self.log_to_file(
+                {
+                    "current_sampling_weights": self.sampling_weights.tolist(),
+                    "current_sampling_ratio": self.sampling_ratio,
+                    "rewards": rewards.tolist(),
+                    "count": count.tolist(),
+                    "action": "update",
+                }
+            )
