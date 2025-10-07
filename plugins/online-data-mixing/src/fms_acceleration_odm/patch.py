@@ -255,8 +255,21 @@ def get_train_dataloader(self):
 def skip_first_batches(dataloader, num_batches=0):
     return dataloader
 
-@dataclass
-class DataLoaderConfiguration(DLConf):
-    def __post_init__(self):
-        print("being set sd")
-        self.use_stateful_dataloader = True
+
+from dataclasses import fields, make_dataclass, field
+
+def replace_default(cls, field_name, new_default):
+    # Copy fields, replacing one default
+    new_fields = []
+    for f in fields(cls):
+        if f.name == field_name:
+            new_fields.append((f.name, f.type, field(default=new_default)))
+        else:
+            # preserve old default if any
+            if f.default is not f.default_factory:
+                new_fields.append((f.name, f.type, field(default=f.default)))
+            else:
+                new_fields.append((f.name, f.type))
+    return make_dataclass(cls.__name__, new_fields)
+
+DataLoaderConfiguration = replace_default(DLConf, "use_stateful_dataloader", True)
