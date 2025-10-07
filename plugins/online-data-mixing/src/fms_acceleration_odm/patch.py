@@ -3,6 +3,8 @@
 from logging import getLogger
 import os
 
+from accelerate import DataLoaderConfiguration as DLConf
+
 logger = getLogger(__name__)
 
 
@@ -17,6 +19,7 @@ def patch_hf_trainer_evaluate():
     Trainer.get_train_dataloader = get_train_dataloader
     patch_target_module("transformers.trainer.Trainer", Trainer)
     patch_target_module("transformers.trainer.skip_first_batches", skip_first_batches)
+    patch_target_module("accelerate.utils.dataclasses.DataLoaderConfiguration", DataLoaderConfiguration)
 
 
 def _evaluate(self, trial, ignore_keys_for_eval, skip_scheduler=False):
@@ -250,3 +253,8 @@ def get_train_dataloader(self):
 
 def skip_first_batches(dataloader, num_batches=0):
     return dataloader
+
+class DataLoaderConfiguration(DLConf):
+    def __init__(self, **kwargs):
+        kwargs["use_stateful_dataloader"] = True
+        super().__init__(**kwargs)
