@@ -27,6 +27,7 @@ def _evaluate(self, trial, ignore_keys_for_eval, skip_scheduler=False):
     # pylint: disable=import-outside-toplevel
     import torch
     from transformers.trainer_utils import PREFIX_CHECKPOINT_DIR
+    from torchdata.stateful_dataloader import StatefulDataLoader
 
     metrics = None
     if (
@@ -112,7 +113,11 @@ def _evaluate(self, trial, ignore_keys_for_eval, skip_scheduler=False):
             output_dir = os.path.join(self.args.output_dir, f"{PREFIX_CHECKPOINT_DIR}-{self.state.global_step}")
             os.makedirs(output_dir, exist_ok=True)
             print("self.accelerator._dataloaders", self.accelerator._dataloaders)
-            torch.save(self.accelerator._dataloaders[0].state_dict(), os.path.join(output_dir, "odm_dl_state_dict.bin"))
+            for i in range(len(self.accelerator._dataloaders)):
+                print(self.accelerator._dataloaders[i].base_dataloader)
+                if isinstance(self.accelerator._dataloaders[i].base_dataloader, StatefulDataLoader):
+                    torch.save(self.accelerator._dataloaders[i].state_dict(), os.path.join(output_dir, "odm_dl_state_dict.bin"))
+                    break
     return metrics
 
 # code taken from transformers and modified
@@ -174,7 +179,8 @@ def _get_dataloader(
     return dataloader
 
 def get_train_dataloader(self):
-    from transformers.trainer_utils import get_last_checkpoint, seed_worker
+    from transformers.trainer_utils import get_last_checkpoint
+    from torchdata.stateful_dataloader import StatefulDataLoader
     import torch
     if self.train_dataset is None:
         raise ValueError("Trainer: training requires a train_dataset.")
@@ -201,9 +207,13 @@ def get_train_dataloader(self):
         output_dataloader_state_dict_file = os.path.join(
             resume_from_checkpoint, dataloader_state_dict_name
         )
-        self.accelerator._dataloaders[0].load_state_dict(
-            torch.load(output_dataloader_state_dict_file)
-        )
+        for i in range(len(self.accelerator._dataloaders)):
+            print(self.accelerator._dataloaders[i].base_dataloader)
+            if isinstance(self.accelerator._dataloaders[i].base_dataloader, StatefulDataLoader):
+                self.accelerator._dataloaders[i].load_state_dict(
+                    torch.load(output_dataloader_state_dict_file)
+                )
+                break
     return dataloader
 
 def skip_first_batches(dataloader, num_batches=0):
