@@ -16,9 +16,10 @@ class DataloaderSavingCallback(TrainerCallback):
         self.accelerator = accelerator
 
     def on_save(self, args, state, control, **kwargs):
-        # Third Party
         if not self.accelerator.is_main_process:
             return
+        # Third Party
+        # pylint: disable=import-outside-toplevel
         from torchdata.stateful_dataloader import StatefulDataLoader
 
         checkpoint_path = os.path.join(

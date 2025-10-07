@@ -242,7 +242,6 @@ class OnlineMixingDataset(IterableDataset):
         for k, v in state_dict.items():
             if hasattr(self, k):
                 setattr(self, k, v)
-        logger.info(f"dataloader is loaded with the following state: {state_dict}")
         self.reward_type = Reward[state_dict["reward_type"].upper()]
         for k, _ in train_dataset_dict_dl_sd.items():
             self.train_dataset_dict_dl_iter[k].load_state_dict(
