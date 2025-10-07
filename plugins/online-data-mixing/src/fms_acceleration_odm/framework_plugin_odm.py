@@ -71,7 +71,7 @@ class OnlineDataMixingAccelerationPlugin(AccelerationPlugin):
     def get_callbacks_and_ready_for_train(
         self, model: torch.nn.Module = None, accelerator=None
     ):
-        callbacks = [DataloaderSavingCallback()]
+        callbacks = [DataloaderSavingCallback(accelerator)]
         patch_hf_trainer_evaluate()
         return callbacks
 

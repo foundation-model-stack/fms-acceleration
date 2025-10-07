@@ -11,14 +11,18 @@ logger = getLogger(__name__)
 
 
 class DataloaderSavingCallback(TrainerCallback):
+    def __init__(self, accelerator):
+        super().__init__()
+        self.accelerator = accelerator
     def on_save(self, args, state, control, **kwargs):
+        from torchdata.stateful_dataloader import StatefulDataLoader
         checkpoint_path = os.path.join(
             args.output_dir, f"checkpoint-{state.global_step}"
         )
-        print(kwargs["train_dataloader"])
-        # save the dataloader
         logger.info("dataloader is saved")
-        torch.save(
-            kwargs["train_dataloader"].state_dict(),
-            os.path.join(checkpoint_path, "odm_dl_state_dict.bin"),
-        )
+        for i, _ in enumerate(self.accelerator._dataloaders):
+            if isinstance(
+                self.accelerator._dataloaders[i].base_dataloader, StatefulDataLoader
+            ):
+                torch.save(self.accelerator._dataloaders[i].base_dataloader, os.path.join(checkpoint_path, "odm_dl_state_dict.bin"))
+                break
