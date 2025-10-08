@@ -1,9 +1,7 @@
 # fms-hf-tuning patch
 # Standard
 from logging import getLogger
-
-# Third Party
-from transformers import Trainer
+import os
 
 logger = getLogger(__name__)
 
@@ -12,11 +10,16 @@ def patch_hf_trainer_evaluate():
     # Third Party
     # pylint: disable=import-outside-toplevel
     from fms_acceleration.model_patcher import patch_target_module
+    from transformers import Trainer
 
     Trainer._evaluate = _evaluate
+    Trainer._get_dataloader = _get_dataloader
+    Trainer.get_train_dataloader = get_train_dataloader
     patch_target_module("transformers.trainer.Trainer", Trainer)
+    patch_target_module("transformers.trainer.skip_first_batches", skip_first_batches)
 
 
+# code taken from transformers, modified and patches original function
 def _evaluate(self, trial, ignore_keys_for_eval, skip_scheduler=False):
     # Standard
     # pylint: disable=import-outside-toplevel
@@ -105,3 +108,126 @@ def _evaluate(self, trial, ignore_keys_for_eval, skip_scheduler=False):
         self.train_dataset.update_sampling_weights(model, self.accelerator, self.state)
 
     return metrics
+
+
+# code taken from transformers, modified and patches original function
+def _get_dataloader(
+    self,
+    dataset,
+    description,
+    batch_size,
+    sampler_fn=None,
+    is_training=False,
+    dataloader_key=None,
+):
+    """Create a [`~torch.utils.data.DataLoader`] from the given dataset."""
+    # Standard
+    # pylint: disable=import-outside-toplevel
+    from functools import partial
+
+    # Third Party
+    # pylint: disable=import-outside-toplevel
+    from torch.utils.data import DataLoader
+    from torchdata.stateful_dataloader import StatefulDataLoader
+    from transformers import is_datasets_available
+    from transformers.trainer_utils import seed_worker
+    import torch
+
+    if is_datasets_available():
+        # Third Party
+        # pylint: disable=import-outside-toplevel
+        import datasets
+
+    data_collator = self.data_collator
+    if is_datasets_available() and isinstance(dataset, datasets.Dataset):
+        dataset = self._remove_unused_columns(dataset, description=description)
+    else:
+        data_collator = self._get_collator_with_removed_columns(
+            self.data_collator, description=description
+        )
+
+    dataloader_params = {
+        "batch_size": batch_size,
+        "collate_fn": data_collator,
+        "num_workers": self.args.dataloader_num_workers,
+        "pin_memory": self.args.dataloader_pin_memory,
+        "persistent_workers": self.args.dataloader_persistent_workers,
+    }
+
+    if not isinstance(dataset, torch.utils.data.IterableDataset):
+        if sampler_fn is not None:
+            dataloader_params["sampler"] = sampler_fn(dataset)
+        dataloader_params["drop_last"] = self.args.dataloader_drop_last
+        dataloader_params["prefetch_factor"] = self.args.dataloader_prefetch_factor
+        if is_training:
+            dataloader_params["worker_init_fn"] = partial(
+                seed_worker,
+                num_workers=self.args.dataloader_num_workers,
+                rank=self.args.process_index,
+            )
+    if is_training:
+        self.accelerator.dataloader_config.use_stateful_dataloader = True
+        dataloader = self.accelerator.prepare(
+            StatefulDataLoader(dataset, **dataloader_params)
+        )
+    else:
+        dataloader = self.accelerator.prepare(DataLoader(dataset, **dataloader_params))
+
+    # Store the prepared dataloader for subsequent evaluations if using persistent workers.
+    if dataloader_key is not None and self.args.dataloader_persistent_workers:
+        if hasattr(self, "_eval_dataloaders"):
+            self._eval_dataloaders[dataloader_key] = dataloader
+        else:
+            self._eval_dataloaders = {dataloader_key: dataloader}
+
+    return dataloader
+
+
+# code taken from transformers, modified and patches original function
+def get_train_dataloader(self):
+    # Third Party
+    # pylint: disable=import-outside-toplevel
+    from torchdata.stateful_dataloader import StatefulDataLoader
+    from transformers.trainer_utils import get_last_checkpoint
+    import torch
+
+    if self.train_dataset is None:
+        raise ValueError("Trainer: training requires a train_dataset.")
+
+    dataloader = self._get_dataloader(
+        dataset=self.train_dataset,
+        description="Training",
+        batch_size=self._train_batch_size,
+        sampler_fn=self._get_train_sampler,
+        is_training=True,
+    )
+    resume_from_checkpoint = self.model.resume_from_checkpoint
+    if resume_from_checkpoint:
+        # code taken from transformers and modified
+        if isinstance(resume_from_checkpoint, bool) and resume_from_checkpoint:
+            resume_from_checkpoint = get_last_checkpoint(self.args.output_dir)
+            if resume_from_checkpoint is None:
+                raise ValueError(
+                    f"No valid checkpoint found in output directory ({self.args.output_dir})"
+                )
+        self.model.resume_from_checkpoint = resume_from_checkpoint
+
+        # load state to the dataloader
+        dataloader_state_dict_name = "odm_dl_state_dict.bin"
+        output_dataloader_state_dict_file = os.path.join(
+            resume_from_checkpoint, dataloader_state_dict_name
+        )
+        for i, _ in enumerate(self.accelerator._dataloaders):
+            if isinstance(
+                self.accelerator._dataloaders[i].base_dataloader, StatefulDataLoader
+            ):
+                self.accelerator._dataloaders[i].load_state_dict(
+                    torch.load(output_dataloader_state_dict_file)
+                )
+                break
+    return dataloader
+
+
+# code taken from transformers, modified and patches original function
+def skip_first_batches(dataloader, num_batches=0):
+    return dataloader

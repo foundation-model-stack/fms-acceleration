@@ -9,6 +9,7 @@ import random
 # Third Party
 from datasets import DatasetDict
 from torch.utils.data import DataLoader, IterableDataset
+from torchdata.stateful_dataloader import StatefulDataLoader
 from tqdm import tqdm
 import torch
 
@@ -97,20 +98,23 @@ class OnlineMixingDataset(IterableDataset):
         self.eval_collators_dict = eval_collators_dict
         self.eval_dataset_dict = eval_dataset_dict
         self.eval_dataset_dict_dl = {}
+        # iterators of the dataloaders
+        self.train_dataset_dict_dl_iter = {}
+        # to reset iterators to dataloaders
         self.train_dataset_dict_dl = {}
+        self.dataset_dict = dataset_dict
         # prepare torch dataloaders for each of the dataset.
-        for k, _ in dataset_dict.items():
-            dataset_dict[k] = DataLoader(
-                dataset_dict[k],
+        for k, _ in self.dataset_dict.items():
+            self.train_dataset_dict_dl[k] = StatefulDataLoader(
+                self.dataset_dict[k],
                 1,
                 shuffle=False,
-                num_workers=1,
+                num_workers=0,
                 collate_fn=collators_dict[k] if collators_dict else None,
             )
-            self.train_dataset_dict_dl[k] = iter(dataset_dict[k])
+            self.train_dataset_dict_dl_iter[k] = iter(self.train_dataset_dict_dl[k])
         self.eval_batch_size = eval_batch_size
-        self.dataset_dict = dataset_dict
-        self.category_list = sorted(self.train_dataset_dict_dl.keys())
+        self.category_list = sorted(self.train_dataset_dict_dl_iter.keys())
         self.id2cat = dict(enumerate(self.category_list))
         self.cat2id = {c: i for i, c in enumerate(self.category_list)}
         self.total_categories = len(self.category_list)
@@ -172,7 +176,6 @@ class OnlineMixingDataset(IterableDataset):
             f.write(json.dumps(self.log) + "\n")
 
     def __iter__(self):
-        self.produced = 0
         return self
 
     def __next__(self):
@@ -182,17 +185,17 @@ class OnlineMixingDataset(IterableDataset):
             )[0]
         sample = None
         try:
-            sample = next(self.train_dataset_dict_dl[self.id2cat[self.arm_idx]])
+            sample = next(self.train_dataset_dict_dl_iter[self.id2cat[self.arm_idx]])
         except StopIteration:
             logger.info(
                 "{id} dataset exhausted so the iterator is reset.".format(
                     id=self.id2cat[self.arm_idx]
                 )
             )
-            self.train_dataset_dict_dl[self.id2cat[self.arm_idx]] = iter(
-                self.dataset_dict[self.id2cat[self.arm_idx]]
+            self.train_dataset_dict_dl_iter[self.id2cat[self.arm_idx]] = iter(
+                self.train_dataset_dict_dl[self.id2cat[self.arm_idx]]
             )
-            sample = next(self.train_dataset_dict_dl[self.id2cat[self.arm_idx]])
+            sample = next(self.train_dataset_dict_dl_iter[self.id2cat[self.arm_idx]])
 
         self.curr_cat_count[self.arm_idx] += 1
         self.produced += 1
@@ -231,6 +234,44 @@ class OnlineMixingDataset(IterableDataset):
         )
         return sample
 
+    def load_state_dict(self, state_dict):
+        """Load the dataloader with the provided state dict"""
+        torch.set_rng_state(state_dict["rng"])
+        train_dataset_dict_dl_sd = state_dict.pop("train_dataset_dict_dl_sd")
+        random.setstate(state_dict.pop("random_state"))
+        for k, v in state_dict.items():
+            if hasattr(self, k):
+                setattr(self, k, v)
+        self.reward_type = Reward[state_dict["reward_type"].upper()]
+        for k, _ in train_dataset_dict_dl_sd.items():
+            self.train_dataset_dict_dl_iter[k].load_state_dict(
+                train_dataset_dict_dl_sd[k]
+            )
+
+    def state_dict(self):
+        """Populate all the state that has to be stored by the stateful dataloader"""
+        return {
+            "rng": torch.get_rng_state(),
+            "gamma": self.gamma,
+            "eta": self.eta,
+            "sampling_interval": self.sampling_interval,
+            "train_dataset_dict_dl_sd": {
+                k: v.state_dict() for k, v in self.train_dataset_dict_dl_iter.items()
+            },
+            "eval_batch_size": self.eval_batch_size,
+            "category_list": self.category_list,
+            "id2cat": self.id2cat,
+            "cat2id": self.cat2id,
+            "total_categories": self.total_categories,
+            "sampling_weights": self.sampling_weights,
+            "sampling_ratio": self.sampling_ratio,
+            "curr_cat_count": self.curr_cat_count,
+            "produced": self.produced,
+            "arm_idx": self.arm_idx,
+            "reward_type": str(self.reward_type),
+            "random_state": random.getstate(),
+        }
+
     def _reset_eval_dataloaders(self):
         """Helper function to reset eval dataloaders since
         they would be exhausted in the previous evaluation loop.
@@ -244,8 +285,8 @@ class OnlineMixingDataset(IterableDataset):
                     DataLoader(
                         self.eval_dataset_dict[k],
                         self.eval_batch_size,
-                        shuffle=False,
-                        num_workers=1,
+                        shuffle=True,
+                        num_workers=0,
                         collate_fn=(
                             self.eval_collators_dict[k]
                             if self.eval_collators_dict
@@ -398,14 +439,14 @@ class OnlineMixingDataset(IterableDataset):
         if accelerator:
             rewards = accelerator.reduce(rewards, reduction="sum")
             count = accelerator.reduce(count, reduction="sum")
-        if accelerator.is_main_process:
+        if accelerator and accelerator.is_main_process:
             self._update_weights(count, rewards)
-        self.log_to_file(
-            {
-                "current_sampling_weights": self.sampling_weights.tolist(),
-                "current_sampling_ratio": self.sampling_ratio,
-                "rewards": rewards.tolist(),
-                "count": count.tolist(),
-                "action": "update",
-            }
-        )
+            self.log_to_file(
+                {
+                    "current_sampling_weights": self.sampling_weights.tolist(),
+                    "current_sampling_ratio": self.sampling_ratio,
+                    "rewards": rewards.tolist(),
+                    "count": count.tolist(),
+                    "action": "update",
+                }
+            )

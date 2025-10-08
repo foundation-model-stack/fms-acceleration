@@ -22,6 +22,7 @@ from transformers import TrainingArguments
 import torch
 
 # Local
+from .callback import DataloaderSavingCallback
 from .patch import patch_hf_trainer_evaluate
 
 
@@ -34,6 +35,11 @@ class OnlineDataMixingAccelerationPlugin(AccelerationPlugin):
         self._update_interval = self._check_config_and_maybe_check_values(
             key="training.odm.odm.update_interval",
             default=1,
+        )
+
+        self._resume_from_checkpoint = self._check_config_and_maybe_check_values(
+            key="training.odm.odm.resume_from_checkpoint",
+            default=False,
         )
 
     # data_config file should be there
@@ -55,15 +61,18 @@ class OnlineDataMixingAccelerationPlugin(AccelerationPlugin):
         train_args.eval_steps = 1
         train_args.eval_strategy = "steps"
 
-        # update_interval information has to be made available in the evaluate HF patch
-        # function and this seems to be the only reasonable way to do so
+        # update_interval and resume_from_checkpoint information has to be made
+        # available in the evaluate HF patch function and this seems to be
+        # the only reasonable way to do so
         model.ta_update_interval = self._update_interval
+        model.resume_from_checkpoint = self._resume_from_checkpoint
+
         return model, modifiable_args
 
     def get_callbacks_and_ready_for_train(
         self, model: torch.nn.Module = None, accelerator=None
     ):
-        callbacks = []
+        callbacks = [DataloaderSavingCallback(accelerator)]
         patch_hf_trainer_evaluate()
         return callbacks
 
