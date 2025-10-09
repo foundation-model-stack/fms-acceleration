@@ -13,6 +13,8 @@
 # limitations under the License.
 
 # Third Party
+from torch.utils.data import IterableDataset
+
 # pylint: disable=import-error
 import pytest
 import torch
@@ -20,9 +22,34 @@ import torch
 # First Party
 from fms_acceleration_odm import OnlineMixingDataset, Reward
 
+
+class SampleDataset(IterableDataset):
+    def __init__(self, seq_length, vocab_size):
+        self.seq_length = seq_length
+        self.vocab_size = vocab_size
+
+    def __len__(self):
+        pass
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        input_ids = torch.rand(self.seq_length)
+        return {
+            "input_ids": input_ids,
+            "attention_mask": torch.ones(self.seq_length),
+            "labels": input_ids,
+        }
+
+
+def get_dataset(seq_len, vocab_size):
+    return SampleDataset(seq_length=seq_len, vocab_size=vocab_size)
+
+
 PARAMETERS = [
     (
-        [1, 100, 2],
+        {"data_1": 1, "data_2": 100, "data_3": 2},
         [[1, 100, 1], [1, 200, 1], [1, 100, 1], [1, 1, 1000], [1, 1, 2000]],
         5,
         [1, 1, 1, 2, 2],
@@ -41,29 +68,18 @@ def test_online_data_mix_learning(
     batch_size = 100
     seq_length = 6
     vocab_size = 50
-    input_ids = (
-        torch.arange(batch_size * seq_length).reshape(batch_size, seq_length)
-        % vocab_size
-    )
-    attention_mask = torch.tensor(
-        [[1, 1, 1, 1, 0, 0], [1, 1, 1, 0, 0, 0], [1, 1, 1, 1, 1, 1]]
-    )
-    labels = input_ids
-    train_data = {
-        "input_ids": input_ids,
-        "labels": labels,
-        "attention_mask": attention_mask,
+
+    train_data_dict = {
+        "data_1": get_dataset(seq_len=seq_length, vocab_size=vocab_size),
+        "data_2": get_dataset(seq_len=seq_length, vocab_size=vocab_size),
+        "data_3": get_dataset(seq_len=seq_length, vocab_size=vocab_size),
     }
-    eval_data = {
-        "input_ids": input_ids,
-        "labels": labels,
-        "attention_mask": attention_mask,
-    }
+    collators_dict = {"data_1": None, "data_2": None, "data_3": None}
     dataset = OnlineMixingDataset(
-        train_data,
-        None,
-        eval_data,
-        None,
+        train_data_dict,
+        collators_dict,
+        train_data_dict,
+        collators_dict,
         sampling_weights,
         0.1,
         0.3,

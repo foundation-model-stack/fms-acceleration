@@ -1,6 +1,6 @@
 # Standard
 from logging import getLogger
-from typing import List, Optional
+from typing import Optional
 import json
 import math
 import os
@@ -27,7 +27,7 @@ class OnlineMixingDataset(IterableDataset):
         collators_dict: dict,
         eval_dataset_dict: DatasetDict,
         eval_collators_dict: dict,
-        sampling_weights: Optional[List[float]] = None,
+        sampling_weights: Optional[dict] = None,
         gamma: float = 0.1,
         eta: float = 0.3,
         sampling_interval: int = 1,
@@ -51,7 +51,7 @@ class OnlineMixingDataset(IterableDataset):
             eval datasets.
             eval_collators_dict (dict): collator corresponding to each dataset
             used while constructing torch dataloader.
-            sampling_weights (Optional[List[float]], optional): Initial
+            sampling_weights (Optional[dict], optional): Initial
             set of sampling weights to start with. Defaults to equal weightage.
             gamma (float, optional): MAB hyperparameter. Defaults to 0.1.
             eta (float, optional): MAB hyperparameter. Defaults to 0.3.
@@ -123,9 +123,13 @@ class OnlineMixingDataset(IterableDataset):
         # are equally important. Weights based on the size of the datasets
         # and other such heuristics should be computed outside and passed
         # through sampling_weights while initializing this class.
-        if sampling_weights is None:
-            sampling_weights = [1] * self.total_categories
-        self.sampling_weights = torch.tensor(sampling_weights, dtype=torch.float64)
+        if not sampling_weights:
+            self.sampling_weights = [1] * self.total_categories
+        else:
+            self.sampling_weights = []
+            for cat in self.category_list:
+                self.sampling_weights.append(sampling_weights[cat])
+        self.sampling_weights = torch.tensor(self.sampling_weights, dtype=torch.float64)
         self.sampling_ratio = []
         self._update_sampling_ratio(self.sampling_weights)
 
