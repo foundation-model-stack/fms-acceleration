@@ -1,6 +1,6 @@
 # Standard
 from logging import getLogger
-from typing import List, Optional
+from typing import Optional
 import json
 import math
 import os

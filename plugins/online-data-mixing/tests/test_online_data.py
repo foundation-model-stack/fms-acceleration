@@ -13,10 +13,11 @@
 # limitations under the License.
 
 # Third Party
+from torch.utils.data import IterableDataset
+
 # pylint: disable=import-error
 import pytest
 import torch
-from torch.utils.data import IterableDataset
 
 # First Party
 from fms_acceleration_odm import OnlineMixingDataset, Reward
@@ -29,30 +30,34 @@ class SampleDataset(IterableDataset):
 
     def __len__(self):
         pass
-    
+
     def __iter__(self):
         return self
 
     def __next__(self):
         input_ids = torch.rand(self.seq_length)
         return {
-            'input_ids': input_ids,
-            'attention_mask': torch.ones(self.seq_length),
-            'labels': input_ids
+            "input_ids": input_ids,
+            "attention_mask": torch.ones(self.seq_length),
+            "labels": input_ids,
         }
+
 
 def get_dataset(seq_len, vocab_size):
     return SampleDataset(seq_length=seq_len, vocab_size=vocab_size)
 
+
 PARAMETERS = [
     (
-        {"data_1":1,"data_2":100,"data_3":2},
+        {"data_1": 1, "data_2": 100, "data_3": 2},
         [[1, 100, 1], [1, 200, 1], [1, 100, 1], [1, 1, 1000], [1, 1, 2000]],
         5,
         [1, 1, 1, 2, 2],
         3,
     )
 ]
+
+
 @pytest.mark.parametrize(
     "sampling_weights,rewards,batch_size,expected_arm_idx,total_categories",
     PARAMETERS,
@@ -69,11 +74,7 @@ def test_online_data_mix_learning(
         "data_2": get_dataset(seq_len=seq_length, vocab_size=vocab_size),
         "data_3": get_dataset(seq_len=seq_length, vocab_size=vocab_size),
     }
-    collators_dict = {
-        "data_1": None,
-        "data_2": None,
-        "data_3": None
-    }
+    collators_dict = {"data_1": None, "data_2": None, "data_3": None}
     dataset = OnlineMixingDataset(
         train_data_dict,
         collators_dict,
