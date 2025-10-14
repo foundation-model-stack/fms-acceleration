@@ -25,11 +25,11 @@ import torch
 
 # Local
 from .utils import (
+    patch_huggingface_clip_grad_norm_fsdp2,
+    patch_huggingface_fsdp2_load_full_state_dict,
     patch_huggingface_save_and_load_for_dtensors,
     patch_torch_optim_foreach_to_not_apply_to_dtensors,
     prepare_scattermoe,
-    patch_huggingface_clip_grad_norm_fsdp2,
-    patch_huggingface_fsdp2_load_full_state_dict
 )
 
 logger = get_logger(__name__)
@@ -145,15 +145,21 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
                 # call this to patch the HF save and load functions to be able
                 # to save DTensors propery
                 patch_huggingface_save_and_load_for_dtensors()
-                
-                if not hasattr(accelerator.state.fsdp_plugin, "fsdp_version") or accelerator.state.fsdp_plugin.fsdp_version == 1:
-                # call this to patch torch optim to not use
-                # foreach for dtensors only when fsdpv1 is used
-                # fsdpv2 with transformers does implicit replication to convert all to dtensors
-                # before grad norm and optimizer.step() operations
+
+                if (
+                    not hasattr(accelerator.state.fsdp_plugin, "fsdp_version")
+                    or accelerator.state.fsdp_plugin.fsdp_version == 1
+                ):
+                    # call this to patch torch optim to not use
+                    # foreach for dtensors only when fsdpv1 is used
+                    # fsdpv2 with transformers does implicit replication to convert all to dtensors
+                    # before grad norm and optimizer.step() operations
                     patch_torch_optim_foreach_to_not_apply_to_dtensors()
 
-                if hasattr(accelerator.state.fsdp_plugin, "fsdp_version") and accelerator.state.fsdp_plugin.fsdp_version == 2:
+                if (
+                    hasattr(accelerator.state.fsdp_plugin, "fsdp_version")
+                    and accelerator.state.fsdp_plugin.fsdp_version == 2
+                ):
                     # when EP and FSDPv2 is used
                     patch_huggingface_clip_grad_norm_fsdp2(accelerator)
                     patch_huggingface_fsdp2_load_full_state_dict()
