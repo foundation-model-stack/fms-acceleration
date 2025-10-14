@@ -253,6 +253,7 @@ def patch_huggingface_clip_grad_norm_fsdp2(accelerator):
 
 def patch_huggingface_fsdp2_load_full_state_dict():
     # Third Party
+    # pylint: disable=import-outside-toplevel
     from fms_acceleration.model_patcher import patch_target_module
 
     patch_target_module(
@@ -722,16 +723,19 @@ if __name__ == "__main__":
 # code taken from HF accelerate and modified
 def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dict):
     """
-    Loads the full state dict (could be only on rank 0) into the sharded model. This is done by broadcasting the
-    parameters from rank 0 to all other ranks. This function modifies the model in-place.
+    Loads the full state dict (could be only on rank 0) into the sharded model. 
+    This is done by broadcasting the parameters from rank 0 to all other ranks. 
+    This function modifies the model in-place.
 
     Args:
         accelerator (`Accelerator`): The accelerator instance
         model (`torch.nn.Module`):
-            The model to load the state dict into, expected to be on meta device or a VRAM spike can occur
+            The model to load the state dict into, expected to be on meta device 
+            or a VRAM spike can occur
         full_sd (`dict`): The full state dict to load, can only be on rank 0
     """
     # Third Party
+    # pylint: disable=import-outside-toplevel
     from torch.distributed.tensor import distribute_tensor
     import torch.distributed as dist
 
@@ -767,9 +771,9 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
             tensor = tensor.contiguous()
         return tensor
 
-    # ignored_params = get_parameters_from_modules(accelerator.state.fsdp_plugin.ignored_modules, model, accelerator.device)
     ignored_params = {
         p.detach()
+        # pylint: disable=undefined-variable
         for p in get_parameters_from_modules(
             accelerator.state.fsdp_plugin.ignored_modules, model, accelerator.device
         )
@@ -786,11 +790,6 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
                 device_mesh = sharded_param.device_mesh
                 full_param = full_param.detach().to(device_mesh.device_type)
                 dist.broadcast(full_param, src=0, group=dist.group.WORLD)
-                # if device_mesh.ndim > 1:
-                #     for mesh_dim_name in device_mesh.mesh_dim_names:
-                #         dist.broadcast(full_param, src=0, group=device_mesh.get_group(mesh_dim=mesh_dim_name))
-                # else:
-                #     dist.broadcast(full_param, src=0, group=device_mesh.get_group())
                 sharded_tensor = distribute_tensor(
                     full_param, device_mesh, sharded_param.placements
                 )
@@ -818,11 +817,6 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
                     dtype=sharded_param.dtype,
                 )
                 dist.broadcast(full_tensor, src=0, group=dist.group.WORLD)
-                # if device_mesh.ndim > 1:
-                #     for mesh_dim_name in device_mesh.mesh_dim_names:
-                #         dist.broadcast(full_tensor, src=0, group=device_mesh.get_group(mesh_dim=mesh_dim_name))
-                # else:
-                #     dist.broadcast(full_tensor, src=0, group=device_mesh.get_group())
                 sharded_tensor = distribute_tensor(
                     full_tensor, device_mesh, sharded_param.placements
                 )
@@ -843,7 +837,8 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
 
 # code taken from HF accelerate and modified
 def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
-    """Prepares the model for FSDP2 in-place. Also returns the model to avoid misuse of the original model.
+    """Prepares the model for FSDP2 in-place. Also returns the model to avoid 
+    misuse of the original model.
 
     Args:
         accelerator (`Accelerator`): The accelerator instance
@@ -853,9 +848,11 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         `torch.nn.Module`: Prepared model
     """
     # Third Party
+    # pylint: disable=import-outside-toplevel
     from torch.distributed.fsdp import FSDPModule, MixedPrecisionPolicy, fully_shard
 
     is_type_fsdp = isinstance(model, FSDPModule) or (
+        # pylint: disable=undefined-variable
         is_compiled_module(model) and isinstance(model._orig_mod, FSDPModule)
     )
     if is_type_fsdp:
@@ -878,32 +875,28 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
             if mesh is not None
             else None
         ),
+        # pylint: disable=undefined-variable
         "ignored_params": get_parameters_from_modules(
             fsdp2_plugin.ignored_modules, model, accelerator.device
         ),
     }
 
     model_has_params4bit = False
-    for name, param in model.named_parameters():
-        # this is a temporary fix whereby loading models with bnb params cannot be moved from
-        # GPU to a meta device due with FSDP2 because torch operations don't return the original class type
-        # bypassing the move to meta will still cause the VRAM spike, but at least it still will load
+    for _, param in model.named_parameters():
+        # this is a temporary fix whereby loading models with bnb params
+        # cannot be moved from GPU to a meta device due with FSDP2 because
+        # torch operations don't return the original class type bypassing the
+        # move to meta will still cause the VRAM spike, but at least it still will load
         if param.__class__.__name__ == "Params4bit":
             model_has_params4bit = True
             break
 
     if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
-        # Context: `fully_shard` moves the model to GPU if it was on CPU, however it can also be on `meta` and then it stays there even after `fully_shard`
-        # For this reason, we need to move the model to `meta` device, as then sharding happens on `meta` device
-        # If we kept the model on CPU (`cpu_ram_efficient_loading` has model be on CPU on all ranks, though non-main ranks only have `torch.empty`), `fully_shard` would move it to GPU
-        # Afterwards, when we call `fsdp2_load_full_state_dict`, us creating the state_dict would result into briefly having two copies of model state_dict on the GPU -> VRAM spike
-
-        # We need to keep the original non-persistent buffers, as those MAY not be in the state_dict, resulting in them staying on meta device
-        # Also, these buffers aren't getting sharded by default
-        # We get the FQNs of all non-persistent buffers, to re-register them after
+        # pylint: disable=undefined-variable
         non_persistent_buffer_fqns = get_non_persistent_buffers(
             model, recurse=True, fqns=True
         )
+        # pylint: disable=undefined-variable
         original_non_persistent_buffers = copy.deepcopy(
             {k: v for k, v in model.named_buffers() if k in non_persistent_buffer_fqns}
         )
@@ -920,14 +913,17 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
                         )
                         setattr(module, param_name, meta_param)
         # model = model.to(torch.device("meta"))
-        # We need to re-tie the weights, not exactly sure why, but if we don't do this, reference to `lm_head/embed_tokens` stay hanging -> more VRAM usage
+        # We need to re-tie the weights, not exactly sure why, but if we don't do this,
+        # reference to `lm_head/embed_tokens` stay hanging -> more VRAM usage
         # We assume `transformers` models have a `tie_weights` method if they support it
         if hasattr(model, "tie_weights"):
             model.tie_weights()
 
+    # pylint: disable=undefined-variable
     auto_wrap_policy_func = fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model)
     if auto_wrap_policy_func is not None:
         # We skip the model itself, as that one is always wrapped
+        # pylint: disable=undefined-variable
         for module in get_module_children_bottom_up(model)[:-1]:
             if auto_wrap_policy_func(module) and not isinstance(module, FSDPModule):
                 fully_shard(module, **fsdp2_kwargs)
@@ -937,7 +933,8 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
 
     if fsdp2_plugin.cpu_ram_efficient_loading:
         # If `cpu_ram_efficient_loading` is enabled, only rank 0 loads the weights
-        # Other ranks have an empty model on `meta` device, so we need to distribute the weights properly
+        # Other ranks have an empty model on `meta` device, so we need to distribute
+        # the weights properly
         fsdp2_load_full_state_dict(accelerator, model, original_sd)
 
     if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
@@ -970,11 +967,14 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         model_dtype is None or model_dtype != torch.float32
     ):
         # We upcast the model according to `deepspeed`'s implementation
-        # More info about this can be found in `accelerator.py:prepare_model`s FSDP1 section
+        # More info about this can be found in `accelerator.py:prepare_model`s
+        # FSDP1 section
         model = model.to(torch.float32)
         if accelerator.is_main_process:
             # TODO(siro1): Add a warning for each parameter that was upcasted
+            # pylint: disable=undefined-variable
             warnings.warn(
-                "FSDP upcast of low precision parameters to fp32 (since mixed_precision != 'no') may affect the precision of model checkpoints."
+                "FSDP upcast of low precision parameters to fp32 (since mixed_precision != 'no')"
+                "may affect the precision of model checkpoints."
             )
     return model
