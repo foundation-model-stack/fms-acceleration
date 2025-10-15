@@ -723,14 +723,14 @@ if __name__ == "__main__":
 # code taken from HF accelerate and modified
 def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dict):
     """
-    Loads the full state dict (could be only on rank 0) into the sharded model. 
-    This is done by broadcasting the parameters from rank 0 to all other ranks. 
+    Loads the full state dict (could be only on rank 0) into the sharded model.
+    This is done by broadcasting the parameters from rank 0 to all other ranks.
     This function modifies the model in-place.
 
     Args:
         accelerator (`Accelerator`): The accelerator instance
         model (`torch.nn.Module`):
-            The model to load the state dict into, expected to be on meta device 
+            The model to load the state dict into, expected to be on meta device
             or a VRAM spike can occur
         full_sd (`dict`): The full state dict to load, can only be on rank 0
     """
@@ -837,7 +837,7 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
 
 # code taken from HF accelerate and modified
 def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
-    """Prepares the model for FSDP2 in-place. Also returns the model to avoid 
+    """Prepares the model for FSDP2 in-place. Also returns the model to avoid
     misuse of the original model.
 
     Args:
@@ -853,7 +853,8 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
 
     is_type_fsdp = isinstance(model, FSDPModule) or (
         # pylint: disable=undefined-variable
-        is_compiled_module(model) and isinstance(model._orig_mod, FSDPModule)
+        is_compiled_module(model)
+        and isinstance(model._orig_mod, FSDPModule)
     )
     if is_type_fsdp:
         return model
