@@ -735,6 +735,7 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
         full_sd (`dict`): The full state dict to load, can only be on rank 0
     """
     # Third Party
+    # pylint: disable=import-outside-toplevel
     from accelerate.utils.fsdp_utils import get_parameters_from_modules
 
     # pylint: disable=import-outside-toplevel
@@ -850,10 +851,12 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         `torch.nn.Module`: Prepared model
     """
     # Standard
+    # pylint: disable=import-outside-toplevel
     import copy
     import warnings
 
     # Third Party
+    # pylint: disable=import-outside-toplevel
     from accelerate.utils.fsdp_utils import (
         fsdp2_prepare_auto_wrap_policy,
         get_parameters_from_modules,
