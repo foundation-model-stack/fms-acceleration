@@ -32,5 +32,8 @@ dependencies = [
 [tool.hatch.build.targets.wheel]
 only-include = ["src/fms_acceleration"]
 
+[tool.hatch.metadata]
+allow-direct-references = true
+
 [tool.hatch.build.targets.wheel.sources]
 "src" = ""
