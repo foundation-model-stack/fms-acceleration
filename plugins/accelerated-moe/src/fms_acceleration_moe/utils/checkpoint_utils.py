@@ -736,6 +736,9 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
     """
     # Third Party
     # pylint: disable=import-outside-toplevel
+    from accelerate.utils.fsdp_utils import get_parameters_from_modules
+
+    # pylint: disable=import-outside-toplevel
     from torch.distributed.tensor import distribute_tensor
     import torch.distributed as dist
 
@@ -847,7 +850,20 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
     Returns:
         `torch.nn.Module`: Prepared model
     """
+    # Standard
+    # pylint: disable=import-outside-toplevel
+    import copy
+    import warnings
+
     # Third Party
+    # pylint: disable=import-outside-toplevel
+    from accelerate.utils.fsdp_utils import (
+        fsdp2_prepare_auto_wrap_policy,
+        get_parameters_from_modules,
+    )
+    from accelerate.utils.modeling import get_non_persistent_buffers
+    from accelerate.utils.other import get_module_children_bottom_up, is_compiled_module
+
     # pylint: disable=import-outside-toplevel
     from torch.distributed.fsdp import FSDPModule, MixedPrecisionPolicy, fully_shard
 

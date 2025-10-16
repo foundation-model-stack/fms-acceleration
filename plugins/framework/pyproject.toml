@@ -25,12 +25,15 @@ dependencies = [
   "numpy<2.0", # numpy needs to be bounded due to incompatiblity with current torch<2.3
   "torch>2.2",
   "peft>=0.15.0",
-  "accelerate",
+  "accelerate @ git+https://github.com/huggingface/accelerate.git@5998f8625b8dfde9253c241233ff13bc2c18635d",
   "pandas",
 ]
 
 [tool.hatch.build.targets.wheel]
 only-include = ["src/fms_acceleration"]
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel.sources]
 "src" = ""

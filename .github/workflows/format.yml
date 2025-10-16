@@ -34,6 +34,8 @@ jobs:
           - "online-data-mixing"
 
     steps:
+      - name: Delete huge unnecessary tools folder
+        run: rm -rf /opt/hostedtoolcache
       - uses: actions/checkout@v4
       - name: Set up Python 3.11
         uses: actions/setup-python@v4
