@@ -802,7 +802,8 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
     }
     def is_ignored_param(param_name: str):
         for n in ignored_param_names:
-            if param_name in n:
+            # may be replace it with regex match
+            if n in param_name:
                 return True
         return False
     if accelerator.is_main_process:
