@@ -734,9 +734,28 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
             or a VRAM spike can occur
         full_sd (`dict`): The full state dict to load, can only be on rank 0
     """
-    # Third Party
-    # pylint: disable=import-outside-toplevel
-    from accelerate.utils.fsdp_utils import get_parameters_from_modules
+    # function taken from huggingface and modified
+    def get_parameters_from_modules(
+        modules, model, device, return_names=False
+    ):
+        if modules is None:
+            return set()
+        parameters = []
+        if isinstance(modules, str):
+            reg = re.compile(modules)
+            mapped_modules = []
+            for name, module in model.named_modules():
+                if reg.fullmatch(name):
+                    module.to(device)
+                    mapped_modules.append(module)
+            modules = mapped_modules
+        for module in modules:
+            if return_names:
+                parameters.extend(list(module.named_parameters()))
+            else:
+                parameters.extend(list(module.parameters()))
+        return set(parameters)
+
 
     # pylint: disable=import-outside-toplevel
     from torch.distributed.tensor import distribute_tensor
@@ -774,11 +793,11 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
             tensor = tensor.contiguous()
         return tensor
 
-    ignored_params = {
-        p.detach()
+    ignored_param_names = {
+        n
         # pylint: disable=undefined-variable
-        for p in get_parameters_from_modules(
-            accelerator.state.fsdp_plugin.ignored_modules, model, accelerator.device
+        for n, _ in get_parameters_from_modules(
+            accelerator.state.fsdp_plugin.ignored_modules, model, accelerator.device, True
         )
     }
     if accelerator.is_main_process:
@@ -787,7 +806,7 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
         ):
             # ignored params will not be on meta device
             # and not handled by FSDP
-            if sharded_param.device != torch.device("meta"):
+            if sharded_param.device != torch.device("meta") or param_name in ignored_param_names:
                 sharded_sd[param_name] = sharded_param
             else:
                 device_mesh = sharded_param.device_mesh
