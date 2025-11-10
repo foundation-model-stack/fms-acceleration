@@ -734,32 +734,6 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
             or a VRAM spike can occur
         full_sd (`dict`): The full state dict to load, can only be on rank 0
     """
-<<<<<<< HEAD
-=======
-    # function taken from huggingface and modified
-    def get_parameters_from_modules(
-        modules, model, device, return_names=False
-    ):
-        if modules is None:
-            return set()
-        parameters = []
-        if isinstance(modules, str):
-            reg = re.compile(modules)
-            mapped_modules = []
-            for name, module in model.named_modules():
-                if reg.fullmatch(name):
-                    module.to(device)
-                    mapped_modules.append(module)
-            modules = mapped_modules
-        for module in modules:
-            if return_names:
-                parameters.extend(list(module.named_parameters()))
-            else:
-                parameters.extend(list(module.parameters()))
-        return set(parameters)
-
-
->>>>>>> 0476e69 (fix: ignored params for ep 8)
     # pylint: disable=import-outside-toplevel
     # Third Party
     from torch.distributed.tensor import distribute_tensor
