@@ -747,12 +747,11 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
             for name, module in model.named_modules():
                 if reg.fullmatch(name):
                     module.to(device)
-                    mapped_modules.append((name, module))
+                    mapped_modules.append(module)
             modules = mapped_modules
-        for name, module in modules:
+        for module in modules:
             if return_names:
-                for n, p in module.named_parameters():
-                    parameters.append((f"{name}.{n}", p))
+                parameters.extend(list(module.named_parameters()))
             else:
                 parameters.extend(list(module.parameters()))
         return set(parameters)
@@ -801,13 +800,18 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
             accelerator.state.fsdp_plugin.ignored_modules, model, accelerator.device, True
         )
     }
+    def is_ignored_param(param_name: str):
+        for n in ignored_param_names:
+            if param_name in n:
+                return True
+        return False
     if accelerator.is_main_process:
         for (param_name, full_param), sharded_param in zip(
             full_sd.items(), meta_sharded_sd.values()
         ):
             # ignored params will not be on meta device
             # and not handled by FSDP
-            if sharded_param.device != torch.device("meta") or param_name in ignored_param_names:
+            if sharded_param.device != torch.device("meta") or is_ignored_param(param_name):
                 sharded_sd[param_name] = sharded_param
             else:
                 device_mesh = sharded_param.device_mesh
