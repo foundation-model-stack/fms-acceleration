@@ -777,7 +777,7 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
         ):
             # ignored params will not be on meta device
             # and not handled by FSDP
-            if sharded_param.device != torch.device("meta"):
+            if sharded_param.device != torch.device("meta") or param_name in ignored_param_names:
                 sharded_sd[param_name] = sharded_param
             else:
                 device_mesh = sharded_param.device_mesh
