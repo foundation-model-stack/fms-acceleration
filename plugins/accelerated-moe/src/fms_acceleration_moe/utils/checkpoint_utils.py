@@ -747,11 +747,12 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
             for name, module in model.named_modules():
                 if reg.fullmatch(name):
                     module.to(device)
-                    mapped_modules.append(module)
+                    mapped_modules.append((name, module))
             modules = mapped_modules
-        for module in modules:
+        for name, module in modules:
             if return_names:
-                parameters.extend(list(module.named_parameters()))
+                for n, p in module.named_parameters():
+                    parameters.append((f"{name}.{n}", p))
             else:
                 parameters.extend(list(module.parameters()))
         return set(parameters)
