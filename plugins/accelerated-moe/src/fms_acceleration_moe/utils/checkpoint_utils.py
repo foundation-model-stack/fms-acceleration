@@ -258,10 +258,10 @@ def patch_huggingface_fsdp2_load_full_state_dict():
     patch_target_module(
         "accelerate.accelerator.fsdp2_prepare_model", fsdp2_prepare_model
     )
-    patch_target_module(
-        "accelerate.utils.fsdp_utils.fsdp2_load_full_state_dict",
-        fsdp2_load_full_state_dict,
-    )
+    # patch_target_module(
+    #     "accelerate.utils.fsdp_utils.fsdp2_load_full_state_dict",
+    #     fsdp2_load_full_state_dict,
+    # )
 
 
 # this function implements a trick to get the resolved cache file to acccess the safetensor
