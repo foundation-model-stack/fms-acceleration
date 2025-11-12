@@ -803,7 +803,7 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
         for param_name, sharded_param in meta_sharded_sd.items():
             # ignored params will not be on meta device
             # and not handled by FSDP
-            if sharded_param.device != torch.device("meta") or is_ignored_param(param_name):
+            if sharded_param.device != torch.device("meta"):
                 sharded_sd[param_name] = sharded_param
             elif is_ignored_param(param_name):
                 # full param is sharded parameter in the case of fms-accel patch
@@ -924,6 +924,8 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
                             requires_grad=param.requires_grad,
                         )
                         setattr(module, param_name, meta_param)
+                    else:
+                        print("ignored", param_name)
         # model = model.to(torch.device("meta"))
         # We need to re-tie the weights, not exactly sure why, but if we don't do this,
         # reference to `lm_head/embed_tokens` stay hanging -> more VRAM usage
