@@ -780,7 +780,7 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
                 sharded_sd[param_name] = sharded_param
             elif is_ignored_param(param_name):
                 # full param is sharded parameter in the case of fms-accel patch
-                sharded_sd[param_name] = full_param
+                sharded_sd[param_name] = sharded_param
             else:
                 device_mesh = sharded_param.device_mesh
                 full_param = full_param.detach().to(device_mesh.device_type)
@@ -805,8 +805,8 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
             if sharded_param.device != torch.device("meta"):
                 sharded_sd[param_name] = sharded_param
             elif is_ignored_param(param_name):
-                # full param is sharded parameter in the case of fms-accel patch
-                sharded_sd[param_name] = full_param
+                # sharded_param is sharded parameter in the case of fms-accel patch
+                sharded_sd[param_name] = sharded_param
             else:
                 device_mesh = sharded_param.device_mesh
                 full_tensor = torch.empty(
@@ -915,20 +915,15 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         # We move the model parameters to meta device that are managed by FSDPv2,
         # as then sharding happens on meta device
         with torch.no_grad():
-            print("fsdp2_kwargs[ignored_params]", fsdp2_kwargs["ignored_params"])
             for _, module in model.named_modules():
                 for param_name, param in list(module.named_parameters(recurse=False)):
                     if param not in fsdp2_kwargs["ignored_params"]:
-                        if "block" in param_name:
-                            print("moe param", param_name, param)
                         # Create new parameter on meta device
                         meta_param = torch.nn.Parameter(
                             torch.empty(param.shape, dtype=param.dtype, device="meta"),
                             requires_grad=param.requires_grad,
                         )
                         setattr(module, param_name, meta_param)
-                    else:
-                        print("ignored", param_name)
         # model = model.to(torch.device("meta"))
         # We need to re-tie the weights, not exactly sure why, but if we don't do this,
         # reference to `lm_head/embed_tokens` stay hanging -> more VRAM usage
