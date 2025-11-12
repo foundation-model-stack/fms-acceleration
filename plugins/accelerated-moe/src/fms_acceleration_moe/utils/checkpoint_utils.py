@@ -157,6 +157,7 @@ def save_fsdp_optimizer(
 
 def _prepare_sd_options(fsdp_plugin):
     sd_options = None
+    print("patched sd options")
 
     # we use this only for FSDP2, as it requires torch >= 2.6.0 and this api requires torch >= 2.2.0
     if fsdp_plugin.fsdp_version == 2:
@@ -260,6 +261,11 @@ def patch_huggingface_save_and_load_for_dtensors():
     patch_target_module("transformers.trainer.load_fsdp_model", load_fsdp_model)
     patch_target_module("transformers.trainer.load_fsdp_optimizer", load_fsdp_optimizer)
 
+def patch_prepare_sd_options():
+    # Third Party
+    # pylint: disable=import-outside-toplevel
+    from fms_acceleration.model_patcher import patch_target_module
+    patch_target_module("accelerate.utils.fsdp_utils._prepare_sd_options", _prepare_sd_options)
 
 # function to monkey patch accelerator clip grad_norm
 def patch_huggingface_clip_grad_norm_fsdp2(accelerator):
