@@ -863,6 +863,7 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
     # pylint: disable=import-outside-toplevel
     from torch.distributed.fsdp import FSDPModule, MixedPrecisionPolicy, fully_shard
 
+    print("in fsdp2_prepare_model")
     is_type_fsdp = isinstance(model, FSDPModule) or (
         # pylint: disable=undefined-variable
         is_compiled_module(model)
