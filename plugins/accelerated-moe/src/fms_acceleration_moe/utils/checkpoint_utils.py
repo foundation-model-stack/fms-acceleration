@@ -734,6 +734,7 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
             or a VRAM spike can occur
         full_sd (`dict`): The full state dict to load, can only be on rank 0
     """
+    print("in fsdp2_load_full_state_dict")
     # function taken from huggingface and modified
     def get_parameters_from_modules(
         modules, model, device, return_names=False
@@ -898,6 +899,7 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
     # pylint: disable=import-outside-toplevel
     from torch.distributed.fsdp import FSDPModule, MixedPrecisionPolicy, fully_shard
 
+    print("in fsdp2_prepare_model")
     is_type_fsdp = isinstance(model, FSDPModule) or (
         # pylint: disable=undefined-variable
         is_compiled_module(model)
