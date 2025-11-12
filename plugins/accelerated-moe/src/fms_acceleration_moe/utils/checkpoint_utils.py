@@ -814,9 +814,9 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
             # and not handled by FSDP
             if sharded_param.device != torch.device("meta"):
                 sharded_sd[param_name] = sharded_param
-            elif is_ignored_param(param_name):
-                # full param is sharded parameter in the case of fms-accel patch
-                sharded_sd[param_name] = sharded_param
+            # elif is_ignored_param(param_name):
+            #     # full param is sharded parameter in the case of fms-accel patch
+            #     sharded_sd[param_name] = sharded_param
             else:
                 device_mesh = sharded_param.device_mesh
                 full_param = full_param.detach().to(device_mesh.device_type)
@@ -840,9 +840,9 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
             # and not handled by FSDP
             if sharded_param.device != torch.device("meta"):
                 sharded_sd[param_name] = sharded_param
-            elif is_ignored_param(param_name):
-                # sharded_param is sharded parameter in the case of fms-accel patch
-                sharded_sd[param_name] = sharded_param
+            # elif is_ignored_param(param_name):
+            #     # sharded_param is sharded parameter in the case of fms-accel patch
+            #     sharded_sd[param_name] = sharded_param
             else:
                 device_mesh = sharded_param.device_mesh
                 full_tensor = torch.empty(
