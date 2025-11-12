@@ -256,7 +256,7 @@ def patch_huggingface_fsdp2_load_full_state_dict():
     # pylint: disable=import-outside-toplevel
     from fms_acceleration.model_patcher import patch_target_module
     patch_target_module(
-        "accelerate.utils.fsdp_utils.fsdp2_prepare_model", fsdp2_prepare_model
+        "accelerate.accelerator.fsdp2_prepare_model", fsdp2_prepare_model
     )
     # patch_target_module(
     #     "accelerate.utils.fsdp_utils.fsdp2_load_full_state_dict",
