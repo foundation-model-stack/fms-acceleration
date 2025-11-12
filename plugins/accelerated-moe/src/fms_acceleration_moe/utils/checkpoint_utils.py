@@ -951,9 +951,12 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         # We move the model parameters to meta device that are managed by FSDPv2,
         # as then sharding happens on meta device
         with torch.no_grad():
+            print("fsdp2_kwargs[ignored_params]", fsdp2_kwargs["ignored_params"])
             for _, module in model.named_modules():
                 for param_name, param in list(module.named_parameters(recurse=False)):
                     if param not in fsdp2_kwargs["ignored_params"]:
+                        if "block" in param_name:
+                            print("moe param", param_name, param)
                         # Create new parameter on meta device
                         meta_param = torch.nn.Parameter(
                             torch.empty(param.shape, dtype=param.dtype, device="meta"),
