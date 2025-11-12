@@ -31,7 +31,12 @@ def calculate_settings(n):
 pass
 
 # import guard added by flim@sg.ibm.com
-from transformers.utils.import_utils import _bitsandbytes_available
+try:
+    from transformers.utils.import_utils import _bitsandbytes_available
+except ImportError:
+    from transformers.utils.import_utils import is_bitsandbytes_available
+    _bitsandbytes_available = is_bitsandbytes_available()
+
 if _bitsandbytes_available:
     import bitsandbytes as bnb
     get_ptr = bnb.functional.get_ptr
