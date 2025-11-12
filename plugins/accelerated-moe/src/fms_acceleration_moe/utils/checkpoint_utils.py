@@ -938,7 +938,7 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
         if param.__class__.__name__ == "Params4bit":
             model_has_params4bit = True
             break
-
+    print("fsdp2_plugin.cpu_ram_efficient_loading", fsdp2_plugin.cpu_ram_efficient_loading)
     if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
         # pylint: disable=undefined-variable
         non_persistent_buffer_fqns = get_non_persistent_buffers(
