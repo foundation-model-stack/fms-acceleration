@@ -255,13 +255,14 @@ def patch_huggingface_fsdp2_load_full_state_dict():
     # Third Party
     # pylint: disable=import-outside-toplevel
     from fms_acceleration.model_patcher import patch_target_module
+
     patch_target_module(
         "accelerate.accelerator.fsdp2_prepare_model", fsdp2_prepare_model
     )
-    # patch_target_module(
-    #     "accelerate.utils.fsdp_utils.fsdp2_load_full_state_dict",
-    #     fsdp2_load_full_state_dict,
-    # )
+    patch_target_module(
+        "accelerate.utils.fsdp_utils.fsdp2_load_full_state_dict",
+        fsdp2_load_full_state_dict,
+    )
 
 
 # this function implements a trick to get the resolved cache file to acccess the safetensor
@@ -733,31 +734,8 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
             or a VRAM spike can occur
         full_sd (`dict`): The full state dict to load, can only be on rank 0
     """
-    print("in fsdp2_load_full_state_dict")
-    # function taken from huggingface and modified
-    def get_parameters_from_modules(
-        modules, model, device, return_names=False
-    ):
-        if modules is None:
-            return set()
-        parameters = []
-        if isinstance(modules, str):
-            reg = re.compile(modules)
-            mapped_modules = []
-            for name, module in model.named_modules():
-                if reg.fullmatch(name):
-                    module.to(device)
-                    mapped_modules.append(module)
-            modules = mapped_modules
-        for module in modules:
-            if return_names:
-                parameters.extend(list(module.named_parameters()))
-            else:
-                parameters.extend(list(module.parameters()))
-        return set(parameters)
-
-
     # pylint: disable=import-outside-toplevel
+    # Third Party
     from torch.distributed.tensor import distribute_tensor
     import torch.distributed as dist
 
@@ -793,19 +771,6 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
             tensor = tensor.contiguous()
         return tensor
 
-    ignored_param_names = {
-        n
-        # pylint: disable=undefined-variable
-        for n, _ in get_parameters_from_modules(
-            accelerator.state.fsdp_plugin.ignored_modules, model, accelerator.device, True
-        )
-    }
-    def is_ignored_param(param_name: str):
-        for n in ignored_param_names:
-            # may be replace it with regex match
-            if n in param_name:
-                return True
-        return False
     if accelerator.is_main_process:
         for (param_name, full_param), sharded_param in zip(
             full_sd.items(), meta_sharded_sd.values()
@@ -814,9 +779,6 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
             # and not handled by FSDP
             if sharded_param.device != torch.device("meta"):
                 sharded_sd[param_name] = sharded_param
-            # elif is_ignored_param(param_name):
-            #     # full param is sharded parameter in the case of fms-accel patch
-            #     sharded_sd[param_name] = sharded_param
             else:
                 device_mesh = sharded_param.device_mesh
                 full_param = full_param.detach().to(device_mesh.device_type)
@@ -840,9 +802,6 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
             # and not handled by FSDP
             if sharded_param.device != torch.device("meta"):
                 sharded_sd[param_name] = sharded_param
-            # elif is_ignored_param(param_name):
-            #     # sharded_param is sharded parameter in the case of fms-accel patch
-            #     sharded_sd[param_name] = sharded_param
             else:
                 device_mesh = sharded_param.device_mesh
                 full_tensor = torch.empty(
@@ -898,7 +857,6 @@ def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
     # pylint: disable=import-outside-toplevel
     from torch.distributed.fsdp import FSDPModule, MixedPrecisionPolicy, fully_shard
 
-    print("in fsdp2_prepare_model")
     is_type_fsdp = isinstance(model, FSDPModule) or (
         # pylint: disable=undefined-variable
         is_compiled_module(model)
