@@ -107,7 +107,6 @@ def save_fsdp_model(
 def save_fsdp_optimizer(
     fsdp_plugin, accelerator, optimizer, model, output_dir, optimizer_index=0
 ):
-    from accelerate.utils.fsdp_utils import _prepare_sd_options
     if fsdp_plugin.state_dict_type != StateDictType.SHARDED_STATE_DICT:
         raise NotImplementedError(
             "Checkpointing for megablocks only enabled for sharded state dict."
@@ -156,6 +155,22 @@ def save_fsdp_optimizer(
     )
     logger.info(f"Optimizer state saved in {ckpt_opt}")
 
+def _prepare_sd_options(fsdp_plugin):
+    sd_options = None
+
+    # we use this only for FSDP2, as it requires torch >= 2.6.0 and this api requires torch >= 2.2.0
+    if fsdp_plugin.fsdp_version == 2:
+        from torch.distributed.checkpoint.state_dict import StateDictOptions
+        from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
+
+        sd_options = StateDictOptions(
+            full_state_dict=fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT,
+            cpu_offload=getattr(fsdp_plugin.state_dict_config, "offload_to_cpu", False),
+            broadcast_from_rank0=getattr(fsdp_plugin.state_dict_config, "rank0_only", False),
+            flatten_optimizer_state_dict=True,
+        )
+
+    return sd_options
 
 # rewrite of func from accelerate.utils.fsdp_utils.py
 # - empty function, main logic in load_fsdp_optimizer (see below).
@@ -178,7 +193,6 @@ def load_fsdp_optimizer(
     optimizer_index=0,
     adapter_only=False,
 ):
-    from accelerate.utils.fsdp_utils import _prepare_sd_options
     accelerator.wait_for_everyone()
     if fsdp_plugin.state_dict_type != StateDictType.SHARDED_STATE_DICT:
         raise NotImplementedError(
