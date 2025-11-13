@@ -113,7 +113,9 @@ def save_fsdp_optimizer(
         )
     sd_options = _prepare_sd_options(fsdp_plugin)
     # get the state dicts for model and optimize
-    (model_state_dict, optimizer_state_dict) = get_state_dict(model, optimizer, options=sd_options)
+    (model_state_dict, optimizer_state_dict) = get_state_dict(
+        model, optimizer, options=sd_options
+    )
 
     # filter out lora state dict
     # TODO: Once expert layers are supported for LoRA tuning
@@ -155,23 +157,28 @@ def save_fsdp_optimizer(
     )
     logger.info(f"Optimizer state saved in {ckpt_opt}")
 
+
 def _prepare_sd_options(fsdp_plugin):
     sd_options = None
-    print("patched sd options")
 
     # we use this only for FSDP2, as it requires torch >= 2.6.0 and this api requires torch >= 2.2.0
     if fsdp_plugin.fsdp_version == 2:
+        # pylint: disable=import-outside-toplevel
+        # Third Party
         from torch.distributed.checkpoint.state_dict import StateDictOptions
-        from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
 
         sd_options = StateDictOptions(
-            full_state_dict=fsdp_plugin.state_dict_type == StateDictType.FULL_STATE_DICT,
+            full_state_dict=fsdp_plugin.state_dict_type
+            == StateDictType.FULL_STATE_DICT,
             cpu_offload=getattr(fsdp_plugin.state_dict_config, "offload_to_cpu", False),
-            broadcast_from_rank0=getattr(fsdp_plugin.state_dict_config, "rank0_only", False),
+            broadcast_from_rank0=getattr(
+                fsdp_plugin.state_dict_config, "rank0_only", False
+            ),
             flatten_optimizer_state_dict=True,
         )
 
     return sd_options
+
 
 # rewrite of func from accelerate.utils.fsdp_utils.py
 # - empty function, main logic in load_fsdp_optimizer (see below).
@@ -201,7 +208,9 @@ def load_fsdp_optimizer(
         )
     sd_options = _prepare_sd_options(fsdp_plugin)
     # - get the state dicts
-    model_state_dict, optimizer_state_dict = get_state_dict(model, optimizer, options=sd_options)
+    model_state_dict, optimizer_state_dict = get_state_dict(
+        model, optimizer, options=sd_options
+    )
 
     # - load the model state dict
     ckpt_model = os.path.join(input_dir, f"{FSDP_MODEL_NAME}_{MODEL_INDEX}")
@@ -225,7 +234,7 @@ def load_fsdp_optimizer(
         optimizer,
         model_state_dict=model_state_dict,
         optim_state_dict=optimizer_state_dict,
-        options=sd_options
+        options=sd_options,
     )
 
     # FIXME:
@@ -261,11 +270,16 @@ def patch_huggingface_save_and_load_for_dtensors():
     patch_target_module("transformers.trainer.load_fsdp_model", load_fsdp_model)
     patch_target_module("transformers.trainer.load_fsdp_optimizer", load_fsdp_optimizer)
 
+
 def patch_prepare_sd_options():
     # Third Party
     # pylint: disable=import-outside-toplevel
     from fms_acceleration.model_patcher import patch_target_module
-    patch_target_module("accelerate.utils.fsdp_utils._prepare_sd_options", _prepare_sd_options)
+
+    patch_target_module(
+        "accelerate.utils.fsdp_utils._prepare_sd_options", _prepare_sd_options
+    )
+
 
 # function to monkey patch accelerator clip grad_norm
 def patch_huggingface_clip_grad_norm_fsdp2(accelerator):
@@ -799,7 +813,6 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
             # ignored params will not be on meta device
             # and not handled by FSDP
             if sharded_param.device != torch.device("meta"):
-                print("yes not meta in rank 0")
                 sharded_sd[param_name] = sharded_param
             else:
                 device_mesh = sharded_param.device_mesh
@@ -823,7 +836,6 @@ def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dic
             # ignored params will not be on meta device
             # and not handled by FSDP
             if sharded_param.device != torch.device("meta"):
-                print("yes not meta in other ranks")
                 sharded_sd[param_name] = sharded_param
             else:
                 device_mesh = sharded_param.device_mesh
