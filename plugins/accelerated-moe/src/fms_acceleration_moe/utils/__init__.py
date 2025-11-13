@@ -17,6 +17,7 @@ from .checkpoint_utils import (
     patch_huggingface_clip_grad_norm_fsdp2,
     patch_huggingface_fsdp2_load_full_state_dict,
     patch_huggingface_save_and_load_for_dtensors,
+    patch_prepare_sd_options,
     recover_safetensors_from_dcp,
 )
 from .scattermoe_prepare import prepare_scattermoe

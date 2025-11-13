@@ -28,6 +28,7 @@ from .utils import (
     patch_huggingface_clip_grad_norm_fsdp2,
     patch_huggingface_fsdp2_load_full_state_dict,
     patch_huggingface_save_and_load_for_dtensors,
+    patch_prepare_sd_options,
     patch_torch_optim_foreach_to_not_apply_to_dtensors,
     prepare_scattermoe,
 )
@@ -118,6 +119,12 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
             accelerator is not None
             and getattr(accelerator.state, "fsdp_plugin", None) is not None
         ):
+            if (
+                hasattr(accelerator.state.fsdp_plugin, "fsdp_version")
+                and accelerator.state.fsdp_plugin.fsdp_version == 2
+            ):
+                # when FSDPv2 is used
+                patch_prepare_sd_options()
 
             if not self._disable_distributed:
                 # - use an internal function call to get the no split
