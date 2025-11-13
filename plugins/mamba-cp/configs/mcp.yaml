@@ -1,0 +1,8 @@
+training:
+  odm:
+    odm:
+      update_interval: 1 # update every step
+      sampling_interval: 1 # sample category for every sample
+      reward_type: entropy # type of reward to use
+      gamma: 0.1 # MAB hyper-parameter
+      eta: 0.1 # MAB hyper-parameter
