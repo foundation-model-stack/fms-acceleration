@@ -16,6 +16,7 @@ from typing import Dict
 from torch.distributed._tensor.device_mesh import DeviceMesh, init_device_mesh
 import torch
 from transformers.modeling_utils import is_fsdp_enabled, is_local_dist_rank_0
+from tqdm import tqdm
 
 key_ep = "cp"
 key_rep = "dp_shard"
@@ -79,7 +80,7 @@ def patch_mamba_layers_with_cp_head(
     }
     
     with torch.no_grad():
-        for layer in model.layers:
+        for layer in tqdm(model.layers, desc="Swapping mamba layers", total=len(model.layers)):
             mamba_layer = Mamba2CP(**config_ssm, **cp_args)
             mamba_layer.load_state_dict(layer.mamba.state_dict())
             setattr(layer, "mamba", mamba_layer)
