@@ -40,7 +40,6 @@ def patch_mamba_layers_with_cp_head(
     cp_degree,
     world_size,
     cp_mamba_impl,
-    cp_attn_impl,
     cp_mamba_recompute
 ):
     config_ssm = hf_config_ssm_config(model.config)
@@ -73,7 +72,6 @@ def patch_mamba_layers_with_cp_head(
     cp_args = {
         "cp_mesh": device_mesh[key_ep],
         "cp_mamba_impl": cp_mamba_impl,
-        "cp_attn_impl": cp_attn_impl,
         "cp_mamba_recompute": cp_mamba_recompute,
     }
     

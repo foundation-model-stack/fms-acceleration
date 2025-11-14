@@ -37,10 +37,6 @@ class MCPAccelerationPlugin(AccelerationPlugin):
             key="training.mamba.cp.mamba_impl",
             default="allgather",
         )
-        self._cp_attn_impl = self._check_config_and_maybe_check_values(
-            key="training.mamba.cp.attn_impl",
-            default="ring",
-        )
         self._cp_mamba_recompute = self._check_config_and_maybe_check_values(
             key="training.mamba.cp.mamba_recompute",
             default=False,
@@ -69,7 +65,6 @@ class MCPAccelerationPlugin(AccelerationPlugin):
                 cp_degree=self._mamba_cp_degree,
                 world_size=world_size,
                 cp_mamba_impl=self._cp_mamba_impl,
-                cp_attn_impl=self._cp_attn_impl,
                 cp_mamba_recompute=self._cp_mamba_recompute,
             )
         return model, modifiable_args
