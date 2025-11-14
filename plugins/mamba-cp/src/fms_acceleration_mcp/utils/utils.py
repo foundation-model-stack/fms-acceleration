@@ -24,7 +24,6 @@ key_rep = "dp_shard"
 def hf_config_ssm_config(hf_config) -> Dict:
     config_ssm = {}
     config_ssm["d_model"] = hf_config.hidden_size
-    config_ssm["n_layer"] = hf_config.num_hidden_layers
     config_ssm["tie_embeddings"] = hf_config.tie_word_embeddings
     config_ssm["d_state"] = 128
     config_ssm["ngroups"] = hf_config.mamba_n_groups
