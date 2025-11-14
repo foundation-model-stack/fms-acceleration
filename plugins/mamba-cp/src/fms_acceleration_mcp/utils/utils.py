@@ -80,7 +80,7 @@ def patch_mamba_layers_with_cp_head(
     }
     
     with torch.no_grad():
-        for layer in tqdm(model.layers, desc="Swapping mamba layers", total=len(model.layers)):
+        for layer in tqdm(model.model.layers, desc="Swapping mamba layers"):
             mamba_layer = Mamba2CP(**config_ssm, **cp_args)
             mamba_layer.load_state_dict(layer.mamba.state_dict())
             setattr(layer, "mamba", mamba_layer)
