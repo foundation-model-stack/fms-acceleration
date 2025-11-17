@@ -22,7 +22,12 @@ classifiers=[
     "Programming Language :: Python :: 3.11",
 ]
 
-dependencies = ["datasets", "torchdata"]
+dependencies = [
+  "datasets",
+  "torchdata",
+  "sentence-transformers",
+  "scikit-learn",
+]
 
 [tool.hatch.build.targets.wheel]
 only-include = ["src/fms_acceleration_odm"]
