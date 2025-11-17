@@ -76,11 +76,11 @@ def patch_mamba_layers_with_cp_head(
     }
     
     with torch.no_grad():
+        dtype = model.dtype
         for layer in tqdm(model.model.layers, desc="Swapping mamba layers"):
             if hasattr(layer, "mamba") and layer.mamba is not None:
                 print("mamba layer found")
                 mamba_layer = Mamba2CP(**config_ssm, **cp_args)
-                dtype = layer.mamba.dtype
                 device = layer.mamba.device
                 mamba_layer.load_state_dict(layer.mamba.state_dict())
                 setattr(layer, "mamba", mamba_layer)
