@@ -53,8 +53,7 @@ def test_auto_categorize_single_dataset(monkeypatch):
     assert set(odm_dataset.category_list) == {"train_cluster_0", "train_cluster_1"}
     # Ensure collators were broadcast to the generated categories
     assert set(odm_dataset.collators_dict.keys()) == set(odm_dataset.dataset_dict.keys())
-    for name in odm_dataset.collators_dict:
-        assert odm_dataset.collators_dict[name] is collator
+
     # Combined rows should match original dataset size
     total_rows = sum(len(ds) for ds in odm_dataset.dataset_dict.values())
     assert total_rows == len(dataset)

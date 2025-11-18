@@ -23,10 +23,10 @@ from typing import Any, Dict, List, Optional
 import math
 
 # Third Party
-from datasets import Dataset, DatasetDict
 import numpy as np
+from datasets import Dataset, DatasetDict
 from sentence_transformers import SentenceTransformer
-from sklearn.cluster import KMeans
+from cuml import KMeans
 
 logger = getLogger(__name__)
 
@@ -39,12 +39,18 @@ class AutoCategorizeConfig:
     num_categories: Optional[int] = None
     min_categories: int = 2
     max_categories: int = 15
-    model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
+    model_name: str = "Qwen/Qwen3-Embedding-0.6B"
     batch_size: int = 64
     cluster_algo: str = "kmeans"
     random_state: int = 0
     category_prefix: str = "auto_category"
-    device: Optional[str] = None
+    # Args for loading model
+    model_kwargs: Dict[str, any] = field(
+        default_factory=lambda: {
+            "device_map": "auto",
+            # "attn_implementation": "flash_attention_2",
+        }
+    )
     cluster_kwargs: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -92,21 +98,21 @@ class DatasetAutoCategorizer:
     def _compute_embeddings(self, dataset: Dataset) -> np.ndarray:
         model = SentenceTransformer(
             self.config.model_name,
-            device=self.config.device,
+            model_kwargs=self.config.model_kwargs,
+            prompts={
+                "clustering": "Identify the topic or theme based on the text: ",
+            },
+            default_prompt_name="clustering",
         )
-        vectors: List[np.ndarray] = []
-        batched_dataset = dataset.batch(self.config.batch_size, num_proc=8)
-        for batch in batched_dataset:
-            texts = batch[self.config.text_field] # type: ignore
-            vec = model.encode(
-                texts,
-                convert_to_numpy=True,
-                show_progress_bar=False,
-                batch_size=min(len(texts), self.config.batch_size),
-                normalize_embeddings=True,
-            )
-            vectors.append(vec)
-        return np.vstack(vectors)
+
+        vectors = model.encode(
+            dataset[self.config.text_field],
+            convert_to_numpy=True,
+            show_progress_bar=True,
+            batch_size=self.config.batch_size,
+            normalize_embeddings=True
+        )
+        return vectors
 
     def _cluster_embeddings(self, embeddings: np.ndarray, num_categories: int) -> np.ndarray:
         if self.config.cluster_algo.lower() != "kmeans":
@@ -117,6 +123,9 @@ class DatasetAutoCategorizer:
         kwargs = {"n_init": 10, "random_state": self.config.random_state}
         kwargs.update(self.config.cluster_kwargs)
         model = KMeans(n_clusters=num_categories, **kwargs)
+
+        logger.info(f"Starting {self.config.cluster_algo} clustering")
+
         return model.fit_predict(embeddings)
 
     def _build_dataset_dict(self, dataset: Dataset, labels: np.ndarray) -> DatasetDict:
@@ -129,10 +138,3 @@ class DatasetAutoCategorizer:
             categorized[name] = dataset.select(indices)
         return DatasetDict(categorized)
 
-
-def auto_categorize_dataset(
-    dataset: Dataset,
-    config: Optional[AutoCategorizeConfig] = None,
-) -> DatasetDict:
-    """Convenience wrapper to auto-categorize a dataset."""
-    return DatasetAutoCategorizer(config)(dataset)

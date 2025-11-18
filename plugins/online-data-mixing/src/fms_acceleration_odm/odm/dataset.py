@@ -14,7 +14,7 @@ from tqdm import tqdm
 import torch
 
 # Local
-from .auto_categorizer import AutoCategorizeConfig, auto_categorize_dataset
+from .auto_categorizer import AutoCategorizeConfig, DatasetAutoCategorizer
 from .reward import Reward, compute_reward
 
 logger = getLogger(__name__)
@@ -339,10 +339,14 @@ class OnlineMixingDataset(IterableDataset):
         logger.info("Starting auto categorization process")
 
         dataset_candidate: Dataset = next(iter(dataset_container.values()))
-        categorized = auto_categorize_dataset(
-            dataset=dataset_candidate,
-            config=self._auto_categorize_config
-        )
+        auto_categorizer = DatasetAutoCategorizer(config=self._auto_categorize_config)
+        categorized = auto_categorizer(dataset=dataset_candidate)
+
+        # We can delete the auto categorizer object since
+        # it loads a sentence embedding model
+        del(auto_categorizer)
+        torch.cuda.empty_cache()
+
         collators_dict = self._broadcast_collators_to_auto_categories(
             collators_dict, list(categorized.keys()) # type: ignore
         )

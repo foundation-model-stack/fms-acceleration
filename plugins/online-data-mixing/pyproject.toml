@@ -26,7 +26,7 @@ dependencies = [
   "datasets",
   "torchdata",
   "sentence-transformers",
-  "scikit-learn",
+  "cuml-cu12==25.10.*",
 ]
 
 [tool.hatch.build.targets.wheel]
