@@ -42,7 +42,7 @@ def hf_config_ssm_config(hf_config) -> Dict:
 
 class Mamba2CPHF(Mamba2CP):
     def forward(
-        self, hidden_states, cache_params, cache_position, attention_mask, seq_idx, **kwargs
+        self, hidden_states, cache_params=None, cache_position=None, attention_mask=None, seq_idx=None, **kwargs
     ):
         return super().forward(u=hidden_states, seqlen=None, seq_idx=None, cu_seqlens=None, inference_params=None)
 
