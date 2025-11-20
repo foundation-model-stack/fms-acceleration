@@ -15,7 +15,8 @@
 ###############################################################################
 # Standard
 from os.path import isfile, join
-from typing import Dict, List, Optional, Union
+from types import MethodType
+from typing import Callable, Dict, List, Optional, Tuple, Union
 import copy
 import json
 import logging
@@ -73,6 +74,7 @@ from ..utils.model import (
     move_to,
     nested_move_to,
     pack_model,
+    replace_3d_parameters_with_module_list,
     simple_dispatch_model,
     verify_model_hash,
     verify_sharded_model_hashes,
@@ -92,6 +94,12 @@ class BaseGPTQModel(nn.Module):
     # these modules are non-repeating and at the root level
     # does not include the node which holds all the repeating layers
     base_modules: List[str] = None
+
+    # If 3D Parameters to be converted
+    convert3dparameters: bool = False
+
+    # User provided forward pass to replace the existing forward pass
+    update_forwards: List[Tuple[str, Callable]] = None
 
     # name of lm_head
     lm_head: str = "lm_head"
@@ -127,6 +135,13 @@ class BaseGPTQModel(nn.Module):
         super().__init__()
 
         self.model = model
+        if self.convert3dparameters:
+            replace_3d_parameters_with_module_list(model)
+            for mod in model.modules():
+                forward = self.update_forwards.get(mod.__class__.__name__)
+                if forward is not None:
+                    mod.forward = MethodType(forward, mod)
+
         self.model_type = self.model.config.model_type
         self._quantized = quantized
         self.quantize_config = quantize_config
@@ -560,7 +575,7 @@ class BaseGPTQModel(nn.Module):
         self.quantize_config.meta_set_versionable(
             key=META_FIELD_QUANTIZER,
             value=META_QUANTIZER_GPTQMODEL,
-            version=__version__,
+            version="1.0.0",
         )
 
         # The config, quantize_config and model may be edited in place in save_quantized.
