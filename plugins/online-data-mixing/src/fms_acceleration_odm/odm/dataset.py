@@ -70,7 +70,7 @@ class OnlineMixingDataset(IterableDataset):
             embedding model, cluster count etc. This will only be used if the `dataset_dict`
             has only one key.
         """
-        self.auto_categorize = True if len(dataset_dict.keys()) == 1 else False
+        self.auto_categorize = len(dataset_dict.keys()) == 1
         self._auto_categorize_config = self._build_auto_categorize_config(
             auto_categorize_config
         )
@@ -335,7 +335,7 @@ class OnlineMixingDataset(IterableDataset):
     ):
         if isinstance(dataset_container, DatasetDict) and len(dataset_container) != 1:
             return dataset_container, collators_dict
-        
+
         logger.info("Starting auto categorization process")
 
         dataset_candidate: Dataset = next(iter(dataset_container.values()))
@@ -344,14 +344,16 @@ class OnlineMixingDataset(IterableDataset):
 
         # We can delete the auto categorizer object since
         # it loads a sentence embedding model
-        del(auto_categorizer)
+        del auto_categorizer
         torch.cuda.empty_cache()
 
         collators_dict = self._broadcast_collators_to_auto_categories(
             collators_dict, list(categorized.keys()) # type: ignore
         )
         logger.info(
-            f"Auto-categorized dataset into {len(categorized)} pseudo categories: {list(categorized.keys())}"
+            "Auto-categorized dataset into %d pseudo categories: %s",
+            len(categorized),
+            list(categorized.keys())
         )
         return categorized, collators_dict
 

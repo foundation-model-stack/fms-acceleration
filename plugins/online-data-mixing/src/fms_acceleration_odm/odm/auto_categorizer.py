@@ -32,7 +32,7 @@ logger = getLogger(__name__)
 
 
 @dataclass
-class AutoCategorizeConfig:
+class AutoCategorizeConfig:  # pylint: disable=too-many-instance-attributes
     """Configuration for sentence-embedding based auto-categorization."""
 
     text_field: str = "text"
@@ -42,7 +42,6 @@ class AutoCategorizeConfig:
     model_name: str = "Qwen/Qwen3-Embedding-0.6B"
     batch_size: int = 64
     cluster_algo: str = "kmeans"
-    random_state: int = 0
     category_prefix: str = "auto_category"
     # Args for loading model
     model_kwargs: Dict[str, any] = field(
@@ -51,6 +50,7 @@ class AutoCategorizeConfig:
             # "attn_implementation": "flash_attention_2",
         }
     )
+    # Args for K means
     cluster_kwargs: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -120,11 +120,11 @@ class DatasetAutoCategorizer:
                 "Unsupported clustering algorithm '%s'. Only 'kmeans' is currently supported."
                 % self.config.cluster_algo
             )
-        kwargs = {"n_init": 10, "random_state": self.config.random_state}
+        kwargs = {"n_init": 10}
         kwargs.update(self.config.cluster_kwargs)
         model = KMeans(n_clusters=num_categories, **kwargs)
 
-        logger.info(f"Starting {self.config.cluster_algo} clustering")
+        logger.info("Starting %s clustering", self.config.cluster_algo)
 
         return model.fit_predict(embeddings)
 
@@ -137,4 +137,3 @@ class DatasetAutoCategorizer:
             name = f"{self.config.category_prefix}_{label}"
             categorized[name] = dataset.select(indices)
         return DatasetDict(categorized)
-

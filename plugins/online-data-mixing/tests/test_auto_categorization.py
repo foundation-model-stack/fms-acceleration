@@ -35,7 +35,10 @@ def test_auto_categorize_single_dataset(monkeypatch):
     dataset = Dataset.from_dict({"text": ["cat", "dog", "wolf", "apple", "pear", "banana"]})
     dataset_dict = DatasetDict({"train": dataset})
 
-    collator = lambda _: _  # noqa: E731 - simple identity collator for test
+    def x(): # noqa: E731 - simple identity collator for test
+        return
+
+    collator = x
     odm_dataset = OnlineMixingDataset(
         dataset_dict=dataset_dict,
         collators_dict={"train": collator},
