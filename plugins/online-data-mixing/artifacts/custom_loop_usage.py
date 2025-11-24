@@ -11,10 +11,7 @@ from accelerate import Accelerator, DataLoaderConfiguration
 from datasets import load_dataset, DatasetDict
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer
-)
+from transformers import AutoModelForCausalLM, AutoTokenizer
 import torch
 from functools import partial
 
@@ -49,12 +46,8 @@ tokenizer.pad_token = tokenizer.eos_token
 #     "oasst": load_dataset("hakurei/open-instruct-v1", split="train[:1%]"),
 # }
 
-dataset_dict = {
-    "alpaca_train": load_dataset("tatsu-lab/alpaca", split="train[90%:]")
-}
-eval_dict = {
-    "alpaca_val": load_dataset("tatsu-lab/alpaca", split="train[:1%]")
-}
+dataset_dict = {"alpaca_train": load_dataset("tatsu-lab/alpaca", split="train[90%:]")}
+eval_dict = {"alpaca_val": load_dataset("tatsu-lab/alpaca", split="train[:1%]")}
 
 
 def format_example(example):
@@ -71,8 +64,9 @@ for name in dataset_dict:
 for name in eval_dict:
     eval_dict[name] = eval_dict[name].map(format_example)
 
-dataset_dict = DatasetDict(dataset_dict)    #type: ignore
-eval_dict = DatasetDict(eval_dict)          #type: ignore
+dataset_dict = DatasetDict(dataset_dict)  # type: ignore
+eval_dict = DatasetDict(eval_dict)  # type: ignore
+
 
 def collate_fn(batch, tokenizer):
     msgs = [b.pop("text") for b in batch]
@@ -82,17 +76,16 @@ def collate_fn(batch, tokenizer):
         truncation=True,
         padding="max_length",
         max_length=1024,
-        return_tensors="pt"
+        return_tensors="pt",
     )
 
+
 collator_dict = {
-    name: partial(collate_fn, tokenizer=tokenizer)
-    for name in dataset_dict
+    name: partial(collate_fn, tokenizer=tokenizer) for name in dataset_dict
 }
 
 eval_collator_dict = {
-    name: partial(collate_fn, tokenizer=tokenizer)
-    for name in eval_dict
+    name: partial(collate_fn, tokenizer=tokenizer) for name in eval_dict
 }
 
 # dataset preparation
@@ -104,7 +97,7 @@ dataset = OnlineMixingDataset(
     output_dir=output_dir,
     reward_type=Reward.TRAIN_LOSS,
     sampling_interval=batch_size,
-    auto_categorize_config={"input_column": "text"}
+    auto_categorize_config={"input_column": "text"},
 )
 dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=None)
 

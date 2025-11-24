@@ -1,14 +1,16 @@
 # Third Party
-import torch
+from datasets import Dataset, DatasetDict
+from transformers import AutoTokenizer
 import numpy as np
 import pytest
-from datasets import Dataset, DatasetDict
+import torch
 
 # First Party
 from fms_acceleration_odm import OnlineMixingDataset
 
 np.random.seed(42)
 torch.random.manual_seed(42)
+
 
 class DummySentenceTransformer:
     """Simple sentence embedder used to avoid network calls in tests."""
@@ -18,7 +20,7 @@ class DummySentenceTransformer:
 
     def encode(self, texts, **_):
         vectors = []
-        for text in texts:
+        for _ in texts:
             if np.random.uniform() < 0.5:
                 vectors.append([0.0, 0.0])
             else:
@@ -35,10 +37,12 @@ def _patch_sentence_transformer(monkeypatch):
 
 def test_auto_categorize_single_dataset(monkeypatch):
     _patch_sentence_transformer(monkeypatch)
-    dataset = Dataset.from_dict({"text": ["cat", "dog", "wolf", "apple", "pear", "banana"]})
+    dataset = Dataset.from_dict(
+        {"text": ["cat", "dog", "wolf", "apple", "pear", "banana"]}
+    )
     dataset_dict = DatasetDict({"train": dataset})
 
-    def x(): # noqa: E731 - simple identity collator for test
+    def x():  # noqa: E731 - simple identity collator for test
         return
 
     collator = x
@@ -57,7 +61,9 @@ def test_auto_categorize_single_dataset(monkeypatch):
 
     assert len(odm_dataset.dataset_dict) == 2
     assert set(odm_dataset.category_list) == {"cluster_0", "cluster_1"}
-    assert set(odm_dataset.collators_dict.keys()) == set(odm_dataset.dataset_dict.keys())
+    assert set(odm_dataset.collators_dict.keys()) == set(
+        odm_dataset.dataset_dict.keys()
+    )
 
     total_rows = sum(len(ds) for ds in odm_dataset.dataset_dict.values())
     assert total_rows == len(dataset)
@@ -79,7 +85,6 @@ def test_auto_categorize_requires_input_column(monkeypatch):
 
 
 def test_auto_categorize_pretokenized_data_w_tokenizer(monkeypatch):
-    from transformers import AutoTokenizer
     _patch_sentence_transformer(monkeypatch)
 
     tok = AutoTokenizer.from_pretrained("openai-community/gpt2")
@@ -104,7 +109,7 @@ def test_auto_categorize_pretokenized_data_w_tokenizer(monkeypatch):
             "num_categories": 2,
             "category_prefix": "cluster",
             "model_name": "dummy",
-            "tokenizer": tok
+            "tokenizer": tok,
         },
     )
 
@@ -144,6 +149,6 @@ def test_auto_categorize_pretokenized_data_wo_tokenizer(monkeypatch):
                 "input_column": "input_ids",
                 "num_categories": 2,
                 "category_prefix": "cluster",
-                "model_name": "dummy"
+                "model_name": "dummy",
             },
         )

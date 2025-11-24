@@ -348,12 +348,12 @@ class OnlineMixingDataset(IterableDataset):
         torch.cuda.empty_cache()
 
         collators_dict = self._broadcast_collators_to_auto_categories(
-            collators_dict, list(categorized.keys()) # type: ignore
+            collators_dict, list(categorized.keys())  # type: ignore
         )
         logger.info(
             "Auto-categorized dataset into %d pseudo categories: %s",
             len(categorized),
-            list(categorized.keys())
+            list(categorized.keys()),
         )
         return categorized, collators_dict
 

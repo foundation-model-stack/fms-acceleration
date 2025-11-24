@@ -14,21 +14,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Standard
+# Future
 from __future__ import annotations
 
+# Standard
 from dataclasses import dataclass, field
 from logging import getLogger
 from typing import Any, Dict, List, Optional
+import copy
 import math
 
 # Third Party
-import numpy as np
 from datasets import Dataset, DatasetDict
 from sentence_transformers import SentenceTransformer
-from cuml import KMeans
+from sklearn.cluster import KMeans
+import numpy as np
 
 logger = getLogger(__name__)
+
+AUTO_CATEGORIZATION_COLUMN_NAME = "auto_categorization_odm_raw_text"
 
 
 @dataclass
@@ -63,7 +67,7 @@ class DatasetAutoCategorizer:
     """Clusters a dataset into pseudo categories using embeddings."""
 
     def __init__(self, config: Optional[AutoCategorizeConfig] = None):
-        self.config = config or AutoCategorizeConfig()
+        self.config = copy.deepcopy(config) or AutoCategorizeConfig()
 
     def __call__(self, dataset: Dataset) -> DatasetDict:
         if len(dataset) == 0:
@@ -87,30 +91,40 @@ class DatasetAutoCategorizer:
         )
         embeddings = self._compute_embeddings(dataset)
         labels = self._cluster_embeddings(embeddings, num_categories)
+
+        if AUTO_CATEGORIZATION_COLUMN_NAME in dataset.column_names:
+            dataset = dataset.remove_columns(AUTO_CATEGORIZATION_COLUMN_NAME)
+
         return self._build_dataset_dict(dataset, labels)
 
     def _maybe_detokenize_data(self, dataset: Dataset) -> Dataset:
         existing_field = self.config.input_column
 
         if isinstance(dataset[existing_field][0], str):
-            logger.info(
-                "Detokenization not needed, text data already provided"
-            )
+            logger.info("Detokenization not needed, text data already provided")
             return dataset
 
         assert self.config.tokenizer is not None, (
             "Attempting detokenizing the data on column '{%s}' but the tokenizer is not provided",
             self.config.input_column,
         )
+        assert AUTO_CATEGORIZATION_COLUMN_NAME not in dataset.column_names, (
+            "Default detokenizing column '{%s}' is already present in the dataset",
+            AUTO_CATEGORIZATION_COLUMN_NAME,
+        )
 
         tokenizer = self.config.tokenizer
 
         dataset = dataset.map(
-            lambda x: {"raw_text": tokenizer.batch_decode(x[existing_field])},
+            lambda x: {
+                AUTO_CATEGORIZATION_COLUMN_NAME: tokenizer.batch_decode(
+                    x[existing_field]
+                )
+            },
             batched=True,
             num_proc=12,
         )
-        self.config.input_column = "raw_text"
+        self.config.input_column = AUTO_CATEGORIZATION_COLUMN_NAME
 
         return dataset
 
@@ -142,11 +156,13 @@ class DatasetAutoCategorizer:
             convert_to_numpy=True,
             show_progress_bar=True,
             batch_size=self.config.batch_size,
-            normalize_embeddings=True
+            normalize_embeddings=True,
         )
         return vectors
 
-    def _cluster_embeddings(self, embeddings: np.ndarray, num_categories: int) -> np.ndarray:
+    def _cluster_embeddings(
+        self, embeddings: np.ndarray, num_categories: int
+    ) -> np.ndarray:
         if self.config.cluster_algo.lower() != "kmeans":
             raise ValueError(
                 "Unsupported clustering algorithm '%s'. Only 'kmeans' is currently supported."

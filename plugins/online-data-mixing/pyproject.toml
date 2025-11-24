@@ -23,7 +23,7 @@ classifiers=[
 ]
 
 dependencies = [
-  "cuml-cu12==25.10.*; platform_system == 'Linux' and python_version ~= '3.11'",
+  "scikit-learn",
   "datasets==4.*",
   "torchdata==0.11.0",
   "sentence-transformers==5.*",
