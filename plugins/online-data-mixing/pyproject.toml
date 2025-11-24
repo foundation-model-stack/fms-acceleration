@@ -29,6 +29,9 @@ dependencies = [
   "sentence-transformers==5.*",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest"]
+
 [tool.hatch.build.targets.wheel]
 only-include = ["src/fms_acceleration_odm"]
 
