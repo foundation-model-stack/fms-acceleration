@@ -21,6 +21,7 @@ from peft import LoraConfig
 from transformers import TrainingArguments
 import torch
 
+# Local
 from .utils import patch_mamba_layers_with_cp_head
 
 
@@ -41,6 +42,7 @@ class MCPAccelerationPlugin(AccelerationPlugin):
             key="training.mamba.cp.mamba_recompute",
             default=False,
         )
+
     # data_config file should be there
     @property
     def requires_augmentation(self):
@@ -52,7 +54,7 @@ class MCPAccelerationPlugin(AccelerationPlugin):
         train_args: TrainingArguments,
         modifiable_args: Tuple[LoraConfig],
     ):
-        if self._mamba_cp_degree != None:
+        if self._mamba_cp_degree is not None:
             rank = 0
             if torch.distributed.is_initialized():
                 rank = torch.distributed.get_node_local_rank()

@@ -11,18 +11,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+# Standard
 from typing import Dict
 
-# pylint: disable=import-error
-from torch.distributed._tensor.device_mesh import DeviceMesh, init_device_mesh
-import torch
-from transformers.modeling_utils import is_fsdp_enabled, is_local_dist_rank_0
-from tqdm import tqdm
+# Third Party
+from mamba_ssm.modules.mamba2_cp import Mamba2CP
 
-try:
-    from mamba_ssm.modules.mamba2_cp import Mamba2CP
-except ImportError:
-    ValueError("Mamba2CP is required to enable context parallelism for mamba layers")
+# pylint: disable=import-error
+from torch.distributed._tensor.device_mesh import init_device_mesh
+from tqdm import tqdm
+from transformers.modeling_utils import is_fsdp_enabled
+import torch
 
 key_ep = "cp"
 key_rep = "dp_shard"
@@ -42,9 +41,22 @@ def hf_config_ssm_config(hf_config) -> Dict:
 
 class Mamba2CPHF(Mamba2CP):
     def forward(
-        self, hidden_states, cache_params=None, cache_position=None, attention_mask=None, seq_idx=None, **kwargs
+        self,
+        hidden_states,
+        cache_params=None,
+        cache_position=None,
+        attention_mask=None,
+        seq_idx=None,
+        **kwargs,
     ):
-        return super().forward(u=hidden_states, seqlen=None, seq_idx=None, cu_seqlens=None, inference_params=None)
+        return super().forward(
+            u=hidden_states,
+            seqlen=None,
+            seq_idx=None,
+            cu_seqlens=None,
+            inference_params=None,
+        )
+
 
 def patch_mamba_layers_with_cp_head(
     model,
@@ -63,7 +75,7 @@ def patch_mamba_layers_with_cp_head(
 
     if cp_degree == 1:
         raise ValueError("CP degree can't be one")
-    elif rep_size == 1:
+    if rep_size == 1:
         device_mesh = init_device_mesh(
             "cuda",
             (cp_degree,),
