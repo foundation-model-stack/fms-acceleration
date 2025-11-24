@@ -17,6 +17,32 @@ Plugin | Description | Depends | Loading | Augmentation | Callbacks
 
 `OnlineMixingDataset` can be imported easily and integrated into existing training loops with minimal changes. A sample custom training loop implementation can be found [here](./artifacts/custom_loop_usage.py). Given code sample uses two instruction tuning datasets and trains `ibm-granite/granite-3.1-2b-instruct` model for next token prediction task.
 
+### Automatic Categorization
+
+When only a single dataset (without category splits) is passed, the dataset will be embedded with a sentence-transformer model and clustered (K-Means by default) to build pseudo categories used by the online data mixer.
+
+```python
+from datasets import load_dataset
+from fms_acceleration_odm import OnlineMixingDataset
+
+dataset = load_dataset("tatsu-lab/alpaca", split="train[:1%]")
+collator = ...  # e.g., DataCollatorForLanguageModeling(...)
+
+odm_dataset = OnlineMixingDataset(
+    dataset_dict=dataset,
+    collators_dict={"train": collator},
+    eval_dataset_dict={},
+    eval_collators_dict={},
+    auto_categorize_config={
+        "input_column": "text",
+        "num_categories": 6,
+        "model_name": "sentence-transformers/all-MiniLM-L6-v2",
+    },
+)
+```
+
+Without an explicit `num_categories`, a heuristic based on the square root of the dataset size is used. Additional knobs such as `category_prefix`, `batch_size`, or clustering-specific kwargs can also be provided through `auto_categorize_config`.
+
 ## Metrics
 
 All metrics related to the online data mixing will be logged to `odm.jsonl` file in the checkpoint output directory.
@@ -47,11 +73,9 @@ Rewards | Description
 `GRADNORM` | Gradient norm where norms are maintained across categories and are updated based on the latest values and sampled dataset/category. Higher values mean reducing samples from that particular dataset/category.
 
 ### Adding a Custom Reward
+
 Custom rewards can be added to the `compute_reward` function and adding it to the `Reward` enum. If the custom reward requires specific set of information from the training loop then `_extract_information_from_state_for_reward` function has to be extended for extracting such information from trainer state. This is member function of `OnlineMixingDataset`.
 
-
 ### Planned TODOs
+
 Please see issue [#153](https://github.com/foundation-model-stack/fms-acceleration/issues/153).
-
-
-

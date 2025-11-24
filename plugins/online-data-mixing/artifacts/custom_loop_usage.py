@@ -8,23 +8,24 @@ import os
 
 # Third Party
 from accelerate import Accelerator, DataLoaderConfiguration
-from datasets import load_dataset
+from datasets import load_dataset, DatasetDict
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from transformers import (
     AutoModelForCausalLM,
-    AutoTokenizer,
-    DataCollatorForLanguageModeling,
+    AutoTokenizer
 )
 import torch
+from functools import partial
 
 # First Party
 from fms_acceleration_odm import OnlineMixingDataset
+from fms_acceleration_odm.odm.reward import Reward
 
-model_name = "ibm-granite/granite-3.1-2b-instruct"
+model_name = "ibm-granite/granite-4.0-h-1b"
 output_dir = "./odm_custom_use"
 max_steps = 125
-batch_size = 12
+batch_size = 4
 log_file = os.path.join(output_dir, "loss.jsonl")
 
 # odm related
@@ -32,7 +33,7 @@ step_idx = 0
 update_interval = 1  # every step
 
 # model
-model = AutoModelForCausalLM.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch.bfloat16)
 
 # tokenizer
 tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -40,15 +41,19 @@ tokenizer.pad_token = tokenizer.eos_token
 
 
 # dataset related
-def tokenize_fn(examples):
-    return tokenizer(
-        examples["text"], truncation=True, padding="max_length", max_length=128
-    )
-
+# If you have a single dataset, you can declare it with a single key, pair.
+# ODM will auto categorize the dataset into psuedo categories
+# If you have multiple categories of dataset, you can declare it with multiple key, pair, eg:
+# dataset_dict = {
+#     "alpaca": load_dataset("tatsu-lab/alpaca", split="train[:1%]"),
+#     "oasst": load_dataset("hakurei/open-instruct-v1", split="train[:1%]"),
+# }
 
 dataset_dict = {
-    "alpaca": load_dataset("tatsu-lab/alpaca", split="train[:1%]"),
-    "oasst": load_dataset("hakurei/open-instruct-v1", split="train[:1%]"),
+    "alpaca_train": load_dataset("tatsu-lab/alpaca", split="train[90%:]")
+}
+eval_dict = {
+    "alpaca_val": load_dataset("tatsu-lab/alpaca", split="train[:1%]")
 }
 
 
@@ -63,43 +68,49 @@ def format_example(example):
 for name in dataset_dict:
     dataset_dict[name] = dataset_dict[name].map(format_example)
 
+for name in eval_dict:
+    eval_dict[name] = eval_dict[name].map(format_example)
 
-def tokenize_fn(examples):
+dataset_dict = DatasetDict(dataset_dict)    #type: ignore
+eval_dict = DatasetDict(eval_dict)          #type: ignore
+
+def collate_fn(batch, tokenizer):
+    msgs = [b.pop("text") for b in batch]
+
     return tokenizer(
-        examples["text"],
+        msgs,
         truncation=True,
         padding="max_length",
         max_length=1024,
-    )
-
-
-for name in dataset_dict:
-    dataset_dict[name] = dataset_dict[name].map(
-        tokenize_fn,
-        batched=True,
-        remove_columns=dataset_dict[name].column_names,
+        return_tensors="pt"
     )
 
 collator_dict = {
-    name: DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+    name: partial(collate_fn, tokenizer=tokenizer)
     for name in dataset_dict
+}
+
+eval_collator_dict = {
+    name: partial(collate_fn, tokenizer=tokenizer)
+    for name in eval_dict
 }
 
 # dataset preparation
 dataset = OnlineMixingDataset(
     dataset_dict=dataset_dict,
     collators_dict=collator_dict,
-    eval_dataset_dict={},
-    eval_collators_dict={},
+    eval_dataset_dict=eval_dict,
+    eval_collators_dict=eval_collator_dict,
     output_dir=output_dir,
-    reward_type="train_loss",
+    reward_type=Reward.TRAIN_LOSS,
     sampling_interval=batch_size,
+    auto_categorize_config={"input_column": "text"}
 )
 dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=None)
 
 # distributed setup
 dataloader_config = DataLoaderConfiguration(split_batches=True, dispatch_batches=True)
-accelerator = Accelerator(split_batches=True, dataloader_config=dataloader_config)
+accelerator = Accelerator(dataloader_config=dataloader_config)
 model, dataloader = accelerator.prepare(model, dataloader)
 
 # training setup
