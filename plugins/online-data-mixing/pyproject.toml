@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fms-acceleration-odm"
-version = '0.2.0.dev'
+version = '0.1.1.dev'
 description = "FMS Acceleration plugin for online data mixing"
 authors = [
   {name = "Mehant Kammakomati", email = "mehant.kammakomati2@ibm.com"},
@@ -37,3 +37,10 @@ only-include = ["src/fms_acceleration_odm"]
 
 [tool.hatch.build.targets.wheel.sources]
 "src" = ""
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "src",
+  "pyproject.toml",
+  "README.md",
+]
