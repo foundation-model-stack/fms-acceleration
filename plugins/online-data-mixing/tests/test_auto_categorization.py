@@ -28,6 +28,11 @@ class DummySentenceTransformer:
         return np.asarray(vectors, dtype=np.float32)
 
 
+class DummyIterable(torch.utils.data.IterableDataset):
+    def __iter__(self):
+        yield {"x": 1}
+
+
 def _patch_sentence_transformer(monkeypatch):
     monkeypatch.setattr(
         "fms_acceleration_odm.odm.auto_categorizer.SentenceTransformer",
@@ -152,3 +157,32 @@ def test_auto_categorize_pretokenized_data_wo_tokenizer(monkeypatch):
                 "model_name": "dummy",
             },
         )
+
+
+def test_iterable_dataset_not_supported_auto_categorize(monkeypatch):
+
+    _patch_sentence_transformer(monkeypatch)
+
+    dataset = DummyIterable()
+    dataset_dict = DatasetDict({"train": dataset})
+
+    def x():  # noqa: E731 - simple identity collator for test
+        return
+
+    collator = x
+
+    with pytest.raises(NotImplementedError) as err:
+        _ = OnlineMixingDataset(
+            dataset_dict=dataset_dict,
+            collators_dict={"train": collator},
+            eval_dataset_dict={},
+            eval_collators_dict={},
+            auto_categorize_config={
+                "input_column": "input_ids",
+                "num_categories": 2,
+                "category_prefix": "cluster",
+                "model_name": "dummy",
+            },
+        )
+
+    assert "not yet supported" in str(err.value)

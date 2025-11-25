@@ -25,6 +25,7 @@ import copy
 import math
 
 # Third Party
+import torch
 from datasets import Dataset, DatasetDict
 from sentence_transformers import SentenceTransformer
 from sklearn.cluster import KMeans
@@ -70,6 +71,12 @@ class DatasetAutoCategorizer:
         self.config = copy.deepcopy(config) or AutoCategorizeConfig()
 
     def __call__(self, dataset: Dataset) -> DatasetDict:
+        if isinstance(dataset, torch.utils.data.IterableDataset):
+            raise NotImplementedError(
+                "Iteratble (or streaming) datasets are not yet supported for auto categorization."
+                "Please use a non-iterable dataset."
+            )
+
         if len(dataset) == 0:
             raise ValueError("Cannot auto-categorize an empty dataset")
         if self.config.input_column not in dataset.column_names:
