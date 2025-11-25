@@ -26,7 +26,7 @@ from fms_acceleration.model_patcher import (
     ModelPatcherTrigger,
 )
 from peft import LoraConfig
-from peft.tuners.lora.gptq import QuantLinear as LoraLinearGPTQ
+from peft.tuners.lora.gptq import GPTQLoraLinear
 import torch
 
 # these parameters are to be patched for triton v2
@@ -162,7 +162,7 @@ def create_new_module_peft(
     # to be installed
     new_module = None
     if isinstance(target, target_cls):
-        new_module = LoraLinearGPTQ(
+        new_module = GPTQLoraLinear(
             target, adapter_name, lora_config=lora_config, **kwargs
         )
 

@@ -16,17 +16,24 @@
 from typing import Dict, Tuple
 
 # Third Party
+from accelerate.logging import get_logger
 from fms_acceleration import AccelerationPlugin
 from peft import LoraConfig
+from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
 from transformers import TrainingArguments
 import torch
 
 # Local
 from .utils import (
+    patch_huggingface_clip_grad_norm_fsdp2,
+    patch_huggingface_fsdp2_load_full_state_dict,
     patch_huggingface_save_and_load_for_dtensors,
+    patch_prepare_sd_options,
     patch_torch_optim_foreach_to_not_apply_to_dtensors,
     prepare_scattermoe,
 )
+
+logger = get_logger(__name__)
 
 
 # pylint: disable=too-many-instance-attributes
@@ -36,6 +43,7 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
         "GraniteMoeForCausalLM",
         "MixtralForCausalLM",
         "GraniteMoeSharedForCausalLM",
+        "GraniteMoeHybridForCausalLM",
     ]
 
     def __init__(self, configurations: Dict[str, Dict]):
@@ -77,6 +85,7 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
         modifiable_args: Tuple[LoraConfig],
     ):
         rank, world_size = 0, 1
+        (peft_config,) = modifiable_args
         if torch.distributed.is_initialized():
             world_size = torch.distributed.get_world_size()
             # we do not need to use the fallback as this is wrapped in an `is_initialized` block
@@ -97,6 +106,7 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
             ep_degree=self._ep_degree,
             disable_distributed=self._disable_distributed,
             mixed_precision=False,  # Currently this is hardcoded to OFF
+            lora_config=peft_config,
         )
         return model, modifiable_args
 
@@ -109,6 +119,12 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
             accelerator is not None
             and getattr(accelerator.state, "fsdp_plugin", None) is not None
         ):
+            if (
+                hasattr(accelerator.state.fsdp_plugin, "fsdp_version")
+                and accelerator.state.fsdp_plugin.fsdp_version == 2
+            ):
+                # when FSDPv2 is used
+                patch_prepare_sd_options()
 
             if not self._disable_distributed:
                 # - use an internal function call to get the no split
@@ -121,13 +137,39 @@ class ScatterMoEAccelerationPlugin(AccelerationPlugin):
                     if layer.__class__.__name__ in _layers
                 ]
 
+                if (
+                    accelerator.state.fsdp_plugin.state_dict_type
+                    != StateDictType.SHARDED_STATE_DICT
+                ):
+                    accelerator.state.fsdp_plugin.state_dict_type = (
+                        StateDictType.SHARDED_STATE_DICT
+                    )
+                    logger.warning(
+                        "Overriding FSDP plugin state_dict_type to"
+                        f"{StateDictType.SHARDED_STATE_DICT},"
+                        "since the plugin does not support {StateDictType.FULL_STATE_DICT}"
+                    )
                 # call this to patch the HF save and load functions to be able
                 # to save DTensors propery
                 patch_huggingface_save_and_load_for_dtensors()
 
-                # call this to patch torch optim to not use
-                # foreach for dtensors
-                patch_torch_optim_foreach_to_not_apply_to_dtensors()
+                if (
+                    not hasattr(accelerator.state.fsdp_plugin, "fsdp_version")
+                    or accelerator.state.fsdp_plugin.fsdp_version == 1
+                ):
+                    # call this to patch torch optim to not use
+                    # foreach for dtensors only when fsdpv1 is used
+                    # fsdpv2 with transformers does implicit replication to convert all to dtensors
+                    # before grad norm and optimizer.step() operations
+                    patch_torch_optim_foreach_to_not_apply_to_dtensors()
+
+                if (
+                    hasattr(accelerator.state.fsdp_plugin, "fsdp_version")
+                    and accelerator.state.fsdp_plugin.fsdp_version == 2
+                ):
+                    # when EP and FSDPv2 is used
+                    patch_huggingface_clip_grad_norm_fsdp2(accelerator)
+                    patch_huggingface_fsdp2_load_full_state_dict()
 
         return callbacks
 

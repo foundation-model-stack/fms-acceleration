@@ -16,9 +16,11 @@
 from collections import defaultdict
 from typing import Dict, List, Union
 import json
+import math
 import os
 import re
 import shutil
+import types
 
 # Third Party
 from accelerate.logging import get_logger
@@ -31,6 +33,7 @@ from torch.distributed.checkpoint.default_planner import (
 )
 from torch.distributed.checkpoint.state_dict import get_state_dict, set_state_dict
 from torch.distributed.fsdp.fully_sharded_data_parallel import StateDictType
+from torch.distributed.tensor import DTensor
 from transformers import PretrainedConfig
 from transformers.utils import CONFIG_NAME, SAFE_WEIGHTS_INDEX_NAME, SAFE_WEIGHTS_NAME
 import torch
@@ -39,6 +42,7 @@ import torch.distributed.checkpoint as dcp
 # Local
 from .scattermoe_constants import (
     FILE_SAFETENSOR_INDEX,
+    KEY_EXPERT_PARALLEL,
     PARAM_NAME_ROUTER_SCATTERMOE,
     PARAM_NAME_WEIGHT_SCATTERMOE,
     get_scattermoe_conv_spec_from_archs,
@@ -52,6 +56,8 @@ logger = get_logger(__name__)
 MODEL_INDEX = None
 KEY_MODEL = "model"
 KEY_OPTIMIZER = "optimizer"
+
+ADAPTER_SAFE_WEIGHTS_NAME = "adapter_model.safetensors"
 
 # Below are rewrite of HF FSDP model saving functions to be able to handle
 # that the parameters are now a mixture of regular and Dtensors.
@@ -101,25 +107,44 @@ def save_fsdp_model(
 def save_fsdp_optimizer(
     fsdp_plugin, accelerator, optimizer, model, output_dir, optimizer_index=0
 ):
-
     if fsdp_plugin.state_dict_type != StateDictType.SHARDED_STATE_DICT:
         raise NotImplementedError(
             "Checkpointing for megablocks only enabled for sharded state dict."
         )
-
+    sd_options = _prepare_sd_options(fsdp_plugin)
     # get the state dicts for model and optimize
-    (model_state_dict, optimizer_state_dict) = get_state_dict(model, optimizer)
+    (model_state_dict, optimizer_state_dict) = get_state_dict(
+        model, optimizer, options=sd_options
+    )
+
+    # filter out lora state dict
+    # TODO: Once expert layers are supported for LoRA tuning
+    # remove the "router" filtering
+    lora_state_dict = {
+        k: v
+        for k, v in model_state_dict.items()
+        if ("lora_A" in k or "lora_B" in k) and "router" not in k
+    }
 
     # - save model
-    ckpt_model = os.path.join(output_dir, f"{FSDP_MODEL_NAME}_{MODEL_INDEX}")
-    os.makedirs(ckpt_model, exist_ok=True)
-    logger.info(f"Saving model to {ckpt_model}")
-    dcp.save(
-        state_dict={KEY_MODEL: model_state_dict},
-        storage_writer=dcp.FileSystemWriter(ckpt_model),
-        planner=DefaultSavePlanner(),
-    )
-    logger.info(f"Model saved to {ckpt_model}")
+    if lora_state_dict:
+        ckpt_model = os.path.join(output_dir, f"{FSDP_MODEL_NAME}_{MODEL_INDEX}")
+        os.makedirs(ckpt_model, exist_ok=True)
+        logger.info(f"Saving lora model to {ckpt_model}")
+        dcp.save(
+            state_dict={KEY_MODEL: lora_state_dict},
+            storage_writer=dcp.FileSystemWriter(ckpt_model),
+            planner=DefaultSavePlanner(),
+        )
+    else:
+        ckpt_model = os.path.join(output_dir, f"{FSDP_MODEL_NAME}_{MODEL_INDEX}")
+        os.makedirs(ckpt_model, exist_ok=True)
+        logger.info(f"Saving ft model to {ckpt_model}")
+        dcp.save(
+            state_dict={KEY_MODEL: model_state_dict},
+            storage_writer=dcp.FileSystemWriter(ckpt_model),
+            planner=DefaultSavePlanner(),
+        )
 
     # - save optimizer
     ckpt_opt = os.path.join(output_dir, f"{OPTIMIZER_NAME}_{optimizer_index}")
@@ -131,6 +156,28 @@ def save_fsdp_optimizer(
         planner=DefaultSavePlanner(),
     )
     logger.info(f"Optimizer state saved in {ckpt_opt}")
+
+
+def _prepare_sd_options(fsdp_plugin):
+    sd_options = None
+
+    # we use this only for FSDP2, as it requires torch >= 2.6.0 and this api requires torch >= 2.2.0
+    if fsdp_plugin.fsdp_version == 2:
+        # pylint: disable=import-outside-toplevel
+        # Third Party
+        from torch.distributed.checkpoint.state_dict import StateDictOptions
+
+        sd_options = StateDictOptions(
+            full_state_dict=fsdp_plugin.state_dict_type
+            == StateDictType.FULL_STATE_DICT,
+            cpu_offload=getattr(fsdp_plugin.state_dict_config, "offload_to_cpu", False),
+            broadcast_from_rank0=getattr(
+                fsdp_plugin.state_dict_config, "rank0_only", False
+            ),
+            flatten_optimizer_state_dict=True,
+        )
+
+    return sd_options
 
 
 # rewrite of func from accelerate.utils.fsdp_utils.py
@@ -154,15 +201,16 @@ def load_fsdp_optimizer(
     optimizer_index=0,
     adapter_only=False,
 ):
-
     accelerator.wait_for_everyone()
     if fsdp_plugin.state_dict_type != StateDictType.SHARDED_STATE_DICT:
         raise NotImplementedError(
             "Checkpointing for megablocks only enabled for sharded state dict."
         )
-
+    sd_options = _prepare_sd_options(fsdp_plugin)
     # - get the state dicts
-    model_state_dict, optimizer_state_dict = get_state_dict(model, optimizer)
+    model_state_dict, optimizer_state_dict = get_state_dict(
+        model, optimizer, options=sd_options
+    )
 
     # - load the model state dict
     ckpt_model = os.path.join(input_dir, f"{FSDP_MODEL_NAME}_{MODEL_INDEX}")
@@ -186,6 +234,7 @@ def load_fsdp_optimizer(
         optimizer,
         model_state_dict=model_state_dict,
         optim_state_dict=optimizer_state_dict,
+        options=sd_options,
     )
 
     # FIXME:
@@ -220,6 +269,35 @@ def patch_huggingface_save_and_load_for_dtensors():
     patch_target_module("transformers.trainer.save_fsdp_optimizer", save_fsdp_optimizer)
     patch_target_module("transformers.trainer.load_fsdp_model", load_fsdp_model)
     patch_target_module("transformers.trainer.load_fsdp_optimizer", load_fsdp_optimizer)
+
+
+def patch_prepare_sd_options():
+    # Third Party
+    # pylint: disable=import-outside-toplevel
+    from fms_acceleration.model_patcher import patch_target_module
+
+    patch_target_module(
+        "accelerate.utils.fsdp_utils._prepare_sd_options", _prepare_sd_options
+    )
+
+
+# function to monkey patch accelerator clip grad_norm
+def patch_huggingface_clip_grad_norm_fsdp2(accelerator):
+    accelerator.clip_grad_norm_ = types.MethodType(clip_grad_norm_, accelerator)
+
+
+def patch_huggingface_fsdp2_load_full_state_dict():
+    # Third Party
+    # pylint: disable=import-outside-toplevel
+    from fms_acceleration.model_patcher import patch_target_module
+
+    patch_target_module(
+        "accelerate.accelerator.fsdp2_prepare_model", fsdp2_prepare_model
+    )
+    patch_target_module(
+        "accelerate.utils.fsdp_utils.fsdp2_load_full_state_dict",
+        fsdp2_load_full_state_dict,
+    )
 
 
 # this function implements a trick to get the resolved cache file to acccess the safetensor
@@ -467,30 +545,54 @@ def save_sharded_safetensors(
     save_directory: str,
     metadata: Dict,
     max_shard_size: Union[int, str] = "5GB",
+    lora: bool = False,
 ):
-    filename_pattern = SAFE_WEIGHTS_NAME.replace(".bin", "{suffix}.bin").replace(
-        ".safetensors", "{suffix}.safetensors"
-    )
-    state_dict_split = split_torch_state_dict_into_shards(
-        input_state_dict,
-        filename_pattern=filename_pattern,
-        max_shard_size=max_shard_size,
-    )
-    index = {
-        "metadata": state_dict_split.metadata,
-        "weight_map": state_dict_split.tensor_to_filename,
-    }
-    # Save the index
-    with open(
-        os.path.join(save_directory, SAFE_WEIGHTS_INDEX_NAME), "w", encoding="utf-8"
-    ) as f:
-        content = json.dumps(index, indent=2, sort_keys=True) + "\n"
-        f.write(content)
+    if not lora:
+        filename_pattern = SAFE_WEIGHTS_NAME.replace(".bin", "{suffix}.bin").replace(
+            ".safetensors", "{suffix}.safetensors"
+        )
+        state_dict_split = split_torch_state_dict_into_shards(
+            input_state_dict,
+            filename_pattern=filename_pattern,
+            max_shard_size=max_shard_size,
+        )
 
-    filename_to_tensors = state_dict_split.filename_to_tensors.items()
-    for shard_file, tensors in filename_to_tensors:
-        shard = {tensor: input_state_dict[tensor].contiguous() for tensor in tensors}
-        save_file(shard, os.path.join(save_directory, shard_file), metadata=metadata)
+        index = {
+            "metadata": state_dict_split.metadata,
+            "weight_map": state_dict_split.tensor_to_filename,
+        }
+        # Save the index
+        with open(
+            os.path.join(save_directory, SAFE_WEIGHTS_INDEX_NAME), "w", encoding="utf-8"
+        ) as f:
+            content = json.dumps(index, indent=2, sort_keys=True) + "\n"
+            f.write(content)
+
+        filename_to_tensors = state_dict_split.filename_to_tensors.items()
+        for shard_file, tensors in filename_to_tensors:
+            shard = {
+                tensor: input_state_dict[tensor].contiguous() for tensor in tensors
+            }
+            save_file(
+                shard, os.path.join(save_directory, shard_file), metadata=metadata
+            )
+    else:
+        filename_pattern = ADAPTER_SAFE_WEIGHTS_NAME.replace(
+            ".bin", "{suffix}.bin"
+        ).replace(".safetensors", "{suffix}.safetensors")
+        state_dict_split = split_torch_state_dict_into_shards(
+            input_state_dict,
+            filename_pattern=filename_pattern,
+            max_shard_size=max_shard_size,
+        )
+        filename_to_tensors = state_dict_split.filename_to_tensors.items()
+        for shard_file, tensors in filename_to_tensors:
+            shard = {
+                tensor: input_state_dict[tensor].contiguous() for tensor in tensors
+            }
+            save_file(
+                shard, os.path.join(save_directory, shard_file), metadata=metadata
+            )
 
 
 # --------------------------- SCRIPT -------------------------
@@ -540,15 +642,77 @@ def recover_safetensors_from_dcp(
     # get the state_dict
     state_dict = loader(checkpoint_dir)
 
+    # filter out additional names created by lora tuning
+    # create switch based on state dict for future use
+    new_state_dict = {}
+    lora = False
+    for name, param in state_dict.items():
+        # if lora weight, set lora switch to true
+        if "lora_A" in name or "lora_B" in name:
+            lora = True
+        # if lora naming convention, convert to traditional
+        if "base_model.model." in name:
+            name = name.replace("base_model.model.", "", 1)
+        if "default." in name:
+            name = name.replace("default.", "", 1)
+        new_state_dict[name] = param
+
     # recover the original state dict
-    state_dict = recover_original_state_dict_from_checkpoint(state_dict, _name_or_path)
+    state_dict = recover_original_state_dict_from_checkpoint(
+        new_state_dict, _name_or_path
+    )
 
     # save it as a safetensors file
     save_sharded_safetensors(
         {k: v.contiguous() for k, v in state_dict.items()},
         output_dir,
         metadata={"format": "pt"},
+        lora=lora,
     )
+
+
+def clip_grad_norm_(self, parameters, max_norm, norm_type=2):
+    """grad norm patch when EP is enabled"""
+    # code inspired from
+    # https://github.com/pytorch/torchtitan/blob/72b16b13abc88ba08f3e1796e5caee09abd94554/torchtitan/distributed/utils.py#L398
+    ep_params = []
+    non_ep_params = []
+    ep_grads = []
+    non_ep_grads = []
+
+    for p in parameters:
+        if p.grad is None:
+            continue
+        if (
+            p.device_mesh.mesh_dim_names
+            and KEY_EXPERT_PARALLEL in p.device_mesh.mesh_dim_names
+        ):
+            ep_params.append(p)
+            ep_grads.append(p.grad)
+        else:
+            non_ep_params.append(p)
+            non_ep_grads.append(p.grad)
+    ep_grads_total_norm = torch.nn.utils.get_total_norm(
+        ep_grads, norm_type, False, True
+    )
+
+    if isinstance(ep_grads_total_norm, DTensor):
+        ep_grads_total_norm = ep_grads_total_norm.full_tensor()
+
+    non_ep_grads_total_norm = torch.nn.utils.get_total_norm(
+        non_ep_grads, norm_type, False, True
+    ).full_tensor()
+
+    if math.isinf(norm_type):
+        total_norm = torch.maximum(ep_grads_total_norm, non_ep_grads_total_norm)
+    else:
+        total_norm = ep_grads_total_norm**norm_type + non_ep_grads_total_norm**norm_type
+        total_norm **= 1.0 / norm_type
+
+    torch.nn.utils.clip_grads_with_norm_(ep_params, max_norm, total_norm, True)
+    torch.nn.utils.clip_grads_with_norm_(non_ep_params, max_norm, total_norm, True)
+
+    return total_norm
 
 
 # have it serve as a conversion script
@@ -589,3 +753,269 @@ if __name__ == "__main__":
     recover_safetensors_from_dcp(
         args.checkpoint_dir, args.pretrained_model_name_or_path, args.output_dir
     )
+
+
+# code taken from HF accelerate and modified
+def fsdp2_load_full_state_dict(accelerator, model: torch.nn.Module, full_sd: dict):
+    """
+    Loads the full state dict (could be only on rank 0) into the sharded model.
+    This is done by broadcasting the parameters from rank 0 to all other ranks.
+    This function modifies the model in-place.
+
+    Args:
+        accelerator (`Accelerator`): The accelerator instance
+        model (`torch.nn.Module`):
+            The model to load the state dict into, expected to be on meta device
+            or a VRAM spike can occur
+        full_sd (`dict`): The full state dict to load, can only be on rank 0
+    """
+    # pylint: disable=import-outside-toplevel
+    # Third Party
+    from torch.distributed.tensor import distribute_tensor
+    import torch.distributed as dist
+
+    # Model was previously copied to meta device
+    meta_sharded_sd = model.state_dict()
+    sharded_sd = {}
+
+    # Rank 0 distributes the full state dict to other ranks
+    def _infer_parameter_dtype(model, param_name, empty_param):
+        try:
+            old_param = model.get_parameter_or_buffer(param_name)
+        except AttributeError:
+            # Need this for LORA, as there some params are not *parameters* of sorts
+            base_param_name, local_param_name = param_name.rsplit(".", 1)
+            submodule = model.get_submodule(base_param_name)
+            old_param = getattr(submodule, local_param_name)
+
+        is_torch_e4m3fn_available = hasattr(torch, "float8_e4m3fn")
+        casting_dtype = None
+        is_param_float8_e4m3fn = (
+            is_torch_e4m3fn_available and empty_param.dtype == torch.float8_e4m3fn
+        )
+
+        if empty_param.dtype.is_floating_point and not is_param_float8_e4m3fn:
+            casting_dtype = old_param.dtype
+
+        return old_param is not None and old_param.is_contiguous(), casting_dtype
+
+    def _cast_and_contiguous(tensor, to_contiguous, dtype):
+        if dtype is not None:
+            tensor = tensor.to(dtype=dtype)
+        if to_contiguous:
+            tensor = tensor.contiguous()
+        return tensor
+
+    if accelerator.is_main_process:
+        for (param_name, full_param), sharded_param in zip(
+            full_sd.items(), meta_sharded_sd.values()
+        ):
+            # ignored params will not be on meta device
+            # and not handled by FSDP
+            if sharded_param.device != torch.device("meta"):
+                sharded_sd[param_name] = sharded_param
+            else:
+                device_mesh = sharded_param.device_mesh
+                full_param = full_param.detach().to(device_mesh.device_type)
+                dist.broadcast(full_param, src=0, group=dist.group.WORLD)
+                sharded_tensor = distribute_tensor(
+                    full_param, device_mesh, sharded_param.placements
+                )
+                to_contiguous, casting_dtype = _infer_parameter_dtype(
+                    model,
+                    param_name,
+                    full_param,
+                )
+                sharded_tensor = _cast_and_contiguous(
+                    sharded_tensor, to_contiguous, casting_dtype
+                )
+                sharded_sd[param_name] = sharded_tensor
+    # We need this else to have a matching `broadcast` for all of the ranks, else we deadlock
+    else:
+        for param_name, sharded_param in meta_sharded_sd.items():
+            # ignored params will not be on meta device
+            # and not handled by FSDP
+            if sharded_param.device != torch.device("meta"):
+                sharded_sd[param_name] = sharded_param
+            else:
+                device_mesh = sharded_param.device_mesh
+                full_tensor = torch.empty(
+                    sharded_param.size(),
+                    device=device_mesh.device_type,
+                    dtype=sharded_param.dtype,
+                )
+                dist.broadcast(full_tensor, src=0, group=dist.group.WORLD)
+                sharded_tensor = distribute_tensor(
+                    full_tensor, device_mesh, sharded_param.placements
+                )
+                to_contiguous, casting_dtype = _infer_parameter_dtype(
+                    model,
+                    param_name,
+                    full_tensor,
+                )
+                sharded_tensor = _cast_and_contiguous(
+                    sharded_tensor, to_contiguous, casting_dtype
+                )
+                sharded_sd[param_name] = sharded_tensor
+
+    # we set `assign=True` because our params are on meta device
+    model.load_state_dict(sharded_sd, assign=True)
+    return model
+
+
+# code taken from HF accelerate and modified
+def fsdp2_prepare_model(accelerator, model: torch.nn.Module) -> torch.nn.Module:
+    """Prepares the model for FSDP2 in-place. Also returns the model to avoid
+    misuse of the original model.
+
+    Args:
+        accelerator (`Accelerator`): The accelerator instance
+        model (`torch.nn.Module`): The model to prepare
+
+    Returns:
+        `torch.nn.Module`: Prepared model
+    """
+    # Standard
+    # pylint: disable=import-outside-toplevel
+    import copy
+    import warnings
+
+    # Third Party
+    # pylint: disable=import-outside-toplevel
+    from accelerate.utils.fsdp_utils import (
+        fsdp2_prepare_auto_wrap_policy,
+        get_parameters_from_modules,
+    )
+    from accelerate.utils.modeling import get_non_persistent_buffers
+    from accelerate.utils.other import get_module_children_bottom_up, is_compiled_module
+
+    # pylint: disable=import-outside-toplevel
+    from torch.distributed.fsdp import FSDPModule, MixedPrecisionPolicy, fully_shard
+
+    is_type_fsdp = isinstance(model, FSDPModule) or (
+        # pylint: disable=undefined-variable
+        is_compiled_module(model)
+        and isinstance(model._orig_mod, FSDPModule)
+    )
+    if is_type_fsdp:
+        return model
+
+    fsdp2_plugin = accelerator.state.fsdp_plugin
+
+    fsdp2_plugin.set_auto_wrap_policy(model)
+
+    original_sd = model.state_dict()
+    mesh = getattr(accelerator, "torch_device_mesh", None)
+
+    fsdp2_kwargs = {
+        "reshard_after_forward": fsdp2_plugin.reshard_after_forward,
+        "offload_policy": fsdp2_plugin.cpu_offload,
+        # `fully_shard` doesn't accept `None` in case of `MixedPrecisionPolicy`
+        "mp_policy": fsdp2_plugin.mixed_precision_policy or MixedPrecisionPolicy(),
+        "mesh": (
+            mesh[tuple(accelerator.parallelism_config.fsdp_dim_names)]
+            if mesh is not None
+            else None
+        ),
+        # pylint: disable=undefined-variable
+        "ignored_params": get_parameters_from_modules(
+            fsdp2_plugin.ignored_modules, model, accelerator.device
+        ),
+    }
+
+    model_has_params4bit = False
+    for _, param in model.named_parameters():
+        # this is a temporary fix whereby loading models with bnb params
+        # cannot be moved from GPU to a meta device due with FSDP2 because
+        # torch operations don't return the original class type bypassing the
+        # move to meta will still cause the VRAM spike, but at least it still will load
+        if param.__class__.__name__ == "Params4bit":
+            model_has_params4bit = True
+            break
+    if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
+        # pylint: disable=undefined-variable
+        non_persistent_buffer_fqns = get_non_persistent_buffers(
+            model, recurse=True, fqns=True
+        )
+        # pylint: disable=undefined-variable
+        original_non_persistent_buffers = copy.deepcopy(
+            {k: v for k, v in model.named_buffers() if k in non_persistent_buffer_fqns}
+        )
+        # We move the model parameters to meta device that are managed by FSDPv2,
+        # as then sharding happens on meta device
+        with torch.no_grad():
+            for _, module in model.named_modules():
+                for param_name, param in list(module.named_parameters(recurse=False)):
+                    if param not in fsdp2_kwargs["ignored_params"]:
+                        # Create new parameter on meta device
+                        meta_param = torch.nn.Parameter(
+                            torch.empty(param.shape, dtype=param.dtype, device="meta"),
+                            requires_grad=param.requires_grad,
+                        )
+                        setattr(module, param_name, meta_param)
+        # model = model.to(torch.device("meta"))
+        # We need to re-tie the weights, not exactly sure why, but if we don't do this,
+        # reference to `lm_head/embed_tokens` stay hanging -> more VRAM usage
+        # We assume `transformers` models have a `tie_weights` method if they support it
+        if hasattr(model, "tie_weights"):
+            model.tie_weights()
+
+    # pylint: disable=undefined-variable
+    auto_wrap_policy_func = fsdp2_prepare_auto_wrap_policy(fsdp2_plugin, model)
+    if auto_wrap_policy_func is not None:
+        # We skip the model itself, as that one is always wrapped
+        # pylint: disable=undefined-variable
+        for module in get_module_children_bottom_up(model)[:-1]:
+            if auto_wrap_policy_func(module) and not isinstance(module, FSDPModule):
+                fully_shard(module, **fsdp2_kwargs)
+
+    if not isinstance(model, FSDPModule):
+        fully_shard(model, **fsdp2_kwargs)
+
+    if fsdp2_plugin.cpu_ram_efficient_loading:
+        # If `cpu_ram_efficient_loading` is enabled, only rank 0 loads the weights
+        # Other ranks have an empty model on `meta` device, so we need to distribute
+        # the weights properly
+        fsdp2_load_full_state_dict(accelerator, model, original_sd)
+
+    if fsdp2_plugin.cpu_ram_efficient_loading and not model_has_params4bit:
+        # We re-register the buffers, as they may not be in the state_dict
+        for fqn, buffer_tensor in original_non_persistent_buffers.items():
+            buffer_tensor = buffer_tensor.to(accelerator.device)
+
+            if "." in fqn:
+                parent_fqn, local_buffer_name = fqn.rsplit(".", 1)
+                parent_module = model.get_submodule(parent_fqn)
+            else:
+                local_buffer_name = fqn
+                parent_module = model
+
+            parent_module.register_buffer(
+                local_buffer_name, buffer_tensor, persistent=False
+            )
+
+        # We need to tie the weights again, as call to `load_full_state_dict` breaks the tie
+        # Needs to be called both here and above
+        # removing this call makes the have slightly different loss
+        # removing the call above leads to extra memory usage as explained in the comment above
+        if hasattr(model, "tie_weights"):
+            model.tie_weights()
+
+    # There is no `dtype` attribution for nn.Module
+    # Set it to None if it doesn't exist and do the upcast always
+    model_dtype = getattr(model, "dtype", None)
+    if accelerator.mixed_precision != "no" and (
+        model_dtype is None or model_dtype != torch.float32
+    ):
+        # We upcast the model according to `deepspeed`'s implementation
+        # More info about this can be found in `accelerator.py:prepare_model`s
+        # FSDP1 section
+        model = model.to(torch.float32)
+        if accelerator.is_main_process:
+            # TODO(siro1): Add a warning for each parameter that was upcasted
+            # pylint: disable=undefined-variable
+            warnings.warn(
+                "FSDP upcast of low precision parameters to fp32 (since mixed_precision != 'no')"
+                "may affect the precision of model checkpoints."
+            )
+    return model

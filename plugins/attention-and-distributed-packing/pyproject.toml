@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fms-acceleration-aadp"
-version = '0.2.0.dev'
+version = '0.2.1.dev'
 description = "FMS Acceleration Plugin for Attention and Distributed Packing Optimizations"
 authors = [
   {name = "Fabian Lim", email = "flim@sg.ibm.com"},
@@ -23,7 +23,7 @@ classifiers=[
     "Programming Language :: Python :: 3.11",
 ]
 
-dependencies = ["numba", "trl"]
+dependencies = ["numba", "trl>=0.19.1,<0.20.0"]
 
 [tool.hatch.build.targets.wheel]
 only-include = ["src/fms_acceleration_aadp"]

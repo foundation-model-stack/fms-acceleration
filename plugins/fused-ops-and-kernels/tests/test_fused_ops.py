@@ -28,7 +28,7 @@ if _is_package_available("bitsandbytes"):
 if _is_package_available("auto_gptq"):
     # pylint: disable=ungrouped-imports
     # Third Party
-    from peft.tuners.lora.gptq import QuantLinear as LoraGPTQLinear4bit
+    from peft.tuners.lora.gptq import GPTQLoraLinear as LoraGPTQLinear4bit
 
     LORA_QUANTIZED_CLASSES[GPTQ] = LoraGPTQLinear4bit
 

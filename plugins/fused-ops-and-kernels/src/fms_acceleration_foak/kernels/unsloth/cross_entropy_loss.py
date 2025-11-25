@@ -187,7 +187,7 @@ def _cross_entropy_backward(
 pass
 
 
-MAX_FUSED_SIZE: tl.constexpr = 65536 # 2**16
+MAX_FUSED_SIZE = 65536 # 2**16
 
 class Fast_CrossEntropyLoss(torch.autograd.Function):
     @staticmethod
