@@ -67,6 +67,11 @@ def patch_mamba_layers_with_cp_head(
     cp_mamba_impl,
     cp_mamba_recompute,
 ):
+    # to avoid rechunking/sharding of the buffers
+    # ideally this is not optimal
+    from torch.distributed.tensor.experimental._attention import _cp_options
+    _cp_options.enable_load_balance = False
+
     config_ssm = hf_config_ssm_config(model.config)
     device = torch.device(f"cuda:{rank}")
     if is_fsdp_enabled():
