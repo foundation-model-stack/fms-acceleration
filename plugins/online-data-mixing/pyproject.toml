@@ -22,10 +22,25 @@ classifiers=[
     "Programming Language :: Python :: 3.11",
 ]
 
-dependencies = ["datasets", "torchdata"]
+dependencies = [
+  "scikit-learn",
+  "datasets==4.*",
+  "torchdata==0.11.0",
+  "sentence-transformers==5.*",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
 
 [tool.hatch.build.targets.wheel]
 only-include = ["src/fms_acceleration_odm"]
 
 [tool.hatch.build.targets.wheel.sources]
 "src" = ""
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "src",
+  "pyproject.toml",
+  "README.md",
+]

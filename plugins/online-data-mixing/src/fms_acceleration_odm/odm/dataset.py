@@ -7,13 +7,14 @@ import os
 import random
 
 # Third Party
-from datasets import DatasetDict
+from datasets import Dataset, DatasetDict
 from torch.utils.data import DataLoader, IterableDataset
 from torchdata.stateful_dataloader import StatefulDataLoader
 from tqdm import tqdm
 import torch
 
 # Local
+from .auto_categorizer import AutoCategorizeConfig, DatasetAutoCategorizer
 from .reward import Reward, compute_reward
 
 logger = getLogger(__name__)
@@ -34,6 +35,7 @@ class OnlineMixingDataset(IterableDataset):
         eval_batch_size: int = 5,
         output_dir="odm",
         reward_type=Reward.ENTROPY,
+        auto_categorize_config: Optional[dict | AutoCategorizeConfig] = None,
     ):
         """Mixes datasets with sampling ratios learnt using
         Multi Armed Bandit (MAB) EXP3 and rewards defined.
@@ -45,6 +47,8 @@ class OnlineMixingDataset(IterableDataset):
 
         Args:
             dataset_dict (DatasetDict): keys are category names and values are HF datasets.
+            If only a single key (dataset) is provided, we will run an auto categorization step.
+            Refer to `auto_categorize_config` for options regarding auto categorization.
             collators_dict (dict): collator corresponding to each dataset
             used while constructing torch dataloader.
             eval_dataset_dict (DatasetDict): keys are category names and values are HF
@@ -61,7 +65,22 @@ class OnlineMixingDataset(IterableDataset):
             output_dir (str, optional): output dir to store logs. Defaults to "odm".
             reward_type (_type_, optional): type of reward to use, more details can
             be found in compute_reward function. Defaults to Reward.ENTROPY.
+            auto_categorize_config (dict | AutoCategorizeConfig, optional):
+            configuration overrides for the auto-categorizer such as text column,
+            embedding model, cluster count etc. This will only be used if the `dataset_dict`
+            has only one key.
         """
+        self.auto_categorize = len(dataset_dict.keys()) == 1
+        self._auto_categorize_config = self._build_auto_categorize_config(
+            auto_categorize_config
+        )
+        dataset_dict, collators_dict = self._maybe_auto_categorize_dataset(
+            dataset_dict, collators_dict, dataset_role="train"
+        )
+        eval_dataset_dict, eval_collators_dict = self._maybe_auto_categorize_dataset(
+            eval_dataset_dict, eval_collators_dict, dataset_role="eval"
+        )
+
         logger.info(
             """Values set to OnlineMixingDataset
                     dataset_dict:       {dataset_dict}
@@ -75,6 +94,7 @@ class OnlineMixingDataset(IterableDataset):
                     eval_batch_size:    {eval_batch_size}
                     output_dir:         {output_dir}
                     reward_type:        {reward_type}
+                    auto_categorize_config:    {auto_categorize_config}
                     """.format(
                 dataset_dict=dataset_dict,
                 collators_dict=collators_dict,
@@ -87,6 +107,7 @@ class OnlineMixingDataset(IterableDataset):
                 eval_batch_size=eval_batch_size,
                 output_dir=output_dir,
                 reward_type=reward_type,
+                auto_categorize_config=auto_categorize_config,
             )
         )
 
@@ -301,6 +322,58 @@ class OnlineMixingDataset(IterableDataset):
                 if self.eval_dataset_dict[k]
                 else None
             )
+
+    def _build_auto_categorize_config(self, config):
+        if isinstance(config, AutoCategorizeConfig):
+            return config
+        if config is None:
+            return AutoCategorizeConfig()
+        return AutoCategorizeConfig(**config)
+
+    def _maybe_auto_categorize_dataset(
+        self, dataset_container, collators_dict, dataset_role
+    ):
+        if len(dataset_container) != 1:
+            return dataset_container, collators_dict
+
+        logger.info("Starting auto categorization process")
+
+        dataset_candidate: Dataset = next(iter(dataset_container.values()))
+        auto_categorizer = DatasetAutoCategorizer(config=self._auto_categorize_config)
+        categorized = auto_categorizer(dataset=dataset_candidate)
+
+        # We can delete the auto categorizer object since
+        # it loads a sentence embedding model
+        del auto_categorizer
+        torch.cuda.empty_cache()
+
+        collators_dict = self._broadcast_collators_to_auto_categories(
+            collators_dict, list(categorized.keys())  # type: ignore
+        )
+        logger.info(
+            "Auto-categorized dataset into %d pseudo categories: %s",
+            len(categorized),
+            list(categorized.keys()),
+        )
+        return categorized, collators_dict
+
+    def _broadcast_collators_to_auto_categories(
+        self, collators_dict: Optional[dict], category_names: list[str]
+    ) -> dict:
+        if not category_names:
+            return collators_dict or {}
+        if not collators_dict:
+            return {name: None for name in category_names}
+        mapping = dict(collators_dict)
+        if set(mapping.keys()) == set(category_names):
+            return mapping
+        if len(mapping) == 1:
+            collator = next(iter(mapping.values()))
+            return {name: collator for name in category_names}
+        raise ValueError(
+            "Unable to broadcast collators to auto-categorized datasets. Provide a single "
+            "collator or one entry per generated category."
+        )
 
     def _update_sampling_ratio(self, weights) -> list:
         """Helper function to convert weights to ratio
