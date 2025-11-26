@@ -23,7 +23,13 @@ from tqdm import tqdm
 from transformers.modeling_utils import is_fsdp_enabled
 import torch
 
-key_ep = "cp"
+# to avoid rechunking/sharding of the buffers
+# ideally this is not optimal
+from torch.distributed.tensor.experimental._attention import _cp_options
+_cp_options.enable_load_balance = False
+
+
+key_cp = "cp"
 key_rep = "dp_shard"
 
 
@@ -67,10 +73,6 @@ def patch_mamba_layers_with_cp_head(
     cp_mamba_impl,
     cp_mamba_recompute,
 ):
-    # to avoid rechunking/sharding of the buffers
-    # ideally this is not optimal
-    from torch.distributed.tensor.experimental._attention import _cp_options
-    _cp_options.enable_load_balance = False
 
     config_ssm = hf_config_ssm_config(model.config)
     device = torch.device(f"cuda:{rank}")
@@ -84,17 +86,17 @@ def patch_mamba_layers_with_cp_head(
         device_mesh = init_device_mesh(
             "cuda",
             (cp_degree,),
-            mesh_dim_names=(key_ep,),
+            mesh_dim_names=(key_cp,),
         )
     else:
         device_mesh = init_device_mesh(
             "cuda",
             (rep_size, cp_degree),
-            mesh_dim_names=(key_rep, key_ep),
+            mesh_dim_names=(key_rep, key_cp),
         )
 
     cp_args = {
-        "cp_mesh": device_mesh[key_ep],
+        "cp_mesh": device_mesh[key_cp],
         "cp_mamba_impl": cp_mamba_impl,
         "cp_mamba_recompute": cp_mamba_recompute,
     }
