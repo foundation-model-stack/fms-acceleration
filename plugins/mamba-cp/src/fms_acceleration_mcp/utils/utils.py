@@ -15,7 +15,13 @@
 from typing import Dict
 
 # Third Party
-from mamba_ssm.modules.mamba2_cp import Mamba2CP
+try:
+    from mamba_ssm.modules.mamba2_cp import Mamba2CP
+except ImportError:
+    raise ValueError("custom mamba_ssm package installation is needed"
+                     "install from https://github.com/garrett361/mamba/tree/mamba-cp"
+                     )
+from accelerate.logging import get_logger
 
 # pylint: disable=import-error
 from torch.distributed._tensor.device_mesh import init_device_mesh
@@ -25,15 +31,20 @@ import torch
 
 # to avoid rechunking/sharding of the buffers
 # ideally this is not optimal
+# this is done to make self attention cp compatible with mamba cp
 from torch.distributed.tensor.experimental._attention import _cp_options
 _cp_options.enable_load_balance = False
 
+logger = get_logger(__name__)
 
+# the same keys are used in accelerate
+# therefore we choose these to be in sync and cross leverage.
 key_cp = "cp"
 key_rep = "dp_shard"
 
-
-def hf_config_ssm_config(hf_config) -> Dict:
+# extract ssm config from hf config to be used 
+# while swapping the mamba modules
+def get_ssmconfig_from_hfconfig(hf_config) -> Dict:
     config_ssm = {}
     config_ssm["d_model"] = hf_config.hidden_size
     config_ssm["d_state"] = 128
@@ -45,6 +56,7 @@ def hf_config_ssm_config(hf_config) -> Dict:
     return config_ssm
 
 
+# to patch input arguments between mamba cp module and standard hf mamba module
 class Mamba2CPHF(Mamba2CP):
     def forward(
         self,
@@ -63,7 +75,10 @@ class Mamba2CPHF(Mamba2CP):
             inference_params=None,
         )
 
-
+# patches each mamba module with mamba cp module
+# mamba cp module's weights are exactly same as hf mamba module
+# so we reuse the state dict and the same does not need special handling
+# while checkpointing.
 def patch_mamba_layers_with_cp_head(
     model,
     checkpoint_name_or_path,
@@ -74,12 +89,18 @@ def patch_mamba_layers_with_cp_head(
     cp_mamba_recompute,
 ):
 
-    config_ssm = hf_config_ssm_config(model.config)
+    config_ssm = get_ssmconfig_from_hfconfig(model.config)
     device = torch.device(f"cuda:{rank}")
     if is_fsdp_enabled():
         device = torch.device("cpu")
     rep_size = world_size // cp_degree
-
+    
+    # auto infer ddp and cp ranks
+    # does not work on other combination of parallelisms
+    logger.warning(
+        "Mamba CP is only meant for parallelism combinations having DP and CP"
+        "other combinations can lead to unexpected behaviour"
+    )
     if cp_degree == 1:
         raise ValueError("CP degree can't be one")
     if rep_size == 1:
@@ -100,7 +121,6 @@ def patch_mamba_layers_with_cp_head(
         "cp_mamba_impl": cp_mamba_impl,
         "cp_mamba_recompute": cp_mamba_recompute,
     }
-
     with torch.no_grad():
         dtype = model.dtype
         device = model.device
