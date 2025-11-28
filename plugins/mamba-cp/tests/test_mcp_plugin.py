@@ -17,6 +17,7 @@ import os
 
 # Third Party
 from fms_acceleration.utils import instantiate_framework, read_configuration
+import pytest
 
 # First Party
 from fms_acceleration_mcp import MCPAccelerationPlugin
@@ -26,6 +27,10 @@ DIRNAME = os.path.dirname(__file__)
 CONFIG_PATH = os.path.join(DIRNAME, "../configs/mcp.yaml")
 
 
+@pytest.mark.skipif(
+    not pytest.importorskip("mamba_ssm", reason="mamba_ssm is not installed"),
+    reason="mamba_ssm is not installed",
+)
 def test_framework_installs_mcp_plugin():
     with instantiate_framework(
         read_configuration(CONFIG_PATH), require_packages_check=False

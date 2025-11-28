@@ -20,7 +20,7 @@ classifiers=[
     "Programming Language :: Python :: 3.11",
 ]
 
-dependencies = []
+dependencies = ["pytest"]
 
 [tool.hatch.build.targets.wheel]
 only-include = ["src/fms_acceleration_mcp"]
