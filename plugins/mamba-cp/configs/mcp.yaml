@@ -1,0 +1,4 @@
+training:
+  mamba:
+    cp:
+      degree: 2 # cp degree

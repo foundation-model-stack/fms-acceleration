@@ -12,13 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-KEY_PLUGINS = "plugins"
-PLUGIN_PREFIX = "fms_acceleration_"
 
-ACCELERATION_FRAMEWORK_ENV_KEY = "ACCELERATION_FRAMEWORK_CONFIG_FILE"
-
-# the order below is a linear precedence in which the plugins will be registered
-# and activated.
-# - hence the plugins that have model loaders should be on top of this list
-
-PLUGINS = ["peft", "foak", "aadp", "moe", "odm", "mcp"]
+# Local
+from .framework_plugin_mcp import MCPAccelerationPlugin
