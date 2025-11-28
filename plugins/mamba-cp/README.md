@@ -14,3 +14,4 @@ Context parallel implementation is taken from a custom [mamba_ssm repo](https://
 
 ## Known Issues
 1. load balancing is removed given limited support on mamba cp implementation. This could lead to potential throughput drops for trainings using causal mask.
+2. Padding free and flash attention are not supported.
