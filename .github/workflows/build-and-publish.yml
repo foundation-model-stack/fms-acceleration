@@ -17,6 +17,7 @@ jobs:
           - "attention-and-distributed-packing"
           - "accelerated-moe"
           - "online-data-mixing"
+          - "mamba-cp"
 
     permissions:
       id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing

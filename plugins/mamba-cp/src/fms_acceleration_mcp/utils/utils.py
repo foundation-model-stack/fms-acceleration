@@ -14,25 +14,28 @@
 # Standard
 from typing import Dict
 
-# Third Party
 try:
+    # Third Party
     from mamba_ssm.modules.mamba2_cp import Mamba2CP
-except ImportError:
-    raise ValueError("custom mamba_ssm package installation is needed"
-                     "install from https://github.com/garrett361/mamba/tree/mamba-cp"
-                     )
+except ImportError as exc:
+    raise ValueError(
+        "custom mamba_ssm package installation is needed"
+        "install from https://github.com/garrett361/mamba/tree/mamba-cp"
+    ) from exc
+# Third Party
 from accelerate.logging import get_logger
 
 # pylint: disable=import-error
 from torch.distributed._tensor.device_mesh import init_device_mesh
-from tqdm import tqdm
-from transformers.modeling_utils import is_fsdp_enabled
-import torch
 
 # to avoid rechunking/sharding of the buffers
 # ideally this is not optimal
 # this is done to make self attention cp compatible with mamba cp
 from torch.distributed.tensor.experimental._attention import _cp_options
+from tqdm import tqdm
+from transformers.modeling_utils import is_fsdp_enabled
+import torch
+
 _cp_options.enable_load_balance = False
 
 logger = get_logger(__name__)
@@ -42,7 +45,8 @@ logger = get_logger(__name__)
 key_cp = "cp"
 key_rep = "dp_shard"
 
-# extract ssm config from hf config to be used 
+
+# extract ssm config from hf config to be used
 # while swapping the mamba modules
 def get_ssmconfig_from_hfconfig(hf_config) -> Dict:
     config_ssm = {}
@@ -75,6 +79,7 @@ class Mamba2CPHF(Mamba2CP):
             inference_params=None,
         )
 
+
 # patches each mamba module with mamba cp module
 # mamba cp module's weights are exactly same as hf mamba module
 # so we reuse the state dict and the same does not need special handling
@@ -94,7 +99,7 @@ def patch_mamba_layers_with_cp_head(
     if is_fsdp_enabled():
         device = torch.device("cpu")
     rep_size = world_size // cp_degree
-    
+
     # auto infer ddp and cp ranks
     # does not work on other combination of parallelisms
     logger.warning(

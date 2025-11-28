@@ -32,6 +32,7 @@ jobs:
           - "attention-and-distributed-packing"
           - "accelerated-moe"
           - "online-data-mixing"
+          - "mamba-cp"
 
     steps:
       - name: Delete huge unnecessary tools folder
