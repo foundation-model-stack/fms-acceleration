@@ -243,7 +243,7 @@ class OnlineMixingDataset(IterableDataset):
                     else torch.ones_like(sample["input_ids"][0])
                 ),
                 "labels": (
-                    sample["labels"][0]
+                    sample["labels"][0].tolist()
                     if "labels" in sample
                     else sample["input_ids"][0]
                 ),
