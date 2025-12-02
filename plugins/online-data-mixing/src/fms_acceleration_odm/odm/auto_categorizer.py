@@ -25,11 +25,11 @@ import copy
 import math
 
 # Third Party
-import torch
 from datasets import Dataset, DatasetDict
 from sentence_transformers import SentenceTransformer
 from sklearn.cluster import KMeans
 import numpy as np
+import torch
 
 logger = getLogger(__name__)
 
