@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fms-acceleration-mcp"
-version = '0.1.1.dev'
+version = '0.1.2'
 description = "FMS Acceleration plugin for context parallel for mamba kernels"
 authors = [
   {name = "Mehant Kammakomati", email = "mehant.kammakomati2@ibm.com"},
