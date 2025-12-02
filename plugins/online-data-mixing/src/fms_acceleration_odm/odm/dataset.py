@@ -546,8 +546,9 @@ class OnlineMixingDataset(IterableDataset):
         if accelerator:
             rewards = accelerator.reduce(rewards, reduction="sum")
             count = accelerator.reduce(count, reduction="sum")
+
+        self._update_weights(count, rewards)
         if accelerator and accelerator.is_main_process:
-            self._update_weights(count, rewards)
             self.log_to_file(
                 {
                     "current_sampling_weights": self.sampling_weights.tolist(),
