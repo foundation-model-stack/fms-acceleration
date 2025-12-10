@@ -654,8 +654,8 @@ def recover_safetensors_from_dcp(
         # if lora naming convention, convert to traditional
         if "base_model.model." in name:
             v = name
+            name = name.replace("base_model.model.", "", 1)
             if "default." in name:
-                name = name.replace("base_model.model.", "", 1)
                 name = name.replace("default.", "", 1)
             k = name
             lora_keys[k] = v
