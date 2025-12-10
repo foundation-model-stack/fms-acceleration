@@ -677,7 +677,7 @@ def recover_safetensors_from_dcp(
         if name in lora_keys.keys():
             name = lora_keys[name]
         new_state_dict[name] = param
-    
+
     # save it as a safetensors file
     save_sharded_safetensors(
         {k: v.contiguous() for k, v in new_state_dict.items()},
