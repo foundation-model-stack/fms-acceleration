@@ -674,7 +674,7 @@ def recover_safetensors_from_dcp(
     new_state_dict = {}
     # modify the state dict back to HF PEFT format
     for name, param in state_dict.items():
-        if name in lora_keys.keys():
+        if lora_keys.get(name, None):
             name = lora_keys[name]
         new_state_dict[name] = param
 
