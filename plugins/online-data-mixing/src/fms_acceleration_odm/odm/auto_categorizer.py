@@ -176,11 +176,11 @@ class DatasetAutoCategorizer:
             )
 
         try:
-            from cuml import KMeans
-            print(f"Using GPU accelerated Kmeans")
-        except ImportError as e:
+            from cuml import KMeans # pylint: disable=import-outside-toplevel
+            print("Using GPU accelerated Kmeans")
+        except ImportError:
             print("GPU accelerated KMeans is not avaialble. Falling back to CPU based KMeans")
-            from sklearn.cluster import KMeans
+            from sklearn.cluster import KMeans # pylint: disable=import-outside-toplevel
 
         kwargs = {"n_init": 10}
         kwargs.update(self.config.cluster_kwargs)
