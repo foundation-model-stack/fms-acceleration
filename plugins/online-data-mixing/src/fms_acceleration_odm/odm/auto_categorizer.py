@@ -27,7 +27,6 @@ import math
 # Third Party
 from datasets import Dataset, DatasetDict
 from sentence_transformers import SentenceTransformer
-from sklearn.cluster import KMeans
 import numpy as np
 import torch
 
@@ -175,6 +174,14 @@ class DatasetAutoCategorizer:
                 "Unsupported clustering algorithm '%s'. Only 'kmeans' is currently supported."
                 % self.config.cluster_algo
             )
+
+        try:
+            from cuml import KMeans
+            print(f"Using GPU accelerated Kmeans")
+        except ImportError as e:
+            print("GPU accelerated KMeans is not avaialble. Falling back to CPU based KMeans")
+            from sklearn.cluster import KMeans
+
         kwargs = {"n_init": 10}
         kwargs.update(self.config.cluster_kwargs)
         model = KMeans(n_clusters=num_categories, **kwargs)
