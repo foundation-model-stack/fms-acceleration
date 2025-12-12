@@ -19,7 +19,7 @@ from functools import partial
 from fms_acceleration_odm import OnlineMixingDataset
 from fms_acceleration_odm.odm.reward import Reward
 
-model_name = "ibm-granite/granite-4.0-h-1b"
+model_name = "ibm-granite/granite-4.0-350m"
 output_dir = "./odm_custom_use"
 max_steps = 125
 batch_size = 4
@@ -27,10 +27,10 @@ log_file = os.path.join(output_dir, "loss.jsonl")
 
 # odm related
 step_idx = 0
-update_interval = 1  # every step
+update_interval = 10  # every 10 steps
 
 # model
-model = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch.bfloat16)
+model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.bfloat16)
 
 # tokenizer
 tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -102,7 +102,7 @@ dataset = OnlineMixingDataset(
 dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=None)
 
 # distributed setup
-dataloader_config = DataLoaderConfiguration(split_batches=True, dispatch_batches=True)
+dataloader_config = DataLoaderConfiguration(dispatch_batches=False)
 accelerator = Accelerator(dataloader_config=dataloader_config)
 model, dataloader = accelerator.prepare(model, dataloader)
 
@@ -141,7 +141,7 @@ for step, batch in enumerate(
     if step_idx % update_interval == 0:
         with torch.no_grad():
             model.eval()
-            dataloader.dataset.update_sampling_weights(model, accelerator, state)
+            dataset.update_sampling_weights(model, accelerator, state)
             model.train()
     if step_idx > max_steps:
         break

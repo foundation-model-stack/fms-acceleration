@@ -15,7 +15,7 @@ license = {text = "Apache-2.0"}
 readme = "README.md"
 requires-python = "~=3.11"
 keywords = ['fms-hf-tuning', 'acceleration', 'online-data-mixing']
-classifiers=[
+classifiers = [
     "License :: OSI Approved :: Apache Software License",
     "Development Status :: 4 - Beta",
     "Programming Language :: Python :: 3",
@@ -23,6 +23,9 @@ classifiers=[
 ]
 
 dependencies = [
+  "torch==2.8.0",
+  "torchvision==0.23.0",
+  "torchaudio==2.8.0",
   "scikit-learn",
   "datasets==4.*",
   "torchdata==0.11.0",
