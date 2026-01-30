@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fms-acceleration-odm"
-version = '0.1.4.dev'
+version = '0.1.5.dev'
 description = "FMS Acceleration plugin for online data mixing"
 authors = [
   {name = "Mehant Kammakomati", email = "mehant.kammakomati2@ibm.com"},
