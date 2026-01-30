@@ -297,7 +297,5 @@ def test_quantizing_pretrained_model_outputs_match(
     target = torch.nn.functional.softmax(original_logits, dim=-1)
     target = target.view(BS * SEQLEN, -1)
     error = loss_fn(input, target)
-    assert error.lt(
-        LOSS_TOLERANCE
-    ), "Model logits don't match between both libraries \
+    assert error.lt(LOSS_TOLERANCE), "Model logits don't match between both libraries \
         after quantization"

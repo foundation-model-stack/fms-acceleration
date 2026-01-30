@@ -142,6 +142,7 @@ class OnlineMixingDataset(IterableDataset):
         self.id2cat = dict(enumerate(self.category_list))
         self.cat2id = {c: i for i, c in enumerate(self.category_list)}
         self.total_categories = len(self.category_list)
+        self.rank = os.environ.get("RANK", "0")
 
         # If not starting weights given, then all arms (categories)
         # are equally important. Weights based on the size of the datasets
@@ -174,7 +175,7 @@ class OnlineMixingDataset(IterableDataset):
         self.output_dir = output_dir
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
-        self.log_file_path = os.path.join(self.output_dir, "odm.jsonl")
+        self.log_file_path = os.path.join(self.output_dir, f"odm_rank_{self.rank}.jsonl")
         logger.info(
             "Logs for online data mixing to be stored at {log_file_path}".format(
                 log_file_path=self.log_file_path
@@ -191,6 +192,7 @@ class OnlineMixingDataset(IterableDataset):
             "rewards": [0] * self.total_categories,
             "count": 0,
             "action": "",  # one of sample or update
+            "rank": self.rank,
         }
 
         # Local RNG so every process can deterministically sample identical streams.
@@ -274,6 +276,7 @@ class OnlineMixingDataset(IterableDataset):
                 "action": "sample",
             }
         )
+
         return sample
 
     def load_state_dict(self, state_dict):
@@ -548,13 +551,12 @@ class OnlineMixingDataset(IterableDataset):
             count = accelerator.reduce(count, reduction="sum")
 
         self._update_weights(count, rewards)
-        if accelerator and accelerator.is_main_process:
-            self.log_to_file(
-                {
-                    "current_sampling_weights": self.sampling_weights.tolist(),
-                    "current_sampling_ratio": self.sampling_ratio,
-                    "rewards": rewards.tolist(),
-                    "count": count.tolist(),
-                    "action": "update",
-                }
-            )
+        self.log_to_file(
+            {
+                "current_sampling_weights": self.sampling_weights.tolist(),
+                "current_sampling_ratio": self.sampling_ratio,
+                "rewards": rewards.tolist(),
+                "count": count.tolist(),
+                "action": "update",
+            }
+        )

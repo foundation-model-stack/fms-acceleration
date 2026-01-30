@@ -163,10 +163,8 @@ def get_gptq_peft_model(
                     model.model, model_id, adapter_name
                 )
         except Exception as exc:
-            raise NotImplementedError(
-                f"{model.__class__.__name__} not support \
-                    {peft_config.peft_type.value} peft type yet."
-            ) from exc
+            raise NotImplementedError(f"{model.__class__.__name__} not support \
+                    {peft_config.peft_type.value} peft type yet.") from exc
 
     return peft_model
 

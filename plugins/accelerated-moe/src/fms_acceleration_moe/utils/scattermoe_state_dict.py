@@ -188,7 +188,7 @@ def _maybe_reshape_scattermoe_expert_weights(
     num_experts: int,
     intermediate_size: int,
 ):
-    (_is_w1, _is_w2, _is_w3) = [
+    _is_w1, _is_w2, _is_w3 = [
         f"{x}.weight" in scatter_key for x in PARAM_NAME_WEIGHT_SCATTERMOE
     ]
 
