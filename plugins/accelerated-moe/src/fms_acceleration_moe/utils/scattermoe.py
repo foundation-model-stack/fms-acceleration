@@ -389,7 +389,7 @@ class ScatterMoE(torch.nn.Module):
 
         # expect these products to be produced by an earlier
         # all-to-all gather call
-        (send_counts, recv_counts, bins, sorted_expert_idxs, sorted_scattered_idxs) = (
+        send_counts, recv_counts, bins, sorted_expert_idxs, sorted_scattered_idxs = (
             gather_products
         )
 
@@ -421,7 +421,7 @@ class ScatterMoE(torch.nn.Module):
         # compute the routing logits, weights, and expert assigments
         # - router_logits: will be passed out of forward, used for computing
         #   routing loss.
-        (router_logits, routing_weights, selected_experts) = (
+        router_logits, routing_weights, selected_experts = (
             self._compute_routing_weights(hidden_states)
         )
 

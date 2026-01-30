@@ -113,7 +113,7 @@ def save_fsdp_optimizer(
         )
     sd_options = _prepare_sd_options(fsdp_plugin)
     # get the state dicts for model and optimize
-    (model_state_dict, optimizer_state_dict) = get_state_dict(
+    model_state_dict, optimizer_state_dict = get_state_dict(
         model, optimizer, options=sd_options
     )
 
