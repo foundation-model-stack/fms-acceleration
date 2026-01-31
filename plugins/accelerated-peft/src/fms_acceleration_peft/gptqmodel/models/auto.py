@@ -29,6 +29,7 @@ from .gemma import GemmaGPTQ
 from .gpt_bigcode import GPTBigCodeGPTQ
 from .gpt_neox import GPTNeoXGPTQ
 from .granite import GraniteGPTQ
+from .granitemoe import GraniteMoeGPTQ
 from .llama import LlamaGPTQ
 from .mistral import MistralGPTQ
 from .mixtral import MixtralGPTQ
@@ -43,6 +44,7 @@ MODEL_MAP = {
     "granite": GraniteGPTQ,
     "dbrx": DbrxGPTQ,
     "dbrx_converted": DbrxConvertedGPTQ,
+    "granitemoe": GraniteMoeGPTQ,
 }
 
 at_least_one_cuda_v6 = any(
