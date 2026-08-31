@@ -2,12 +2,16 @@
 
 # Standard
 from enum import StrEnum, auto
+from logging import getLogger
 from typing import Dict
+import math
 
 # Third Party
 from transformers import PreTrainedModel
 import torch
 import torch.nn.functional as F
+
+logger = getLogger(__name__)
 
 
 class Reward(StrEnum):
@@ -17,6 +21,9 @@ class Reward(StrEnum):
     TRAIN_LOSS = auto()
     VALIDATION_LOSS = auto()
     GRADNORM = auto()
+    LEARNABILITY = auto()
+    VELOCITY = auto()
+    COMBINED = auto()
 
 
 # TODO:
@@ -31,6 +38,8 @@ EVAL_LOSS_DATA = {"buffer": []}
 
 GRADNORM_DATA = {"buffer": []}
 
+VELOCITY_DATA = {"buffer": []}
+
 
 def compute_reward(
     model: PreTrainedModel,
@@ -43,6 +52,11 @@ def compute_reward(
     last_sampled_category=None,
     total_categories=None,
     current_category=None,
+    zero_shot_batch=None,
+    few_shot_batch=None,
+    train_step=None,
+    total_steps=None,
+    beta: float = 1.0,
 ) -> float:
     """
     Compute rewards based on the provided reward_type.
@@ -67,6 +81,25 @@ def compute_reward(
         Similar to TRAIN_LOSS reward here we use overall gradnorm. However, Higher grad norm
         categories should be less priortized.
 
+        Learnability reward: LEARNABILITY
+        Compares the model's loss on a zero-shot batch against a few-shot (templated) batch
+        for the same category: reward = 1 - loss_few_shot / loss_zero_shot. Higher values mean
+        the category benefits more from in-context examples, i.e. the model has more to learn
+        from that category.
+
+        Velocity reward: VELOCITY
+        Tracks how quickly a category's (eval) loss is dropping between consecutive reward
+        computations: reward = 1 - current_loss / previous_loss. Higher values mean the category
+        is still improving quickly and should keep being sampled.
+
+        Combined reward: COMBINED
+        Exponentially-decayed blend of LEARNABILITY and VELOCITY:
+            R(t) = alpha(t) * learnability + (1 - alpha(t)) * velocity
+            alpha(t) = exp(-beta * train_step / total_steps)
+        Early in training the blend favors LEARNABILITY (which category teaches the model the
+        most relative to its current baseline); later it favors VELOCITY (which category is
+        still yielding gains in absolute loss).
+
     Args:
         model (PreTrainedModel): HF Model object
         batch (torch.Tensor): Batch of samples (input_ids, labels, attention_mask)
@@ -78,6 +111,11 @@ def compute_reward(
         last_sampled_category: index of the last sampled category
         total_categories: total number of categories
         current_category: currently being reward computed category
+        zero_shot_batch: batch of zero-shot samples, used by LEARNABILITY/COMBINED
+        few_shot_batch: batch of few-shot (templated) samples, used by LEARNABILITY/COMBINED
+        train_step: current training step, used by COMBINED to compute alpha(t)
+        total_steps: total number of training steps, used by COMBINED to compute alpha(t)
+        beta: decay hyper-parameter for COMBINED's alpha(t). Defaults to 1.0.
     Returns:
         float
     """
@@ -145,4 +183,48 @@ def compute_reward(
             gradnorm_history[-1]["grad_norm"] + 0.0001
         )
         return GRADNORM_DATA["buffer"][current_category]
+    if reward_type == Reward.LEARNABILITY:
+        return _compute_learnability_reward(model, zero_shot_batch, few_shot_batch)
+    if reward_type == Reward.VELOCITY:
+        return _compute_velocity_reward(model, batch, current_category, total_categories)
+    if reward_type == Reward.COMBINED:
+        learn_r = _compute_learnability_reward(model, zero_shot_batch, few_shot_batch)
+        vel_r = _compute_velocity_reward(model, batch, current_category, total_categories)
+        if not total_steps:
+            logger.warning(
+                "COMBINED reward received an empty total_steps; falling back to "
+                "alpha=1.0 (pure LEARNABILITY) for this call."
+            )
+            alpha = 1.0
+        else:
+            alpha = math.exp(-beta * train_step / total_steps)
+        return alpha * learn_r + (1.0 - alpha) * vel_r
     raise TypeError(f"Reward {reward_type} not supported")
+
+
+def _compute_learnability_reward(model, zero_shot_batch, few_shot_batch) -> float:
+    if zero_shot_batch is None or few_shot_batch is None:
+        raise ValueError(
+            "zero_shot_batch and few_shot_batch cannot be None for LEARNABILITY/"
+            "COMBINED rewards."
+        )
+    with torch.inference_mode():
+        loss_zero_shot = model(**zero_shot_batch).loss.item()
+        loss_few_shot = model(**few_shot_batch).loss.item()
+    if loss_zero_shot == 0:
+        return 0.0
+    return 1.0 - loss_few_shot / loss_zero_shot
+
+
+def _compute_velocity_reward(model, batch, current_category, total_categories) -> float:
+    if batch is None:
+        raise ValueError("batch cannot be None for VELOCITY/COMBINED rewards.")
+    with torch.inference_mode():
+        current_loss = model(**batch).loss.item()
+    if not VELOCITY_DATA["buffer"]:
+        VELOCITY_DATA["buffer"] = [None] * total_categories
+    previous_loss = VELOCITY_DATA["buffer"][current_category]
+    VELOCITY_DATA["buffer"][current_category] = current_loss
+    if not previous_loss:
+        return 0.0
+    return 1.0 - current_loss / previous_loss
