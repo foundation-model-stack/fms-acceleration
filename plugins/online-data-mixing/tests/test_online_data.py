@@ -163,11 +163,20 @@ def test_online_data_update_sampling_weights_with_templated_eval_dataset(reward_
         max_steps = 10
         log_history = []
 
+    class CPUAccelerator:
+        device = torch.device("cpu")
+
+        def prepare(self, x):
+            return x
+
+        def reduce(self, x, reduction):  # pylint: disable=unused-argument
+            return x
+
     model = AutoModelForCausalLM.from_pretrained("Maykeye/TinyLLama-v0")
-    # update_sampling_weights() moves eval batches to torch.device(0) when no
-    # accelerator is given; match the model to whatever that resolves to here.
-    model = model.to(torch.device(0))
-    dataset.update_sampling_weights(model, accelerator=None, state=DummyState())
+    # update_sampling_weights() moves eval batches to accelerator.device (or
+    # torch.device(0), i.e. cuda:0, if no accelerator is given). Pass a
+    # single-process CPU stub so this test doesn't require a GPU.
+    dataset.update_sampling_weights(model, accelerator=CPUAccelerator(), state=DummyState())
 
     assert dataset.log["rewards"], "expected rewards to be logged after update"
     counts = list(dataset.log["count"])
