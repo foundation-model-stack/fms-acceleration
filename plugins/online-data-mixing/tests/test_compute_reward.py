@@ -181,3 +181,112 @@ def test_compute_reward(
                     gradnorm_history=h,
                 )
             assert returned_reward == r, f"expected {r} but got {returned_reward}"
+
+
+def _make_batch(batch_size, seq_length, vocab_size, offset=0):
+    input_ids = (
+        torch.arange(offset, offset + batch_size * seq_length).reshape(
+            batch_size, seq_length
+        )
+        % vocab_size
+    )
+    attention_mask = torch.ones(batch_size, seq_length, dtype=torch.long)
+    return {"input_ids": input_ids, "labels": input_ids, "attention_mask": attention_mask}
+
+
+def test_compute_reward_learnability():
+    loaded_model = AutoModelForCausalLM.from_pretrained("Maykeye/TinyLLama-v0")
+    zero_shot_batch = _make_batch(3, 6, 50)
+    few_shot_batch = _make_batch(3, 10, 50, offset=1)
+
+    reward = compute_reward(
+        model=loaded_model,
+        batch=None,
+        vocab_size=50,
+        reward_type=Reward.LEARNABILITY,
+        current_category=0,
+        total_categories=2,
+        zero_shot_batch=zero_shot_batch,
+        few_shot_batch=few_shot_batch,
+    )
+
+    with torch.inference_mode():
+        expected = 1.0 - (
+            loaded_model(**few_shot_batch).loss.item()
+            / loaded_model(**zero_shot_batch).loss.item()
+        )
+    assert reward == pytest.approx(expected)
+
+    with pytest.raises(ValueError):
+        compute_reward(
+            model=loaded_model,
+            batch=None,
+            vocab_size=50,
+            reward_type=Reward.LEARNABILITY,
+            current_category=0,
+            total_categories=2,
+        )
+
+
+def test_compute_reward_velocity():
+    loaded_model = AutoModelForCausalLM.from_pretrained("Maykeye/TinyLLama-v0")
+    batch = _make_batch(3, 6, 50)
+
+    first_reward = compute_reward(
+        model=loaded_model,
+        batch=batch,
+        vocab_size=50,
+        reward_type=Reward.VELOCITY,
+        current_category=0,
+        total_categories=2,
+    )
+    # no prior loss recorded for this category yet
+    assert first_reward == 0.0
+
+    second_reward = compute_reward(
+        model=loaded_model,
+        batch=batch,
+        vocab_size=50,
+        reward_type=Reward.VELOCITY,
+        current_category=0,
+        total_categories=2,
+    )
+    # same batch twice through an unchanging model -> loss unchanged -> no velocity
+    assert second_reward == pytest.approx(0.0)
+
+    with pytest.raises(ValueError):
+        compute_reward(
+            model=loaded_model,
+            batch=None,
+            vocab_size=50,
+            reward_type=Reward.VELOCITY,
+            current_category=1,
+            total_categories=2,
+        )
+
+
+def test_compute_reward_combined():
+    loaded_model = AutoModelForCausalLM.from_pretrained("Maykeye/TinyLLama-v0")
+    zero_shot_batch = _make_batch(3, 6, 50)
+    few_shot_batch = _make_batch(3, 10, 50, offset=1)
+
+    with torch.inference_mode():
+        loss_zero_shot = loaded_model(**zero_shot_batch).loss.item()
+        loss_few_shot = loaded_model(**few_shot_batch).loss.item()
+    expected_learnability = 1.0 - loss_few_shot / loss_zero_shot
+
+    # total_steps falsy -> falls back to alpha=1.0 (pure learnability)
+    reward = compute_reward(
+        model=loaded_model,
+        batch=zero_shot_batch,
+        vocab_size=50,
+        reward_type=Reward.COMBINED,
+        current_category=0,
+        total_categories=2,
+        zero_shot_batch=zero_shot_batch,
+        few_shot_batch=few_shot_batch,
+        train_step=0,
+        total_steps=None,
+        beta=1.0,
+    )
+    assert reward == pytest.approx(expected_learnability)

@@ -71,6 +71,11 @@ Rewards | Description
 `TRAIN_LOSS` | Training loss where loss is maintained across categories and is updated based on the latest loss and sampled dataset/category. Higher values mean requirement of more samples.
 `VALIDATION_LOSS` | Validation loss across categories calculated using evaluation datasets from each of the categories. Higher values mean requirement of more samples.
 `GRADNORM` | Gradient norm where norms are maintained across categories and are updated based on the latest values and sampled dataset/category. Higher values mean reducing samples from that particular dataset/category.
+`LEARNABILITY` | Compares model loss on a zero-shot eval batch against a few-shot (templated) batch for the same category: `1 - loss_few_shot / loss_zero_shot`. Higher values mean the category benefits more from in-context examples, i.e. there is more to learn from it. Requires `templated_eval_dataset_dict` (see below).
+`VELOCITY` | Tracks how quickly a category's eval loss is dropping between consecutive reward computations: `1 - current_loss / previous_loss`. Higher values mean the category is still improving quickly and should keep being sampled.
+`COMBINED` | Exponentially-decayed blend of `LEARNABILITY` and `VELOCITY`: `R(t) = alpha(t) * learnability + (1 - alpha(t)) * velocity`, `alpha(t) = exp(-beta * t / total_steps)`. Favors learnability early in training and velocity later. Requires `templated_eval_dataset_dict` (see below).
+
+`LEARNABILITY` and `COMBINED` require passing `templated_eval_dataset_dict` (and `templated_eval_collators_dict`) to `OnlineMixingDataset` — a few-shot-templated version of `eval_dataset_dict`, keyed by the same category names, used as the "few-shot" side of the learnability comparison. Constructing `OnlineMixingDataset` with one of these reward types but without `templated_eval_dataset_dict` raises a `ValueError`.
 
 ### Adding a Custom Reward
 

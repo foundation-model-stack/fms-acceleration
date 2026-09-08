@@ -37,6 +37,9 @@ class OnlineMixingDataset(IterableDataset):
         reward_type=Reward.ENTROPY,
         auto_categorize_config: Optional[dict | AutoCategorizeConfig] = None,
         seed: Optional[int] = 42,
+        templated_eval_dataset_dict: Optional[DatasetDict] = None,
+        templated_eval_collators_dict: Optional[dict] = None,
+        beta: float = 1.0,
     ):
         """Mixes datasets with sampling ratios learnt using
         Multi Armed Bandit (MAB) EXP3 and rewards defined.
@@ -72,7 +75,30 @@ class OnlineMixingDataset(IterableDataset):
             has only one key.
             seed (Optional[int], optional): Base seed for the dataset-level RNG so all
             distributed ranks iterate over the exact same sample order. Defaults to 42.
+            templated_eval_dataset_dict (Optional[DatasetDict], optional): keys are category
+            names and values are HF eval datasets rendered with few-shot templates. Required
+            (together with `templated_eval_collators_dict`) when `reward_type` is
+            Reward.LEARNABILITY or Reward.COMBINED, used as the "few-shot" side of the
+            learnability comparison against `eval_dataset_dict` (the "zero-shot" side).
+            templated_eval_collators_dict (Optional[dict], optional): collator corresponding
+            to each dataset in `templated_eval_dataset_dict`.
+            beta (float, optional): decay hyper-parameter for Reward.COMBINED's alpha(t)
+            schedule. Defaults to 1.0.
         """
+        # should be one of Reward
+        self.reward_type = reward_type
+        if isinstance(self.reward_type, str):
+            self.reward_type = self.reward_type.upper()
+            self.reward_type = Reward[self.reward_type]
+
+        if self.reward_type in (Reward.LEARNABILITY, Reward.COMBINED) and (
+            templated_eval_dataset_dict is None or templated_eval_collators_dict is None
+        ):
+            raise ValueError(
+                "templated_eval_dataset_dict and templated_eval_collators_dict must both "
+                "be provided when reward_type is Reward.LEARNABILITY or Reward.COMBINED."
+            )
+
         self.auto_categorize = len(dataset_dict.keys()) == 1
         self._auto_categorize_config = self._build_auto_categorize_config(
             auto_categorize_config
@@ -83,6 +109,14 @@ class OnlineMixingDataset(IterableDataset):
         eval_dataset_dict, eval_collators_dict = self._maybe_auto_categorize_dataset(
             eval_dataset_dict, eval_collators_dict, dataset_role="eval"
         )
+        if templated_eval_dataset_dict is not None:
+            templated_eval_dataset_dict, templated_eval_collators_dict = (
+                self._maybe_auto_categorize_dataset(
+                    templated_eval_dataset_dict,
+                    templated_eval_collators_dict,
+                    dataset_role="templated_eval",
+                )
+            )
 
         logger.info(
             """Values set to OnlineMixingDataset
@@ -122,6 +156,10 @@ class OnlineMixingDataset(IterableDataset):
         self.eval_collators_dict = eval_collators_dict
         self.eval_dataset_dict = eval_dataset_dict
         self.eval_dataset_dict_dl = {}
+        self.templated_eval_collators_dict = templated_eval_collators_dict
+        self.templated_eval_dataset_dict = templated_eval_dataset_dict
+        self.templated_eval_dataset_dict_dl = {}
+        self.beta = beta
         # iterators of the dataloaders
         self.train_dataset_dict_dl_iter = {}
         # to reset iterators to dataloaders
@@ -356,6 +394,27 @@ class OnlineMixingDataset(IterableDataset):
                 else None
             )
 
+        self.templated_eval_dataset_dict_dl = {}
+        if self.templated_eval_dataset_dict:
+            for k, _ in self.templated_eval_dataset_dict.items():
+                self.templated_eval_dataset_dict_dl[k] = (
+                    iter(
+                        DataLoader(
+                            self.templated_eval_dataset_dict[k],
+                            self.eval_batch_size,
+                            shuffle=True,
+                            num_workers=0,
+                            collate_fn=(
+                                self.templated_eval_collators_dict[k]
+                                if self.templated_eval_collators_dict
+                                else None
+                            ),
+                        )
+                    )
+                    if self.templated_eval_dataset_dict[k]
+                    else None
+                )
+
     def _build_auto_categorize_config(self, config):
         if isinstance(config, AutoCategorizeConfig):
             return config
@@ -454,13 +513,10 @@ class OnlineMixingDataset(IterableDataset):
         Returns:
             dict: arguments prepared for compute_reward function
         """
-        if state is None:
+        if state is None or self.reward_type.startswith(Reward.ENTROPY):
             return {}
-        if self.reward_type.startswith(Reward.ENTROPY):
-            return {}
-        if self.reward_type == Reward.TRAIN_LOSS:
-            return {"train_loss_history": [d for d in state.log_history if "loss" in d]}
-        if self.reward_type == Reward.VALIDATION_LOSS:
+
+        def _validation_loss_info():
             assert category is not None
             return {
                 "eval_loss_history": [
@@ -469,11 +525,22 @@ class OnlineMixingDataset(IterableDataset):
                     if f"eval_{category}_loss" in d
                 ]
             }
-        if self.reward_type == Reward.GRADNORM:
-            return {
+
+        extractors = {
+            Reward.TRAIN_LOSS: lambda: {
+                "train_loss_history": [d for d in state.log_history if "loss" in d]
+            },
+            Reward.VALIDATION_LOSS: _validation_loss_info,
+            Reward.GRADNORM: lambda: {
                 "gradnorm_history": [d for d in state.log_history if "grad_norm" in d]
-            }
-        return {}
+            },
+            Reward.COMBINED: lambda: {
+                "train_step": state.global_step,
+                "total_steps": getattr(state, "max_steps", None),
+                "beta": self.beta,
+            },
+        }
+        return extractors.get(self.reward_type, dict)()
 
     def update_sampling_weights(self, model, accelerator, state):
         """Function to update MAB weights based on the reward type provided
@@ -493,6 +560,8 @@ class OnlineMixingDataset(IterableDataset):
         rewards = [0] * self.total_categories
         count = [0] * self.total_categories
         eval_dataset_dict = {}
+        templated_eval_dataset_dict = {}
+        needs_templated = self.reward_type in (Reward.LEARNABILITY, Reward.COMBINED)
         device = accelerator.device if accelerator else torch.device(0)
         self._reset_eval_dataloaders()
         for c in range(self.total_categories):
@@ -503,10 +572,22 @@ class OnlineMixingDataset(IterableDataset):
                     if self.eval_dataset_dict_dl.get(self.id2cat[c], None)
                     else None
                 )
+                if needs_templated:
+                    templated_eval_dataset_dict[self.id2cat[c]] = (
+                        accelerator.prepare(
+                            self.templated_eval_dataset_dict_dl[self.id2cat[c]]
+                        )
+                        if self.templated_eval_dataset_dict_dl.get(self.id2cat[c], None)
+                        else None
+                    )
             else:
                 eval_dataset_dict[self.id2cat[c]] = self.eval_dataset_dict_dl.get(
                     self.id2cat[c], None
                 )
+                if needs_templated:
+                    templated_eval_dataset_dict[self.id2cat[c]] = (
+                        self.templated_eval_dataset_dict_dl.get(self.id2cat[c], None)
+                    )
         for c in tqdm(
             range(self.total_categories), total=self.total_categories, desc="Categories"
         ):  # for trian loss you dont need to iterate over eval dataset.
@@ -525,6 +606,34 @@ class OnlineMixingDataset(IterableDataset):
                 )
                 rewards[c] += rc
                 count[c] += 1
+            elif needs_templated:
+                for batch, templated_batch in tqdm(
+                    zip(
+                        eval_dataset_dict[self.id2cat[c]],
+                        templated_eval_dataset_dict[self.id2cat[c]],
+                    ),
+                    desc="Reward computation over eval dataset",
+                ):
+                    zero_shot_batch = {k: v.to(device) for k, v in batch.items()}
+                    few_shot_batch = {
+                        k: v.to(device) for k, v in templated_batch.items()
+                    }
+                    rc = compute_reward(
+                        model=model,
+                        batch=zero_shot_batch,
+                        vocab_size=32000,
+                        reward_type=self.reward_type,
+                        current_category=c,
+                        total_categories=self.total_categories,
+                        last_sampled_category=self.arm_idx,
+                        zero_shot_batch=zero_shot_batch,
+                        few_shot_batch=few_shot_batch,
+                        **self._extract_information_from_state_for_reward(
+                            state, self.id2cat[c]
+                        ),
+                    )
+                    rewards[c] += rc
+                    count[c] += zero_shot_batch["input_ids"].shape[0]
             else:
                 for batch in tqdm(
                     eval_dataset_dict[self.id2cat[c]],

@@ -13,7 +13,9 @@
 # limitations under the License.
 
 # Third Party
+from datasets import Dataset
 from torch.utils.data import IterableDataset
+from transformers import AutoModelForCausalLM
 
 # pylint: disable=import-error
 import pytest
@@ -98,3 +100,86 @@ def test_online_data_mix_learning(
     assert sum(x == y for x, y in zip(categories_chosen, expected_arm_idx)) >= (
         len(expected_arm_idx) / 2
     ), "Not even half of the choices were correct"
+
+
+def _hf_dataset(seq_length, vocab_size, num_rows=4):
+    return Dataset.from_dict(
+        {
+            "input_ids": [[i % vocab_size] * seq_length for i in range(num_rows)],
+            "attention_mask": [[1] * seq_length for _ in range(num_rows)],
+            "labels": [[i % vocab_size] * seq_length for i in range(num_rows)],
+        }
+    ).with_format("torch")
+
+
+def test_online_data_learnability_requires_templated_eval_dataset():
+    seq_length = 6
+    vocab_size = 50
+    train_data_dict = {
+        "data_1": _hf_dataset(seq_length, vocab_size),
+        "data_2": _hf_dataset(seq_length, vocab_size),
+    }
+    collators_dict = {"data_1": None, "data_2": None}
+    with pytest.raises(ValueError):
+        OnlineMixingDataset(
+            train_data_dict,
+            collators_dict,
+            train_data_dict,
+            collators_dict,
+            output_dir="odm",
+            reward_type=Reward.LEARNABILITY,
+        )
+
+
+@pytest.mark.parametrize("reward_type", [Reward.LEARNABILITY, Reward.COMBINED])
+def test_online_data_update_sampling_weights_with_templated_eval_dataset(reward_type):
+    seq_length = 6
+    vocab_size = 50
+    train_data_dict = {
+        "data_1": _hf_dataset(seq_length, vocab_size),
+        "data_2": _hf_dataset(seq_length, vocab_size),
+    }
+    collators_dict = {"data_1": None, "data_2": None}
+    templated_data_dict = {
+        "data_1": _hf_dataset(seq_length + 4, vocab_size),
+        "data_2": _hf_dataset(seq_length + 4, vocab_size),
+    }
+
+    dataset = OnlineMixingDataset(
+        train_data_dict,
+        collators_dict,
+        train_data_dict,
+        collators_dict,
+        output_dir="odm",
+        reward_type=reward_type,
+        eval_batch_size=2,
+        templated_eval_dataset_dict=templated_data_dict,
+        templated_eval_collators_dict=collators_dict,
+        beta=1.0,
+    )
+
+    class DummyState:
+        global_step = 0
+        max_steps = 10
+        log_history = []
+
+    class CPUAccelerator:
+        device = torch.device("cpu")
+
+        def prepare(self, x):
+            return x
+
+        def reduce(self, x, reduction):  # pylint: disable=unused-argument
+            return x
+
+    model = AutoModelForCausalLM.from_pretrained("Maykeye/TinyLLama-v0")
+    # update_sampling_weights() moves eval batches to accelerator.device (or
+    # torch.device(0), i.e. cuda:0, if no accelerator is given). Pass a
+    # single-process CPU stub so this test doesn't require a GPU.
+    dataset.update_sampling_weights(model, accelerator=CPUAccelerator(), state=DummyState())
+
+    assert dataset.log["rewards"], "expected rewards to be logged after update"
+    counts = list(dataset.log["count"])
+    assert all(
+        count > 0 for count in counts
+    ), "expected every category to accumulate a nonzero count"
