@@ -170,6 +170,7 @@ def test_online_data_update_sampling_weights_with_templated_eval_dataset(reward_
     dataset.update_sampling_weights(model, accelerator=None, state=DummyState())
 
     assert dataset.log["rewards"], "expected rewards to be logged after update"
+    counts = list(dataset.log["count"])
     assert all(
-        count > 0 for count in dataset.log["count"]
+        count > 0 for count in counts
     ), "expected every category to accumulate a nonzero count"

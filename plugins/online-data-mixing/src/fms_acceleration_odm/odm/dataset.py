@@ -513,13 +513,10 @@ class OnlineMixingDataset(IterableDataset):
         Returns:
             dict: arguments prepared for compute_reward function
         """
-        if state is None:
+        if state is None or self.reward_type.startswith(Reward.ENTROPY):
             return {}
-        if self.reward_type.startswith(Reward.ENTROPY):
-            return {}
-        if self.reward_type == Reward.TRAIN_LOSS:
-            return {"train_loss_history": [d for d in state.log_history if "loss" in d]}
-        if self.reward_type == Reward.VALIDATION_LOSS:
+
+        def _validation_loss_info():
             assert category is not None
             return {
                 "eval_loss_history": [
@@ -528,21 +525,22 @@ class OnlineMixingDataset(IterableDataset):
                     if f"eval_{category}_loss" in d
                 ]
             }
-        if self.reward_type == Reward.GRADNORM:
-            return {
+
+        extractors = {
+            Reward.TRAIN_LOSS: lambda: {
+                "train_loss_history": [d for d in state.log_history if "loss" in d]
+            },
+            Reward.VALIDATION_LOSS: _validation_loss_info,
+            Reward.GRADNORM: lambda: {
                 "gradnorm_history": [d for d in state.log_history if "grad_norm" in d]
-            }
-        if self.reward_type == Reward.LEARNABILITY:
-            return {}
-        if self.reward_type == Reward.VELOCITY:
-            return {}
-        if self.reward_type == Reward.COMBINED:
-            return {
+            },
+            Reward.COMBINED: lambda: {
                 "train_step": state.global_step,
                 "total_steps": getattr(state, "max_steps", None),
                 "beta": self.beta,
-            }
-        return {}
+            },
+        }
+        return extractors.get(self.reward_type, dict)()
 
     def update_sampling_weights(self, model, accelerator, state):
         """Function to update MAB weights based on the reward type provided

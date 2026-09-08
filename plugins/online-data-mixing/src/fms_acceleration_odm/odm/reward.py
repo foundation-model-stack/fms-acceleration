@@ -120,86 +120,138 @@ def compute_reward(
         float
     """
     if reward_type.startswith(Reward.ENTROPY):
-        with torch.inference_mode():
-            outputs = model(**batch)
-            shift_logits = outputs.logits[:, :-1, :]
+        return _compute_entropy_reward(model, batch, vocab_size, reward_type)
 
-            log_probs = F.log_softmax(shift_logits, dim=-1)
-            probs = torch.exp(log_probs)
+    handlers = {
+        Reward.TRAIN_LOSS: lambda: _compute_train_loss_reward(
+            train_loss_history, last_sampled_category, current_category, total_categories
+        ),
+        Reward.VALIDATION_LOSS: lambda: _compute_validation_loss_reward(
+            eval_loss_history, current_category, total_categories
+        ),
+        Reward.GRADNORM: lambda: _compute_gradnorm_reward(
+            gradnorm_history, last_sampled_category, current_category, total_categories
+        ),
+        Reward.LEARNABILITY: lambda: _compute_learnability_reward(
+            model, zero_shot_batch, few_shot_batch
+        ),
+        Reward.VELOCITY: lambda: _compute_velocity_reward(
+            model, batch, current_category, total_categories
+        ),
+        Reward.COMBINED: lambda: _compute_combined_reward(
+            model,
+            batch,
+            current_category,
+            total_categories,
+            zero_shot_batch,
+            few_shot_batch,
+            train_step,
+            total_steps,
+            beta,
+        ),
+    }
+    if reward_type not in handlers:
+        raise TypeError(f"Reward {reward_type} not supported")
+    return handlers[reward_type]()
 
-            entropy = -torch.sum(probs * log_probs, dim=-1)
-            sum_p_log_sq = torch.sum(probs * (log_probs**2), dim=-1)
-            varentropy = sum_p_log_sq - (entropy**2)
 
-            entropy_last_token = entropy[:, -1]
+def _compute_entropy_reward(model, batch, vocab_size, reward_type) -> float:
+    with torch.inference_mode():
+        outputs = model(**batch)
+        shift_logits = outputs.logits[:, :-1, :]
 
-            mask = batch["attention_mask"][:, 1:]
+        log_probs = F.log_softmax(shift_logits, dim=-1)
+        probs = torch.exp(log_probs)
 
-            entropy = (entropy * mask).sum(dim=-1) / mask.sum(dim=-1)
-            varentropy = (varentropy * mask).sum(dim=-1) / mask.sum(dim=-1)
+        entropy = -torch.sum(probs * log_probs, dim=-1)
+        sum_p_log_sq = torch.sum(probs * (log_probs**2), dim=-1)
+        varentropy = sum_p_log_sq - (entropy**2)
 
-        max_entropy = torch.log(
-            torch.tensor(vocab_size, dtype=entropy.dtype, device=entropy.device)
+        entropy_last_token = entropy[:, -1]
+
+        mask = batch["attention_mask"][:, 1:]
+
+        entropy = (entropy * mask).sum(dim=-1) / mask.sum(dim=-1)
+        varentropy = (varentropy * mask).sum(dim=-1) / mask.sum(dim=-1)
+
+    max_entropy = torch.log(
+        torch.tensor(vocab_size, dtype=entropy.dtype, device=entropy.device)
+    )
+
+    entropy = (entropy / max_entropy).clamp(0.0, 1.0)
+    varentropy = (varentropy / max_entropy**2).clamp(0.0, 1.0)
+    entropy_last_token = (entropy_last_token / max_entropy).clamp(0.0, 1.0)
+    if reward_type == Reward.ENTROPY:
+        return entropy.sum().item()
+    if reward_type == Reward.ENTROPY3_VARENT1:
+        return 0.75 * entropy.sum().item() + 0.25 * varentropy.sum().item()
+    return entropy_last_token.sum().item()
+
+
+def _compute_train_loss_reward(
+    train_loss_history, last_sampled_category, current_category, total_categories
+) -> float:
+    if not train_loss_history:
+        raise ValueError("train_loss_history cannot be a empty list or None")
+    if not TRAIN_LOSS_DATA["buffer"]:
+        TRAIN_LOSS_DATA["buffer"] = [1e-100] * total_categories
+    TRAIN_LOSS_DATA["buffer"][last_sampled_category] = train_loss_history[-1]["loss"]
+    return TRAIN_LOSS_DATA["buffer"][current_category]
+
+
+def _compute_validation_loss_reward(
+    eval_loss_history, current_category, total_categories
+) -> float:
+    if not eval_loss_history:
+        raise ValueError(
+            "eval_loss_history cannot be a empty list or None."
+            "Make sure you are using eval_strategy and eval_steps"
+            "allowing atleast 1 evaluation before reward computation."
         )
+    if not EVAL_LOSS_DATA["buffer"]:
+        EVAL_LOSS_DATA["buffer"] = [1e-100] * total_categories
+    EVAL_LOSS_DATA["buffer"][current_category] = eval_loss_history[-1]["loss"]
+    return EVAL_LOSS_DATA["buffer"][current_category]
 
-        entropy = (entropy / max_entropy).clamp(0.0, 1.0)
-        varentropy = (varentropy / max_entropy**2).clamp(0.0, 1.0)
-        entropy_last_token = (entropy_last_token / max_entropy).clamp(0.0, 1.0)
-        if reward_type == Reward.ENTROPY:
-            return entropy.sum().item()
-        if reward_type == Reward.ENTROPY3_VARENT1:
-            return 0.75 * entropy.sum().item() + 0.25 * varentropy.sum().item()
-        if reward_type == Reward.ENTROPY_LAST_TOKEN:
-            return entropy_last_token.sum().item()
-    if reward_type == Reward.TRAIN_LOSS:
-        if not train_loss_history:
-            raise ValueError("train_loss_history cannot be a empty list or None")
-        if not TRAIN_LOSS_DATA["buffer"]:
-            TRAIN_LOSS_DATA["buffer"] = [1e-100] * total_categories
-        TRAIN_LOSS_DATA["buffer"][last_sampled_category] = train_loss_history[-1][
-            "loss"
-        ]
-        return TRAIN_LOSS_DATA["buffer"][current_category]
-    if reward_type == Reward.VALIDATION_LOSS:
-        if not eval_loss_history:
-            raise ValueError(
-                "eval_loss_history cannot be a empty list or None."
-                "Make sure you are using eval_strategy and eval_steps"
-                "allowing atleast 1 evaluation before reward computation."
-            )
-        if not EVAL_LOSS_DATA["buffer"]:
-            EVAL_LOSS_DATA["buffer"] = [1e-100] * total_categories
-        EVAL_LOSS_DATA["buffer"][current_category] = eval_loss_history[-1]["loss"]
-        return EVAL_LOSS_DATA["buffer"][current_category]
-    if reward_type == Reward.GRADNORM:
-        if not gradnorm_history:
-            raise ValueError(
-                "gradnorm_history cannot be a empty list or None."
-                "Make sure grad norm is made available."
-            )
-        if not GRADNORM_DATA["buffer"]:
-            GRADNORM_DATA["buffer"] = [1e-100] * total_categories
-        GRADNORM_DATA["buffer"][last_sampled_category] = 1 / (
-            gradnorm_history[-1]["grad_norm"] + 0.0001
+
+def _compute_gradnorm_reward(
+    gradnorm_history, last_sampled_category, current_category, total_categories
+) -> float:
+    if not gradnorm_history:
+        raise ValueError(
+            "gradnorm_history cannot be a empty list or None."
+            "Make sure grad norm is made available."
         )
-        return GRADNORM_DATA["buffer"][current_category]
-    if reward_type == Reward.LEARNABILITY:
-        return _compute_learnability_reward(model, zero_shot_batch, few_shot_batch)
-    if reward_type == Reward.VELOCITY:
-        return _compute_velocity_reward(model, batch, current_category, total_categories)
-    if reward_type == Reward.COMBINED:
-        learn_r = _compute_learnability_reward(model, zero_shot_batch, few_shot_batch)
-        vel_r = _compute_velocity_reward(model, batch, current_category, total_categories)
-        if not total_steps:
-            logger.warning(
-                "COMBINED reward received an empty total_steps; falling back to "
-                "alpha=1.0 (pure LEARNABILITY) for this call."
-            )
-            alpha = 1.0
-        else:
-            alpha = math.exp(-beta * train_step / total_steps)
-        return alpha * learn_r + (1.0 - alpha) * vel_r
-    raise TypeError(f"Reward {reward_type} not supported")
+    if not GRADNORM_DATA["buffer"]:
+        GRADNORM_DATA["buffer"] = [1e-100] * total_categories
+    GRADNORM_DATA["buffer"][last_sampled_category] = 1 / (
+        gradnorm_history[-1]["grad_norm"] + 0.0001
+    )
+    return GRADNORM_DATA["buffer"][current_category]
+
+
+def _compute_combined_reward(
+    model,
+    batch,
+    current_category,
+    total_categories,
+    zero_shot_batch,
+    few_shot_batch,
+    train_step,
+    total_steps,
+    beta,
+) -> float:
+    learn_r = _compute_learnability_reward(model, zero_shot_batch, few_shot_batch)
+    vel_r = _compute_velocity_reward(model, batch, current_category, total_categories)
+    if not total_steps:
+        logger.warning(
+            "COMBINED reward received an empty total_steps; falling back to "
+            "alpha=1.0 (pure LEARNABILITY) for this call."
+        )
+        alpha = 1.0
+    else:
+        alpha = math.exp(-beta * train_step / total_steps)
+    return alpha * learn_r + (1.0 - alpha) * vel_r
 
 
 def _compute_learnability_reward(model, zero_shot_batch, few_shot_batch) -> float:
