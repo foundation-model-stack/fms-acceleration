@@ -124,7 +124,10 @@ def compute_reward(
 
     handlers = {
         Reward.TRAIN_LOSS: lambda: _compute_train_loss_reward(
-            train_loss_history, last_sampled_category, current_category, total_categories
+            train_loss_history,
+            last_sampled_category,
+            current_category,
+            total_categories,
         ),
         Reward.VALIDATION_LOSS: lambda: _compute_validation_loss_reward(
             eval_loss_history, current_category, total_categories

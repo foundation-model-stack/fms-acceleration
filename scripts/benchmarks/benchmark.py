@@ -302,8 +302,8 @@ class ConfigUtils:
             argument_list = ConfigUtils.convert_keyvalue_arguments_to_list(
                 combined_args
             )
-            pdtbs = combined_args.get('per_device_train_batch_size')
-            grad_accum = combined_args.get('gradient_accumulation_steps')
+            pdtbs = combined_args.get("per_device_train_batch_size")
+            grad_accum = combined_args.get("gradient_accumulation_steps")
             if pdtbs is None and grad_accum is not None:
                 if grad_accum > 1:
                     warnings.warn(
@@ -389,15 +389,11 @@ class ScenarioMatrix:
                 # if acceleration_config_map is None, then do not do mapping
                 if acceleration_config_map:
 
-                    # - we allow k to be None to indicate we do not wish to 
+                    # - we allow k to be None to indicate we do not wish to
                     #   set a config for that matrix entry. However, we do not
                     #   check for multiple None's, so be careful.
                     val = [
-                        (
-                            acceleration_config_map[k] 
-                            if k is not None 
-                            else None
-                        )
+                        (acceleration_config_map[k] if k is not None else None)
                         for k in val
                         if k in acceleration_config_map or k is None
                     ]
@@ -466,8 +462,8 @@ class Experiment:
         # return complete only if no errors
         # and is not a dry run
         return (
-            not ERROR_MESSAGES in results and
-            results.get(DRY_RUN_MESSAGE, False) == False
+            not ERROR_MESSAGES in results
+            and results.get(DRY_RUN_MESSAGE, False) == False
         )
 
     def run(
@@ -719,12 +715,11 @@ def prepare_arguments(args, benchmark_dataset: BenchmarkDataset):
         # build scenario matrix
         scenario = ScenarioMatrix(scenario_config, acceleration_config_map)
 
-        if (
-            not args.run_only_scenarios
-            and scenario.slow
-        ):
+        if not args.run_only_scenarios and scenario.slow:
             # unfiltered runs omit all "slow" marked scenarios
-            print(f"Skipping slow scenario '{_scn_name}' beacuse run_only_scenarios=None.")
+            print(
+                f"Skipping slow scenario '{_scn_name}' beacuse run_only_scenarios=None."
+            )
             continue
 
         scenario_matrices, scenario_constants = (
@@ -736,7 +731,7 @@ def prepare_arguments(args, benchmark_dataset: BenchmarkDataset):
             scn_factor *= len(v)
 
         # scenario-specific constants should overwrite any similar values in defaults
-        defaults = {k:v for k, v in defaults.items() if k not in scenario_constants}
+        defaults = {k: v for k, v in defaults.items() if k not in scenario_constants}
         # update defaults with scenario constants
         constants = {**defaults, **scenario_constants}
         # Remove any empty variables and combine matrices to dictionary to cartesian product on

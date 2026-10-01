@@ -176,7 +176,9 @@ def test_online_data_update_sampling_weights_with_templated_eval_dataset(reward_
     # update_sampling_weights() moves eval batches to accelerator.device (or
     # torch.device(0), i.e. cuda:0, if no accelerator is given). Pass a
     # single-process CPU stub so this test doesn't require a GPU.
-    dataset.update_sampling_weights(model, accelerator=CPUAccelerator(), state=DummyState())
+    dataset.update_sampling_weights(
+        model, accelerator=CPUAccelerator(), state=DummyState()
+    )
 
     assert dataset.log["rewards"], "expected rewards to be logged after update"
     counts = list(dataset.log["count"])

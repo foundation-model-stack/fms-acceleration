@@ -31,12 +31,15 @@ from peft import PeftConfig, PeftModel, PeftType, get_peft_model
 from peft.mapping import PEFT_TYPE_TO_CONFIG_MAPPING
 
 try:
+    # Third Party
     from peft.peft_model import PEFT_TYPE_TO_MODEL_MAPPING
 except ImportError:
     # peft >= 0.19 renamed this mapping and provides no back-compat alias
     from peft.peft_model import (
         PEFT_TYPE_TO_TUNER_MAPPING as PEFT_TYPE_TO_MODEL_MAPPING,
     )
+
+# Third Party
 from peft.tuners.lora import LoraConfig, LoraModel
 from peft.tuners.lora.gptq import GPTQLoraLinear
 
@@ -47,6 +50,7 @@ from peft.tuners.lora.gptq import GPTQLoraLinear
 _GPTQ_LORA_LINEAR_TAKES_CONFIG = (
     "config" in inspect.signature(GPTQLoraLinear.__init__).parameters
 )
+# Third Party
 import torch
 
 # Local

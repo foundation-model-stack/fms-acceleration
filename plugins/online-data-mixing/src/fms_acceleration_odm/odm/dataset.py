@@ -213,7 +213,9 @@ class OnlineMixingDataset(IterableDataset):
         self.output_dir = output_dir
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir)
-        self.log_file_path = os.path.join(self.output_dir, f"odm_rank_{self.rank}.jsonl")
+        self.log_file_path = os.path.join(
+            self.output_dir, f"odm_rank_{self.rank}.jsonl"
+        )
         logger.info(
             "Logs for online data mixing to be stored at {log_file_path}".format(
                 log_file_path=self.log_file_path
