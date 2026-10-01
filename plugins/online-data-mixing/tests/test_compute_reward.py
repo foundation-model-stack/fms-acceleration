@@ -191,7 +191,11 @@ def _make_batch(batch_size, seq_length, vocab_size, offset=0):
         % vocab_size
     )
     attention_mask = torch.ones(batch_size, seq_length, dtype=torch.long)
-    return {"input_ids": input_ids, "labels": input_ids, "attention_mask": attention_mask}
+    return {
+        "input_ids": input_ids,
+        "labels": input_ids,
+        "attention_mask": attention_mask,
+    }
 
 
 def test_compute_reward_learnability():

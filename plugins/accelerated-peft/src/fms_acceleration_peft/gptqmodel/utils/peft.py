@@ -24,13 +24,33 @@
 ###############################################################################
 from contextlib import contextmanager
 from typing import List, Optional, Tuple, Union
+import inspect
 
 # Third Party
 from peft import PeftConfig, PeftModel, PeftType, get_peft_model
 from peft.mapping import PEFT_TYPE_TO_CONFIG_MAPPING
-from peft.peft_model import PEFT_TYPE_TO_MODEL_MAPPING
+
+try:
+    # Third Party
+    from peft.peft_model import PEFT_TYPE_TO_MODEL_MAPPING
+except ImportError:
+    # peft >= 0.19 renamed this mapping and provides no back-compat alias
+    from peft.peft_model import (
+        PEFT_TYPE_TO_TUNER_MAPPING as PEFT_TYPE_TO_MODEL_MAPPING,
+    )
+
+# Third Party
 from peft.tuners.lora import LoraConfig, LoraModel
 from peft.tuners.lora.gptq import GPTQLoraLinear
+
+# peft >= 0.19 made `config` a required positional argument of
+# GPTQLoraLinear.__init__. On earlier versions there is no such parameter and
+# the value was absorbed (and discarded) by **kwargs, so only pass it when the
+# installed peft actually declares it.
+_GPTQ_LORA_LINEAR_TAKES_CONFIG = (
+    "config" in inspect.signature(GPTQLoraLinear.__init__).parameters
+)
+# Third Party
 import torch
 
 # Local
@@ -68,9 +88,11 @@ class GPTQLoraModel(LoraModel):
         # to be installed
         new_module = None
         if isinstance(target, target_cls):
-            new_module = GPTQLoraLinear(
-                target, adapter_name, lora_config=lora_config, **kwargs
-            )
+            if _GPTQ_LORA_LINEAR_TAKES_CONFIG:
+                # peft >= 0.19: `config` is a required positional argument
+                new_module = GPTQLoraLinear(target, adapter_name, lora_config, **kwargs)
+            else:
+                new_module = GPTQLoraLinear(target, adapter_name, **kwargs)
 
         # if module cannot be found, return None which results in a raise in the call-stack
         return new_module
